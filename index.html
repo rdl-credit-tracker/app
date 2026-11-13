@@ -2,9 +2,19 @@
 <html lang="">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<style>html,body{touch-action:pan-x pan-y}</style>
+<script>["gesturestart","gesturechange","gestureend"].forEach(function(e){document.addEventListener(e,function(x){x.preventDefault()})});</script>
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"><meta http-equiv="Pragma" content="no-cache"><meta http-equiv="Expires" content="0">
 <title>RDL Credit Tracker</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0b3d91">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="RDL">
+
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{--bg:#f1f6fd;--navy:#0b3d91;--ink:#12306b}
@@ -1436,6 +1446,7 @@ var css='#rgx-login{position:fixed;inset:0;z-index:99999;background:#f4f7fb;disp
 +'#rgx-panel button.rgx-b.alt{background:#e8eef5;color:#1f4e78}#rgx-panel button.rgx-b.red{background:#fde8e6;color:#c0392b}'
 +'#rgx-panel .rep{font-size:12.5px;white-space:pre-wrap;background:#f4f7fb;border-radius:8px;padding:8px;margin-top:6px}'
 +'.rgx-toast{position:fixed;left:50%;transform:translateX(-50%);bottom:130px;z-index:99998;background:#222;color:#fff;padding:10px 16px;border-radius:20px;font-size:14px;max-width:90vw;text-align:center}';
+css+='#rgx-lock{position:fixed;inset:0;z-index:100000;background:#f4f7fb;display:flex;align-items:center;justify-content:center;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}\n.rgx-pin{width:100%;box-sizing:border-box;font-size:24px;letter-spacing:8px;text-align:center;padding:10px;border:1.5px solid #c8d3e0;border-radius:12px;margin:6px 0}\n.rgx-go{display:block;width:100%;margin:10px 0 2px;padding:12px;border:0;border-radius:12px;background:#1f4e78;color:#fff;font-size:15px;cursor:pointer}.rgx-go.alt{background:#e8eef5;color:#1f4e78}.rgx-go:disabled{opacity:.6}\n.rgx-link{display:block;width:100%;margin-top:8px;background:none;border:0;color:#1f4e78;font-size:14px;cursor:pointer}\n#rgx-users{position:fixed;inset:0;z-index:99990;background:#f4f7fb;display:flex;flex-direction:column;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#1b2430}\n.rgx-uh{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;background:#1f4e78;color:#fff;font-size:17px}.rgx-uh button{background:none;border:0;color:#fff;font-size:20px}\n.rgx-ub{flex:1;overflow:auto;padding:12px}\n.rgx-ucard{background:#fff;border-radius:12px;padding:12px;margin-bottom:10px;box-shadow:0 1px 4px rgba(0,0,0,.1)}.rgx-ucard.off{opacity:.55}\n.rgx-fi{display:block;width:100%;box-sizing:border-box;padding:10px;margin:6px 0;border:1.5px solid #c8d3e0;border-radius:10px;font-size:15px}\n.rgx-un{font-weight:600}.rgx-us{font-size:13px;color:#5b6675;word-break:break-all}.rgx-warn{font-size:12.5px;color:#b9770e;margin-top:4px}\n.rgx-sm{margin:8px 8px 0 0;padding:7px 12px;border:0;border-radius:8px;background:#1f4e78;color:#fff;font-size:13px}.rgx-sm.alt{background:#e8eef5;color:#1f4e78}\n.rgx-lr{font-size:12.5px;padding:6px 0;border-bottom:1px solid #e3e8ef;word-break:break-word}.rgx-lr.bad{color:#c0392b}\n';
 var stl=document.createElement('style');stl.textContent=css;document.head.appendChild(stl);
 
 /* ---------- Google sign-in ---------- */
@@ -1463,12 +1474,12 @@ function api(action,body,noPrompt){
 /* ---------- login screen ---------- */
 function showLogin(){
   var o=h('div');o.id='rgx-login';var c=h('div','rgx-card');
-  c.appendChild(h('h1',null,'RDL Credit Tracker'));c.appendChild(h('p',null,'Sign in with your Google account'));
+  c.appendChild(h('h1',null,'RDL Credit Tracker'));c.appendChild(h('p',null,'Sign in with your Google account'));c.appendChild(h('p','rgx-msg','Choose your Gmail. For a different one, tap Use another account.'));
   var b=h('div');b.id='rgx-btn';b.style.cssText='display:flex;justify-content:center;min-height:44px';c.appendChild(b);
   var m=h('div','rgx-msg','Loading…');m.id='rgx-lm';c.appendChild(m);o.appendChild(c);document.body.appendChild(o);
   loadGIS(function(err){
     if(err){setLogin('No internet. Connect and reload.',true);return}
-    initGIS(false);google.accounts.id.renderButton(b,{theme:'filled_blue',size:'large',shape:'pill',text:'signin_with',width:260});setLogin('')})}
+    initGIS(false);try{google.accounts.id.disableAutoSelect()}catch(e){}google.accounts.id.renderButton(b,{theme:'filled_blue',size:'large',shape:'pill',text:'signin_with',width:260});setLogin('')})}
 function setLogin(t,bad){var m=document.getElementById('rgx-lm');if(m){m.textContent=t;m.className='rgx-msg'+(bad?' bad':'')}}
 function setDepotLabel(){if(S&&S.role==='user'&&S.depot){var p=jget('rdl.prefs.v1')||{};if(p.depot!==S.depot){p.depot=S.depot;LS.setItem('rdl.prefs.v1',JSON.stringify(p))}}}
 function wipeUserData(){Object.keys(LS).filter(function(k){return k.indexOf('rdl.')===0&&k!=='rdl.prefs.v1'&&k!=='rdl.cleanstart.v2'}).forEach(function(k){LS.removeItem(k)});
@@ -1482,7 +1493,7 @@ function firstLogin(){
     jset(SK,S);location.reload()
   }).catch(function(e){S=null;tok=null;setLogin(msgOf(e),true)})}
 function forcedOut(msg){
-  if(S&&S.role==='user')wipeUserData();LS.removeItem(SK);
+  if(S&&S.role==='user')wipeUserData();clearPin();LS.removeItem(SK);
   try{google.accounts.id.disableAutoSelect()}catch(e){}
   alert(msg||'Your access was removed. Please contact the admin.');location.reload()}
 
@@ -1572,7 +1583,7 @@ function afterLogin(){
 
 /* ---------- floating button + menu ---------- */
 function signOut(){
-  var go=function(){if(S.role==='user')wipeUserData();LS.removeItem(SK);try{google.accounts.id.disableAutoSelect()}catch(e){}location.reload()};
+  var go=function(){if(S.role==='user')wipeUserData();clearPin();LS.removeItem(SK);try{google.accounts.id.disableAutoSelect()}catch(e){}location.reload()};
   if(S.role==='user'){
     if(!confirm('Sign out? Your work is first saved to the server, then removed from this phone.'))return;
     sendBackup().then(go).catch(function(e){if(confirm('Backup could not be saved ('+msgOf(e)+').\nSigning out now will LOSE unsaved work. Sign out anyway?'))go()})
@@ -1597,6 +1608,9 @@ function renderPanel(){
   }else{
     btn('Get latest data now','',function(b){run(b,'Checking…',function(){return pullData(false).then(function(c){if(c){setTimeout(function(){location.reload()},800);return 'New data received. Reloading…'}return 'You already have the latest data.'})})});
   }
+  if(S.role==='admin')btn('Users & activity log','alt',function(){panelOn=false;renderPanel();openUsers()});
+  btn('Lock app now','alt',function(){panelOn=false;renderPanel();LS.setItem('rdlgate.last','0');lockNow()});
+  btn('Change PIN','alt',function(){panelOn=false;renderPanel();changePin()});
   btn('Save backup now','alt',function(b){run(b,'Saving…',function(){return sendBackup().then(function(){return 'Backup saved to Drive.'})})});
   btn('Sign out','red',function(){signOut()});
   p.appendChild(rep);document.body.appendChild(p)}
@@ -1607,19 +1621,125 @@ function buildChip(){
 
 /* users: hide the admin-only database tiles in Settings */
 function hideAdminTiles(){var q=0;
-  function run(){q=0;document.querySelectorAll('button.set-item').forEach(function(b){if(/Database Settings|Database Correction/.test(b.textContent||''))b.style.display='none'})}
+  function run(){q=0;document.querySelectorAll('button.set-item').forEach(function(b){if(/App Security|Database Settings|Database Correction/.test(b.textContent||''))b.style.display='none'})}
   new MutationObserver(function(){if(!q)q=requestAnimationFrame(run)}).observe(document.documentElement,{childList:true,subtree:true})}
+
+/* ---------- phone lock (PIN) ---------- */
+var LOCK_MIN=5,MAXTRY=5,locked=false,lastTouch=Date.now();
+function clearPin(){['rdlgate.pin','rdlgate.fail','rdlgate.until','rdlgate.last'].forEach(function(k){LS.removeItem(k)})}
+function b64(buf){var a=new Uint8Array(buf),s='';for(var i=0;i<a.length;i++)s+=String.fromCharCode(a[i]);return btoa(s)}
+function newSalt(){var a=new Uint8Array(12);crypto.getRandomValues(a);return b64(a)}
+function hashPin(pin,salt){var e=new TextEncoder();
+  return crypto.subtle.importKey('raw',e.encode(pin),'PBKDF2',false,['deriveBits']).then(function(k){
+    return crypto.subtle.deriveBits({name:'PBKDF2',salt:e.encode(salt),iterations:150000,hash:'SHA-256'},k,256)}).then(b64)}
+function setPin(pin){var s=newSalt();return hashPin(pin,s).then(function(x){jset('rdlgate.pin',{salt:s,h:x})})}
+function checkPin(pin){var r=jget('rdlgate.pin');if(!r)return Promise.resolve(false);return hashPin(pin,r.salt).then(function(x){return x===r.h})}
+function touch(){lastTouch=Date.now();LS.setItem('rdlgate.last',String(lastTouch))}
+function lockUI(o){
+  var old=document.getElementById('rgx-lock');if(old)old.remove();locked=true;
+  var w=h('div');w.id='rgx-lock';var c=h('div','rgx-card');
+  c.appendChild(h('h1',null,o.title));c.appendChild(h('p',null,o.sub||''));
+  function inp(ph){var i=h('input','rgx-pin');i.type='password';i.setAttribute('inputmode','numeric');i.maxLength=6;i.autocomplete='off';i.placeholder=ph;c.appendChild(i);return i}
+  var i1=inp(o.confirm?'New PIN (4–6 digits)':'PIN'),i2=o.confirm?inp('Repeat PIN'):null;
+  var m=h('div','rgx-msg');c.appendChild(m);
+  var b=h('button','rgx-go',o.btn||'Unlock');b.type='button';c.appendChild(b);
+  if(o.cancel){var cb=h('button','rgx-link','Cancel');cb.type='button';cb.onclick=function(){w.remove();locked=false};c.appendChild(cb)}
+  if(o.forgot){var fb=h('button','rgx-link','Forgot PIN?');fb.type='button';fb.onclick=forgotPin;c.appendChild(fb)}
+  function wait(){var u=+LS.getItem('rdlgate.until')||0;return u>Date.now()?Math.ceil((u-Date.now())/60000):0}
+  function go(){
+    var p=i1.value;if(!/^\d{4,6}$/.test(p)){m.textContent='PIN must be 4 to 6 digits';m.className='rgx-msg bad';return}
+    if(o.confirm&&p!==i2.value){m.textContent='The two PINs are different';m.className='rgx-msg bad';return}
+    var wt=o.counts&&wait();if(wt){m.textContent='Too many wrong tries. Try again in '+wt+' min.';m.className='rgx-msg bad';return}
+    b.disabled=true;
+    o.onSubmit(p).then(function(err){b.disabled=false;
+      if(err){m.textContent=err;m.className='rgx-msg bad';i1.value='';if(i2)i2.value='';return}
+      w.remove();locked=false;if(o.onDone)o.onDone()})
+    .catch(function(e){b.disabled=false;m.textContent=msgOf(e);m.className='rgx-msg bad'})}
+  b.onclick=go;i1.addEventListener('keydown',function(e){if(e.key==='Enter'&&!i2)go()});
+  w.appendChild(c);document.body.appendChild(w);setTimeout(function(){i1.focus()},100)}
+function showUnlock(){
+  lockUI({title:'App locked',sub:'Enter your PIN',forgot:true,counts:true,onSubmit:function(p){
+    return checkPin(p).then(function(ok){
+      if(ok){LS.removeItem('rdlgate.fail');LS.removeItem('rdlgate.until');touch();return null}
+      var f=(+LS.getItem('rdlgate.fail')||0)+1;LS.setItem('rdlgate.fail',String(f));
+      if(f>=MAXTRY){LS.setItem('rdlgate.until',String(Date.now()+5*60000*Math.min(f-MAXTRY+1,6)));return 'Too many wrong tries. Locked for a while.'}
+      return 'Wrong PIN ('+(MAXTRY-f)+' tries left)'})}})}
+function showCreate(){
+  lockUI({title:'Create your PIN',sub:'This PIN locks the app on this phone. Do not share it.',confirm:true,btn:'Save PIN',onSubmit:function(p){return setPin(p).then(function(){touch();return null})}})}
+function lockNow(){if(document.getElementById('rgx-lock')||!window.crypto||!crypto.subtle)return;if(jget('rdlgate.pin'))showUnlock();else showCreate()}
+function forgotPin(){
+  if(!confirm('Forgot PIN?\n\nYou will be signed out and the data on this phone is removed. After you sign in with Google it is downloaded again.\nWork that was not yet backed up (☁ → Save backup) is lost.\n\nContinue?'))return;
+  if(S&&S.role==='user')wipeUserData();clearPin();LS.removeItem(SK);try{google.accounts.id.disableAutoSelect()}catch(e){}
+  location.reload()}
+function changePin(){
+  if(!jget('rdlgate.pin')){showCreate();return}
+  lockUI({title:'Change PIN',sub:'Enter your current PIN',cancel:true,onSubmit:function(p){return checkPin(p).then(function(ok){return ok?null:'Wrong PIN'})},onDone:function(){
+    lockUI({title:'New PIN',sub:'Choose a new PIN',confirm:true,cancel:true,btn:'Save PIN',onSubmit:function(p){return setPin(p).then(function(){return null})}})}})}
+function lockInit(){
+  if(!window.crypto||!crypto.subtle)return;                                   /* needs https (GitHub Pages is) */
+  if(!jget('rdlgate.pin')){showCreate();return}
+  if(Date.now()-(+LS.getItem('rdlgate.last')||0)>LOCK_MIN*60000)showUnlock();else touch();
+  ['touchstart','click','keydown'].forEach(function(ev){document.addEventListener(ev,function(){if(!locked&&Date.now()-lastTouch>15000)touch();else if(!locked)lastTouch=Date.now()},true)});
+  document.addEventListener('visibilitychange',function(){
+    if(document.visibilityState==='hidden'){if(!locked)touch()}
+    else if(!locked&&Date.now()-(+LS.getItem('rdlgate.last')||0)>LOCK_MIN*60000)showUnlock()});
+  setInterval(function(){if(!locked&&Date.now()-lastTouch>LOCK_MIN*60000)showUnlock()},30000)}
+
+/* ---------- admin: users and activity log ---------- */
+function depotNames(){var m=jget('rdl.master.v1'),s={};if(m){(m.out||[]).concat(m.cr||[]).forEach(function(r){if(r.dp)s[r.dp]=1})}return Object.keys(s).sort()}
+function fmtT(t){try{var d=new Date(t);return d.toLocaleDateString()+' '+('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2)}catch(e){return t}}
+function openUsers(){
+  var old=document.getElementById('rgx-users');if(old)old.remove();
+  var o=h('div');o.id='rgx-users';var top=h('div','rgx-uh');top.appendChild(h('b',null,'Users & activity'));
+  var x=h('button',null,'✕');x.type='button';x.onclick=function(){o.remove()};top.appendChild(x);o.appendChild(top);
+  var body=h('div','rgx-ub');o.appendChild(body);document.body.appendChild(o);
+  var add=h('div','rgx-ucard');add.appendChild(h('b',null,'Add a user'));
+  function fld(ph,id,type){var i=h('input','rgx-fi');i.placeholder=ph;i.id=id;i.type=type||'text';i.autocomplete='off';add.appendChild(i);return i}
+  var fe=fld('Gmail address','rgx-fe','email'),fn=fld('Name','rgx-fn'),fd=fld('Depot (exactly as in the Excel)','rgx-fd');
+  var dl=h('datalist');dl.id='rgx-dl';depotNames().forEach(function(n){var op=h('option');op.value=n;dl.appendChild(op)});fd.setAttribute('list','rgx-dl');add.appendChild(dl);
+  var am=h('div','rgx-msg');var ab=h('button','rgx-go','Add user');ab.type='button';add.appendChild(ab);add.appendChild(am);body.appendChild(add);
+  var list=h('div');body.appendChild(list);
+  var lb=h('button','rgx-go alt','Show activity log');lb.type='button';body.appendChild(lb);var lg=h('div');body.appendChild(lg);
+  function fail(el,e){el.textContent=msgOf(e);el.className='rgx-msg bad'}
+  function load(){list.textContent='Loading…';
+    api('listUsers').then(function(j){list.textContent='';
+      j.users.forEach(function(u){
+        var r=h('div','rgx-ucard'+(u.active?'':' off'));
+        r.appendChild(h('div','rgx-un',(u.name||u.email)+(u.role==='admin'?'  (Admin)':'')));
+        r.appendChild(h('div','rgx-us',u.email));
+        r.appendChild(h('div','rgx-us',(u.depot||'all depots')+' • '+(u.active?'Active':'Turned off')));
+        if(u.role==='user'&&u.depot&&!u.depotKnown)r.appendChild(h('div','rgx-warn','⚠ No data published under this depot name. Check the spelling.'));
+        if(u.role==='user'){
+          var bt=h('button','rgx-sm',u.active?'Turn off':'Turn on');bt.type='button';
+          bt.onclick=function(){if(u.active&&!confirm('Turn off '+u.email+'? They lose access the next time they open the app.'))return;
+            bt.disabled=true;api('saveUser',{email:u.email,active:!u.active}).then(load).catch(function(e){bt.disabled=false;alert(msgOf(e))})};
+          var be=h('button','rgx-sm alt','Change depot');be.type='button';
+          be.onclick=function(){var d=prompt('Depot for '+u.email,u.depot||'');if(d==null||!d.trim())return;
+            api('saveUser',{email:u.email,depot:d.trim()}).then(load).catch(function(e){alert(msgOf(e))})};
+          r.appendChild(bt);r.appendChild(be)}
+        list.appendChild(r)})})
+    .catch(function(e){list.textContent='';var m=h('div','rgx-msg bad',msgOf(e));list.appendChild(m)})}
+  ab.onclick=function(){
+    am.textContent='';ab.disabled=true;
+    api('saveUser',{email:fe.value,name:fn.value,depot:fd.value,active:true}).then(function(j){ab.disabled=false;am.textContent=j.created?'User added.':'User updated.';am.className='rgx-msg';fe.value='';fn.value='';fd.value='';load()})
+    .catch(function(e){ab.disabled=false;fail(am,e)})};
+  lb.onclick=function(){lg.textContent='Loading…';
+    api('listLog').then(function(j){lg.textContent='';
+      if(!j.rows.length)lg.textContent='No activity yet.';
+      j.rows.forEach(function(r){var d=h('div','rgx-lr'+(r.result==='FAIL'?' bad':''));d.textContent=fmtT(r.at)+' • '+(r.email||'?')+' • '+r.action+' • '+r.result+(r.note?' • '+r.note:'');lg.appendChild(d)})})
+    .catch(function(e){lg.textContent='';lg.appendChild(h('div','rgx-msg bad',msgOf(e)))})};
+  load()}
 
 /* ---------- start ---------- */
 function start(){
   if(!S){showLogin();return}
-  buildChip();if(S.role==='user')hideAdminTiles();
+  lockInit();buildChip();if(S.role==='user')hideAdminTiles();
   loadGIS(function(err){if(err){status('Offline — working on this phone','warn');return}initGIS(true);
     if(tok){afterLogin();return}
     try{google.accounts.id.prompt()}catch(e){}
     setTimeout(function(){if(!tok)status('Tap ☁ and press the blue button to sign in','warn')},6000)})}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start);else start();
-window.RDLGATE={build:buildPkgs,mergeVal:mergeVal,session:function(){return S}};
+window.RDLGATE={api:api,lockNow:lockNow,build:buildPkgs,mergeVal:mergeVal,session:function(){return S}};
 })();
 </script>
 
@@ -3625,7 +3745,7 @@ function page(id,title,parent,build){
   top.appendChild(b);top.appendChild(el('h2',null,title));p.appendChild(top);
   const body=el('div','sbody');p.appendChild(body);pages[id]={body,build};return p}
 const PROT=new Set(['bcu','updoff','setdb','setcu','setup','setdcr','setupd','updout','updcr','seterase','setbp','setbackup']);
-function open(id){if(PROT.has(id)&&!unlocked()){unlock().then(ok=>{if(ok)open(id)});return}const pg=pages[id];if(pg&&pg.build){pg.body.textContent='';pg.build(pg.body)}show(id);if(id==='setup'||id==='setdcr')R.curStatus&&R.curStatus()}
+function open(id){if(window.RDL_ROLE==='user'&&(PROT.has(id)||['setsec','setlog','setcorr'].indexOf(id)>=0))return;if(PROT.has(id)&&!unlocked()){unlock().then(ok=>{if(ok)open(id)});return}const pg=pages[id];if(pg&&pg.build){pg.body.textContent='';pg.build(pg.body)}show(id);if(id==='setup'||id==='setdcr')R.curStatus&&R.curStatus()}
 const card=(h,hint)=>{const c=el('div','st-card');if(h)c.appendChild(el('h3',null,h));if(hint)c.appendChild(el('p','hint',hint));return c};
 const msgBox=()=>el('div','stt');
 const say=(e,t,cls)=>{e.textContent=t;e.className='stt '+(cls||'')};
@@ -3654,7 +3774,7 @@ const pUp=page('setup','Database Upload','setdb'),pDcr=page('setdcr','Daily Coll
 if(upCard){upCard.querySelector('.hint').textContent='Upload either file or both. Credit limit data replaces only the credit limits. Outstanding data replaces the bills; bills and collections you posted in the app are reconciled by date.';
   const bd=upCard.querySelector('#bDb');if(bd)bd.textContent='Upload Database';pages.setup.body.appendChild(upCard)}
 if(dcrCard)pages.setdcr.body.appendChild(dcrCard);
-mainList.appendChild(tile(IC.lock,G.red,'App Security','PIN, corrections and activity log',async()=>{if(await unlock())open('setsec')}));
+if(window.RDL_ROLE!=='user')mainList.appendChild(tile(IC.lock,G.red,'App Security','PIN, corrections and activity log',async()=>{if(await unlock())open('setsec')}));
 mainList.appendChild(tile(IC.pen,G.red,'Header Text','Change the app title and depot name',()=>open('sethdr')));
 mainList.appendChild(tile(IC.bell,G.amber,'Notification Settings','Choose which due bills notify you',()=>open('setnotif')));
 mainList.appendChild(tile(svg('<path d="M20 2H4a2 2 0 00-2 2v18l4-4h14a2 2 0 002-2V4a2 2 0 00-2-2z"/>'),G.green,'WhatsApp Message','Change the wording of the overdue message',()=>open('setwa')));
@@ -3798,6 +3918,7 @@ async function setPin(title,keepRec){
   else jset(SK,S);
   unl=Date.now();return true}
 async function unlock(){
+  if(window.RDL_ROLE==='user'){await RDLUI.alert('App Security','Only the Admin can use App Security.');return false}
   if(unlocked())return true;
   let S=secG();if(!S.h)return setPin('Create App Security PIN');
   let tries=0;
@@ -6984,5 +7105,9 @@ html body .st-card.cx-fill>.od-table-wrap{margin:0!important;border:0!important;
 
 
 
+<script>
+/* installable app (PWA): registered a few seconds after load so it never races the one-time clean start */
+window.addEventListener('load',function(){setTimeout(function(){try{if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(function(){})}catch(e){}},3000)});
+</script>
 </body>
 </html>
