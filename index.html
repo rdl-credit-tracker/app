@@ -82,7 +82,7 @@ body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans Bengali",s
 .meta span{display:flex;align-items:center;gap:4px}
 .meta span+span{padding-left:8px}
 .meta svg{display:none}
-.hdr{grid-template-columns:auto minmax(0,1fr) 38px 38px;overflow:hidden}
+.hdr{grid-template-columns:auto minmax(0,1fr) 38px 38px 38px;overflow:hidden}
 .meta{min-width:0;overflow:hidden;font-size:clamp(9.5px,2.9vw,12px)}
 .meta span{gap:0}
 .meta span+span{padding-left:6px}
@@ -1437,12 +1437,10 @@ var css='#rgx-login{position:fixed;inset:0;z-index:99999;background:#f4f7fb;disp
 +'.rgx-card{background:#fff;border-radius:18px;box-shadow:0 8px 30px rgba(0,0,0,.12);padding:28px 22px;width:min(92vw,360px);text-align:center;color:#1b2430}'
 +'.rgx-card h1{font-size:21px;margin:0 0 4px}.rgx-card p{margin:6px 0 16px;color:#5b6675;font-size:14px}'
 +'.rgx-msg{margin-top:14px;font-size:13.5px;color:#5b6675;min-height:18px}.rgx-msg.bad{color:#c0392b}'
-+'#rgx-chip{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 0;font-size:11px;font-weight:600;color:#6b7fa6;position:relative;cursor:pointer;-webkit-user-select:none;user-select:none;outline:0}'
-+'#rgx-chip .rgx-ic{position:relative;width:38px;height:38px;border-radius:50%;display:grid;place-items:center;color:#fff;background:linear-gradient(135deg,#5fd3d0,#0a8f9c);box-shadow:0 1px 0 #ffffffaa inset,0 -4px 7px #00000030 inset,0 2px 0 #075f69,0 4px 0 #075f69,0 9px 12px -3px #0a8f9c}'
-+'#rgx-chip .rgx-ic svg{width:21px;height:21px;fill:currentColor;position:relative;z-index:1;filter:drop-shadow(0 1px 1.5px #0004)}'
-+'#rgx-chip:active .rgx-ic{transform:translateY(3px)}'
++'#rgx-chip{cursor:pointer;-webkit-user-select:none;user-select:none;outline:0}'
++'#rgx-chip:active{transform:translateY(2px)}'
 +'.rgx-dot{position:absolute;right:1px;top:1px;width:11px;height:11px;border-radius:50%;background:#aab;border:2px solid #fff}.rgx-dot.ok{background:#27ae60}.rgx-dot.warn{background:#e6a100}.rgx-dot.bad{background:#d63031}'
-+'#rgx-panel{position:fixed;left:8px;right:8px;bottom:128px;z-index:9001;max-width:420px;background:#fff;color:#1b2430;border-radius:16px;box-shadow:0 8px 30px rgba(0,0,0,.3);padding:16px;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-height:70vh;overflow:auto}'
++'#rgx-panel{position:fixed;left:8px;right:8px;top:calc(env(safe-area-inset-top,0px) + 88px);z-index:9001;max-width:420px;background:#fff;color:#1b2430;border-radius:16px;box-shadow:0 8px 30px rgba(0,0,0,.3);padding:16px;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-height:calc(100vh - 110px);overflow:auto}'
 +'#rgx-panel h3{margin:0 0 2px;font-size:16px}#rgx-panel .sub{font-size:12.5px;color:#5b6675;margin-bottom:10px;word-break:break-all}'
 +'.rgx-st{font-size:13px;margin:8px 0;color:#34495e}.rgx-st.ok{color:#1e8449}.rgx-st.warn{color:#b9770e}.rgx-st.bad{color:#c0392b}'
 +'#rgx-panel button.rgx-b{display:block;width:100%;margin:7px 0;padding:11px;border-radius:10px;border:0;background:#1f4e78;color:#fff;font-size:14.5px;cursor:pointer}'
@@ -1486,7 +1484,7 @@ function showLogin(){
 function setLogin(t,bad){var m=document.getElementById('rgx-lm');if(m){m.textContent=t;m.className='rgx-msg'+(bad?' bad':'')}}
 function setDepotLabel(){if(S&&S.role==='user'&&S.depot){var p=jget('rdl.prefs.v1')||{};if(p.depot!==S.depot){p.depot=S.depot;LS.setItem('rdl.prefs.v1',JSON.stringify(p))}}}
 function wipeUserData(){Object.keys(LS).filter(function(k){return k.indexOf('rdl.')===0&&k!=='rdl.prefs.v1'&&k!=='rdl.cleanstart.v2'}).forEach(function(k){LS.removeItem(k)});
-  ['rdlgate.dataAt','rdlgate.dcrAt','rdlgate.bk','rdlgate.bkdirty'].forEach(function(k){LS.removeItem(k)})}
+  ['rdlgate.dataAt','rdlgate.dcrAt','rdlgate.bk','rdlgate.bkdirty','rdlgate.perms'].forEach(function(k){LS.removeItem(k)})}
 function firstLogin(){
   setLogin('Checking access…');
   api('me').then(function(j){
@@ -1570,6 +1568,13 @@ function mergeBackups(){
     function line(b){return '• '+(b.name||b.email)+' ('+b.depot+') — backup of '+b.day}
     return{done:done,late:late,text:(done.length?'Merged:\n'+done.map(line).join('\n'):'Nothing was merged.')+(late.length?'\n\nSkipped — these users have not opened the app since the latest database was published, so their posts are not yet adjusted to it:\n'+late.map(line).join('\n'):'')}})}
 
+/* ---------- user access limits (set by the admin in App Security > User Manage & Access Control) ---------- */
+function loadPerms(){
+  if(!S||S.role!=='user')return;
+  return api('myPerms',null,true).then(function(j){
+    if(j&&j.perms&&typeof j.perms==='object'){LS.setItem('rdlgate.perms',JSON.stringify(j.perms));if(window.RDLACC)RDLACC.apply()}
+  }).catch(function(e){if(/ACCESS_DENIED/.test(e.message))throw e})}
+
 /* ---------- after sign-in (every app start) ---------- */
 function afterLogin(){
   afterAt=Date.now();status('Checking…');
@@ -1579,7 +1584,7 @@ function afterLogin(){
     setDepotLabel();if(ch){location.reload();return}
     if(S.role==='user')return pullData(false).then(function(changed){if(changed){toast('New data received — reloading…');setTimeout(function(){location.reload()},900);throw new Error('__reload')}});
     if(S.role==='admin'&&sigNow()&&LS.getItem('rdlgate.sig')!==sigNow())return pushData().then(function(t){toast('Database published to depots')}).catch(function(e){status(msgOf(e),'warn')})
-  }).then(function(){return backupIfDue()}).catch(function(e){
+  }).then(loadPerms).then(function(){return backupIfDue()}).catch(function(e){
     if(e.message==='__reload')return;
     if(/ACCESS_DENIED/.test(e.message))return forcedOut(msgOf(e));
     status('Offline or not synced: '+msgOf(e),'warn')})}
@@ -1611,20 +1616,22 @@ function renderPanel(){
   }else{
     btn('Get latest data now','',function(b){run(b,'Checking…',function(){return pullData(false).then(function(c){if(c){setTimeout(function(){location.reload()},800);return 'New data received. Reloading…'}return 'You already have the latest data.'})})});
   }
-  if(S.role==='admin')btn('Users & activity log','alt',function(){panelOn=false;renderPanel();openUsers()});
-  btn('Lock app now','alt',function(){panelOn=false;renderPanel();LS.setItem('rdlgate.last','0');lockNow()});
-  btn('Change PIN','alt',function(){panelOn=false;renderPanel();changePin()});
+  /* admin: Users, Lock app now and Change PIN live in Settings > App Security; normal users keep them here */
+  if(S.role!=='admin'){
+    btn('Lock app now','alt',function(){panelOn=false;renderPanel();LS.setItem('rdlgate.last','0');lockNow()});
+    btn('Change PIN','alt',function(){panelOn=false;renderPanel();changePin()})}
   btn('Save backup now','alt',function(b){run(b,'Saving…',function(){return sendBackup().then(function(){return 'Backup saved to Drive.'})})});
   btn('Sign out','red',function(){signOut()});
   p.appendChild(rep);document.body.appendChild(p)}
 function buildChip(){
   if(document.getElementById('rgx-chip'))return;
-  var c=h('span',null);c.id='rgx-chip';c.setAttribute('role','button');c.tabIndex=0;c.setAttribute('aria-label','Sync menu');
-  var ic=h('span','rgx-ic');ic.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-cloud"/></svg>';
-  var d=h('span','rgx-dot '+st.c);d.id='rgx-dot';d.style.cssText='right:-1px;top:-1px';ic.appendChild(d);c.appendChild(ic);c.appendChild(document.createTextNode('Cloud'));
+  var hd=document.querySelector('.hdr');if(!hd)return;
+  var c=h('div','ib');c.id='rgx-chip';c.setAttribute('role','button');c.tabIndex=0;c.setAttribute('aria-label','Cloud');
+  c.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-cloud"/></svg>';
+  var d=h('span','rgx-dot '+st.c);d.id='rgx-dot';d.style.cssText='right:-3px;top:-3px';c.appendChild(d);
   c.onclick=function(){panelOn=!panelOn;renderPanel()};
   c.onkeydown=function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();c.onclick()}};
-  var nv=document.querySelector('.nav > div');(nv||document.body).appendChild(c)}
+  hd.appendChild(c)}
 
 /* users: hide the admin-only database tiles in Settings */
 function hideAdminTiles(){var q=0;
@@ -1740,13 +1747,13 @@ function openUsers(){
 /* ---------- start ---------- */
 function start(){
   if(!S){showLogin();return}
-  lockInit();buildChip();if(S.role==='user')hideAdminTiles();
+  lockInit();buildChip();if(window.RDLACC)RDLACC.apply();if(S.role==='user')hideAdminTiles();
   loadGIS(function(err){if(err){status('Offline — working on this phone','warn');return}initGIS(true);
     if(tok){afterLogin();return}
     try{google.accounts.id.prompt()}catch(e){}
     setTimeout(function(){if(!tok)status('Tap ☁ and press the blue button to sign in','warn')},6000)})}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start);else start();
-window.RDLGATE={api:api,lockNow:lockNow,build:buildPkgs,mergeVal:mergeVal,session:function(){return S}};
+window.RDLGATE={api:api,lockNow:function(){LS.setItem('rdlgate.last','0');lockNow()},changePin:changePin,depotNames:depotNames,build:buildPkgs,mergeVal:mergeVal,session:function(){return S}};
 })();
 </script>
 
@@ -3752,7 +3759,7 @@ function page(id,title,parent,build){
   top.appendChild(b);top.appendChild(el('h2',null,title));p.appendChild(top);
   const body=el('div','sbody');p.appendChild(body);pages[id]={body,build};return p}
 const PROT=new Set(['bcu','updoff','setdb','setcu','setup','setdcr','setupd','updout','updcr','seterase','setbp','setbackup']);
-function open(id){if(window.RDL_ROLE==='user'&&(PROT.has(id)||['setsec','setlog','setcorr'].indexOf(id)>=0))return;if(PROT.has(id)&&!unlocked()){unlock().then(ok=>{if(ok)open(id)});return}const pg=pages[id];if(pg&&pg.build){pg.body.textContent='';pg.build(pg.body)}show(id);if(id==='setup'||id==='setdcr')R.curStatus&&R.curStatus()}
+function open(id){if(window.RDL_ROLE==='user'&&(PROT.has(id)||['setsec','setlog','setcorr','setusers'].indexOf(id)>=0))return;if(PROT.has(id)&&!unlocked()){unlock().then(ok=>{if(ok)open(id)});return}const pg=pages[id];if(pg&&pg.build){pg.body.textContent='';pg.build(pg.body)}show(id);if(id==='setup'||id==='setdcr')R.curStatus&&R.curStatus()}
 const card=(h,hint)=>{const c=el('div','st-card');if(h)c.appendChild(el('h3',null,h));if(hint)c.appendChild(el('p','hint',hint));return c};
 const msgBox=()=>el('div','stt');
 const say=(e,t,cls)=>{e.textContent=t;e.className='stt '+(cls||'')};
@@ -3781,7 +3788,7 @@ const pUp=page('setup','Database Upload','setdb'),pDcr=page('setdcr','Daily Coll
 if(upCard){upCard.querySelector('.hint').textContent='Upload either file or both. Credit limit data replaces only the credit limits. Outstanding data replaces the bills; bills and collections you posted in the app are reconciled by date.';
   const bd=upCard.querySelector('#bDb');if(bd)bd.textContent='Upload Database';pages.setup.body.appendChild(upCard)}
 if(dcrCard)pages.setdcr.body.appendChild(dcrCard);
-if(window.RDL_ROLE!=='user')mainList.appendChild(tile(IC.lock,G.red,'App Security','PIN, corrections and activity log',async()=>{if(await unlock())open('setsec')}));
+if(window.RDL_ROLE!=='user')mainList.appendChild(tile(IC.lock,G.red,'App Security','Users, PIN, corrections and activity log',async()=>{if(await unlock())open('setsec')}));
 mainList.appendChild(tile(IC.pen,G.red,'Header Text','Change the app title and depot name',()=>open('sethdr')));
 mainList.appendChild(tile(IC.bell,G.amber,'Notification Settings','Choose which due bills notify you',()=>open('setnotif')));
 mainList.appendChild(tile(svg('<path d="M20 2H4a2 2 0 00-2 2v18l4-4h14a2 2 0 002-2V4a2 2 0 00-2-2z"/>'),G.green,'WhatsApp Message','Change the wording of the overdue message',()=>open('setwa')));
@@ -4056,10 +4063,91 @@ page('setsec','App Security','settings',b=>{
   const l=el('div','set-list');
   l.appendChild(tile(IC.db,G.blue,'Database Settings','Backup, database upload and daily Collection & Order upload',()=>open('setdb')));
   l.appendChild(tile(IC.pen,G.red,'Database Correction & Update','Correction, database update, new customer create and erase',()=>open('setcu')));
+  l.appendChild(tile(svg('<path d="M16 11a3 3 0 100-6 3 3 0 000 6zM8 11a3 3 0 100-6 3 3 0 000 6zm0 2c-2.3 0-7 1.2-7 3.5V19h14v-2.5C15 14.2 10.3 13 8 13zm8 0c-.4 0-.7 0-1.1.1 1.2.8 2.100 1.900 2.100 3.400V19h6v-2.500c0-2.300-4.700-3.500-7-3.500z"/>'),G.green,'User Manage & Access Control','Create, disable, delete users and set what each can do',()=>open('setusers')));
   l.appendChild(tile(IC.cal,G.blue,'Activity Log','What was changed, and undo the last change',()=>open('setlog')));
   l.appendChild(tile(IC.lock,G.purple,secG().on?'Change PIN':'Set PIN',secG().on?'Set a new 4-digit PIN':'PIN lock is OFF. Tap to set a new PIN and recovery code',async()=>{if(await setPin('Change PIN',true)){open('setsec')}}));
+  if(window.RDLGATE){
+    l.appendChild(tile(IC.lock,G.grey,'Change Lock PIN','PIN that locks the app on this phone',()=>window.RDLGATE.changePin()));
+    l.appendChild(tile(IC.lock,G.red,'Lock App Now','Lock the app immediately',()=>window.RDLGATE.lockNow()))}
   b.appendChild(l);
   b.appendChild(el('p','hint','Before every change the app keeps a safety copy of your posted data (last 5). You can undo the last change from Activity Log. Activity Log data is deleted automatically after 30 days.'))});
+
+
+/* ---------- User Manage & Access Control (users, enable / disable / delete, access limits; all kept in the Google Sheet) ---------- */
+page('setusers','User Manage & Access Control','setsec',b=>{
+  if(!unlocked()){b.appendChild(el('p','hint','Locked. Go back and open App Security again.'));return}
+  const GT=window.RDLGATE,ACC=window.RDLACC;
+  if(!GT||!ACC){b.appendChild(el('p','hint','Not available on this device.'));return}
+  if(!document.getElementById('uaCss')){const cs=document.createElement('style');cs.id='uaCss';
+    cs.textContent='.ua-in{display:block;width:100%;box-sizing:border-box;margin:7px 0;padding:11px;border-radius:10px;border:1px solid #8aa0c466;background:transparent;color:inherit;font-size:15px}'
+    +'.ua-u{margin:10px 0;padding:12px;border-radius:14px;border:1px solid #8aa0c455}.ua-u.off{opacity:.62}'
+    +'.ua-n{font-weight:700;font-size:15.5px}.ua-s{font-size:12.5px;opacity:.8;margin-top:2px;word-break:break-all}'
+    +'.ua-w{font-size:12.5px;color:#c0392b;margin-top:4px}'
+    +'.ua-bs{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}'
+    +'.ua-b{padding:8px 12px;border-radius:10px;border:0;background:#1f4e78;color:#fff;font-size:13px;cursor:pointer}.ua-b.alt{background:#e8eef5;color:#1f4e78}.ua-b.red{background:#fde8e6;color:#c0392b}.ua-b:disabled{opacity:.5}'
+    +'.ua-ed{margin-top:10px;padding-top:8px;border-top:1px dashed #8aa0c466}'
+    +'.ua-r{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:7px 0}.ua-r small{display:block;opacity:.7;font-size:11.5px}'
+    +'.ua-r select{padding:7px;border-radius:8px;border:1px solid #8aa0c466;background:transparent;color:inherit;font-size:13.5px}'
+    +'.ua-lr{font-size:12px;padding:5px 0;border-bottom:1px solid #8aa0c433;word-break:break-word}.ua-lr.bad{color:#c0392b}';
+    document.head.appendChild(cs)}
+  const msg=e=>String(e&&e.message||e||'').replace(/^Error:\s*/,'').replace(/^ACCESS_DENIED:\s*/,'');
+  const depots=(()=>{const m=base(),o={};if(m)(m.out||[]).concat(m.cr||[]).forEach(r=>{if(r.dp)o[r.dp]=1});return Object.keys(o).sort()})();
+
+  /* add a user */
+  const add=card('Add a user','The user is added to the Google Sheet and can sign in with this Gmail. A new user has full access until you set limits.');
+  const mk=(ph,type)=>{const i=el('input','ua-in');i.placeholder=ph;i.type=type||'text';i.autocomplete='off';add.appendChild(i);return i};
+  const fe=mk('Gmail address','email'),fn=mk('Name'),fd=mk('Depot (exactly as in the Excel)');
+  const dl=el('datalist');dl.id='uaDl';depots.forEach(n=>{const o=el('option');o.value=n;dl.appendChild(o)});fd.setAttribute('list','uaDl');add.appendChild(dl);
+  const ab=el('button','st-btn','Add user');ab.type='button';add.appendChild(ab);const am=msgBox();add.appendChild(am);b.appendChild(add);
+
+  const listCard=card('Users');const list=el('div');listCard.appendChild(list);b.appendChild(listCard);
+  const summary=p=>{const r=[];ACC.MODS.forEach(m=>{const v=p&&p[m.k];if(v===0)r.push(m.t+': no access');else if(v===1)r.push(m.t+': view only')});return r.length?'Limited — '+r.join(' • '):'Full access'};
+
+  const load=async()=>{
+    list.textContent='Loading…';let us,pm;
+    try{us=(await GT.api('listUsers')).users}catch(e){list.textContent=msg(e);return}
+    try{pm=(await GT.api('listPerms')).perms||{}}catch(e){pm=null}
+    list.textContent='';
+    if(pm===null)list.appendChild(el('p','ua-w','⚠ Access limits and Delete need the Apps Script update (file Apps-Script-User-Access.gs). Add, Turn off and Turn on still work.'));
+    us.forEach(u=>{
+      const r=el('div','ua-u'+(u.active?'':' off'));
+      r.appendChild(el('div','ua-n',(u.name||u.email)+(u.role==='admin'?'  (Admin)':'')));
+      r.appendChild(el('div','ua-s',u.email));
+      r.appendChild(el('div','ua-s',(u.depot||'all depots')+' • '+(u.active?'Active':'Turned off')));
+      if(u.role!=='user'){r.appendChild(el('div','ua-s','Admin — full access, cannot be limited or deleted here'));list.appendChild(r);return}
+      const cur=(pm&&pm[u.email.toLowerCase()])||{};
+      r.appendChild(el('div','ua-s',pm===null?'':summary(cur)));
+      if(u.depot&&!u.depotKnown)r.appendChild(el('div','ua-w','⚠ No data published under this depot name. Check the spelling.'));
+      const bs=el('div','ua-bs');r.appendChild(bs);
+      const btn=(t,cls,fn)=>{const x=el('button','ua-b '+(cls||''),t);x.type='button';x.onclick=()=>fn(x);bs.appendChild(x);return x};
+      btn(u.active?'Turn off':'Turn on','',async x=>{
+        if(u.active&&!await RDLUI.ask({title:'Turn off '+u.email+'?',msg:'They lose access the next time they open the app. You can turn them on again later.'}))return;
+        x.disabled=true;try{await GT.api('saveUser',{email:u.email,active:!u.active});load()}catch(e){x.disabled=false;await RDLUI.alert('Could not change',msg(e))}});
+      btn('Change depot','alt',async()=>{const d=prompt('Depot for '+u.email,u.depot||'');if(d==null||!d.trim())return;
+        try{await GT.api('saveUser',{email:u.email,depot:d.trim()});load()}catch(e){await RDLUI.alert('Could not change',msg(e))}});
+      let ed=null;
+      btn('Access','alt',()=>{
+        if(ed){ed.remove();ed=null;return}
+        ed=el('div','ua-ed');r.appendChild(ed);const sel={};
+        ACC.MODS.forEach(m=>{const row=el('div','ua-r');const lb=el('div');lb.appendChild(document.createTextNode(m.t));lb.appendChild(el('small',null,m.d));row.appendChild(lb);
+          const s=el('select');[[2,'Full'],[1,'View only'],[0,'No access']].forEach(o=>{if(o[0]===1&&!m.ro)return;const op=el('option',null,o[1]);op.value=o[0];s.appendChild(op)});
+          const v=cur[m.k];s.value=String(v===0||v===1?(v===1&&!m.ro?2:v):2);sel[m.k]=s;row.appendChild(s);ed.appendChild(row)});
+        const sv=el('button','st-btn','Save access');sv.type='button';const st=msgBox();ed.appendChild(sv);ed.appendChild(st);
+        sv.onclick=async()=>{const perms={};ACC.MODS.forEach(m=>{const v=+sel[m.k].value;if(v!==2)perms[m.k]=v});
+          sv.disabled=true;try{await GT.api('setPerms',{email:u.email,perms});say(st,'Saved. It applies the next time this user opens the app with internet.','ok');load()}catch(e){sv.disabled=false;say(st,msg(e),'bad')}}});
+      btn('Delete','red',async x=>{
+        if(!await RDLUI.ask({title:'Delete '+u.email+'?',msg:'The user is removed from the Google Sheet and loses access. Their backups are kept. This cannot be undone.'}))return;
+        x.disabled=true;try{await GT.api('deleteUser',{email:u.email});load()}catch(e){x.disabled=false;await RDLUI.alert('Could not delete',msg(e))}});
+      list.appendChild(r)})};
+  ab.onclick=async()=>{am.textContent='';ab.disabled=true;
+    try{const j=await GT.api('saveUser',{email:fe.value,name:fn.value,depot:fd.value,active:true});say(am,j.created?'User added.':'User updated.','ok');fe.value='';fn.value='';fd.value='';load()}
+    catch(e){say(am,msg(e),'bad')}ab.disabled=false};
+
+  /* sign-in / backup log kept by the server */
+  const lc=card('Sign-in & backup log','Server log: who signed in, backed up or was refused.');const lb=el('button','st-btn','Show log');lb.type='button';const lg=el('div');lc.appendChild(lb);lc.appendChild(lg);b.appendChild(lc);
+  lb.onclick=async()=>{lg.textContent='Loading…';try{const j=await GT.api('listLog');lg.textContent='';if(!j.rows.length)lg.textContent='No activity yet.';
+    j.rows.forEach(r=>{const d=el('div','ua-lr'+(r.result==='FAIL'?' bad':''));let t=r.at;try{t=new Date(r.at).toLocaleString()}catch(e){}d.textContent=t+' • '+(r.email||'?')+' • '+r.action+' • '+r.result+(r.note?' • '+r.note:'');lg.appendChild(d)})}catch(e){lg.textContent=msg(e)}};
+  load()});
 
 /* ---------- Database Correction & Update menu ---------- */
 page('setcu','Database Correction & Update','setsec',b=>{
@@ -7118,6 +7206,13 @@ window.addEventListener('load',function(){setTimeout(function(){try{if('serviceW
 </script>
 
 <style id="rdl-fit-css">
+/* header: Cloud button next to Settings; Date / Time / Day closer together and larger */
+.hdr{column-gap:8px}
+.hdr .meta{grid-column:1/-1;justify-content:flex-start;gap:0;overflow:visible;font-size:clamp(11.5px,3.55vw,15px);padding-top:4px}
+.hdr .meta span{gap:0}
+.hdr .meta span+span{padding-left:10px;margin-left:10px}
+.hdr .meta b{font-weight:700}
+
 /* 6 items in the bottom bar: keep labels on one line */
 .nav button,.nav #rgx-chip{min-width:0}
 .nav button{font-size:11px!important;letter-spacing:-.1px;white-space:nowrap}
