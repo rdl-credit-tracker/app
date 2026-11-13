@@ -1437,7 +1437,10 @@ var css='#rgx-login{position:fixed;inset:0;z-index:99999;background:#f4f7fb;disp
 +'.rgx-card{background:#fff;border-radius:18px;box-shadow:0 8px 30px rgba(0,0,0,.12);padding:28px 22px;width:min(92vw,360px);text-align:center;color:#1b2430}'
 +'.rgx-card h1{font-size:21px;margin:0 0 4px}.rgx-card p{margin:6px 0 16px;color:#5b6675;font-size:14px}'
 +'.rgx-msg{margin-top:14px;font-size:13.5px;color:#5b6675;min-height:18px}.rgx-msg.bad{color:#c0392b}'
-+'#rgx-chip{position:fixed;left:8px;bottom:84px;z-index:9000;width:36px;height:36px;border-radius:50%;border:0;background:#1f4e78;color:#fff;font-size:17px;box-shadow:0 2px 8px rgba(0,0,0,.3);opacity:.88;cursor:pointer}'
++'#rgx-chip{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 0;font-size:11px;font-weight:600;color:#6b7fa6;position:relative;cursor:pointer;-webkit-user-select:none;user-select:none;outline:0}'
++'#rgx-chip .rgx-ic{position:relative;width:38px;height:38px;border-radius:50%;display:grid;place-items:center;color:#fff;background:linear-gradient(135deg,#5fd3d0,#0a8f9c);box-shadow:0 1px 0 #ffffffaa inset,0 -4px 7px #00000030 inset,0 2px 0 #075f69,0 4px 0 #075f69,0 9px 12px -3px #0a8f9c}'
++'#rgx-chip .rgx-ic svg{width:21px;height:21px;fill:currentColor;position:relative;z-index:1;filter:drop-shadow(0 1px 1.5px #0004)}'
++'#rgx-chip:active .rgx-ic{transform:translateY(3px)}'
 +'.rgx-dot{position:absolute;right:1px;top:1px;width:11px;height:11px;border-radius:50%;background:#aab;border:2px solid #fff}.rgx-dot.ok{background:#27ae60}.rgx-dot.warn{background:#e6a100}.rgx-dot.bad{background:#d63031}'
 +'#rgx-panel{position:fixed;left:8px;right:8px;bottom:128px;z-index:9001;max-width:420px;background:#fff;color:#1b2430;border-radius:16px;box-shadow:0 8px 30px rgba(0,0,0,.3);padding:16px;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-height:70vh;overflow:auto}'
 +'#rgx-panel h3{margin:0 0 2px;font-size:16px}#rgx-panel .sub{font-size:12.5px;color:#5b6675;margin-bottom:10px;word-break:break-all}'
@@ -1615,9 +1618,13 @@ function renderPanel(){
   btn('Sign out','red',function(){signOut()});
   p.appendChild(rep);document.body.appendChild(p)}
 function buildChip(){
-  var c=h('button',null,'☁');c.id='rgx-chip';c.type='button';c.setAttribute('aria-label','Sync menu');
-  var d=h('span','rgx-dot '+st.c);d.id='rgx-dot';c.appendChild(d);
-  c.onclick=function(){panelOn=!panelOn;renderPanel()};document.body.appendChild(c)}
+  if(document.getElementById('rgx-chip'))return;
+  var c=h('span',null);c.id='rgx-chip';c.setAttribute('role','button');c.tabIndex=0;c.setAttribute('aria-label','Sync menu');
+  var ic=h('span','rgx-ic');ic.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-cloud"/></svg>';
+  var d=h('span','rgx-dot '+st.c);d.id='rgx-dot';d.style.cssText='right:-1px;top:-1px';ic.appendChild(d);c.appendChild(ic);c.appendChild(document.createTextNode('Cloud'));
+  c.onclick=function(){panelOn=!panelOn;renderPanel()};
+  c.onkeydown=function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();c.onclick()}};
+  var nv=document.querySelector('.nav > div');(nv||document.body).appendChild(c)}
 
 /* users: hide the admin-only database tiles in Settings */
 function hideAdminTiles(){var q=0;
@@ -7108,6 +7115,45 @@ html body .st-card.cx-fill>.od-table-wrap{margin:0!important;border:0!important;
 <script>
 /* installable app (PWA): registered a few seconds after load so it never races the one-time clean start */
 window.addEventListener('load',function(){setTimeout(function(){try{if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(function(){})}catch(e){}},3000)});
+</script>
+
+<style id="rdl-fit-css">
+/* 6 items in the bottom bar: keep labels on one line */
+.nav button,.nav #rgx-chip{min-width:0}
+.nav button{font-size:11px!important;letter-spacing:-.1px;white-space:nowrap}
+/* Home page: no up/down scrolling, everything fits the phone screen */
+html.rdl-fit,html.rdl-fit body{height:100%;overflow:hidden;overscroll-behavior:none}
+</style>
+<script id="rdl-fit-js">
+/* ===== Home page auto-fit: scales the Home screen so it fits above the bottom bar on any phone ===== */
+(function(){
+  var MIN=.5,app=document.querySelector('.app'),home=document.getElementById('home'),root=document.documentElement,t=0;
+  if(!app||!home)return;
+  function navTop(){var n=document.querySelector('.nav > div');return n?n.getBoundingClientRect().top:innerHeight-80}
+  function bottom(){var m=0;for(var i=0;i<home.children.length;i++){var r=home.children[i].getBoundingClientRect();if(r.height>0&&r.bottom>m)m=r.bottom}return m}
+  function reset(){app.style.zoom='';root.classList.remove('rdl-fit')}
+  function fit(){
+    if(!home.classList.contains('on')){reset();return}
+    var a=document.activeElement;if(a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName))return;
+    root.classList.add('rdl-fit');window.scrollTo(0,0);
+    var avail=navTop()-8,z=1;app.style.zoom=1;
+    for(var i=0;i<6;i++){
+      var b=bottom();if(b<=avail&&(avail-b<8||z>=1))break;
+      z=Math.max(MIN,Math.min(1,z*(avail/b)*(b>avail?.996:1)));app.style.zoom=z;
+      if(z<=MIN)break}
+    if(bottom()>avail+2&&z<=MIN)root.classList.remove('rdl-fit')   /* extremely small screen: allow scrolling instead of clipping */
+  }
+  function later(ms){clearTimeout(t);t=setTimeout(fit,ms||80)}
+  window.addEventListener('resize',function(){later(150)});
+  window.addEventListener('orientationchange',function(){later(350)});
+  window.addEventListener('load',function(){later(200)});
+  document.addEventListener('focusout',function(){later(300)});
+  document.addEventListener('visibilitychange',function(){if(!document.hidden)later(100)});
+  new MutationObserver(function(){later(40)}).observe(home,{attributes:true,attributeFilter:['class']});
+  var rb=document.getElementById('remindBar');if(rb)new MutationObserver(function(){later(60)}).observe(rb,{childList:true,attributes:true});
+  document.addEventListener('click',function(e){if(e.target.closest&&e.target.closest('.nav'))later(120)},true);
+  later(50);setTimeout(fit,600);setTimeout(fit,1800);
+})();
 </script>
 </body>
 </html>
