@@ -3739,7 +3739,10 @@ const FONTS=[['default','Default',''],
  ['mono','Typewriter','ui-monospace,Menlo,Consolas,"Courier New",monospace'],
  ['casual','Casual','"Comic Sans MS","Comic Neue",casual,cursive']];
 function applyPrefs(){
-  const p=prefs(),h1=$('.ttl h1'),dl=$('#depotLine');if(h1)h1.textContent=p.title;if(dl){dl.textContent=p.depot;dl.style.display=p.depot?'':'none'}
+  const p=prefs(),h1=$('.ttl h1'),dl=$('#depotLine');if(h1){const tt=String(p.title||'').trim(),sp=tt.indexOf(' ');h1.textContent='';h1.setAttribute('aria-label',tt);
+    if(sp>0){const a=document.createElement('span'),b=document.createElement('span');a.className='t1';a.textContent=tt.slice(0,sp);b.className='t2';b.textContent=tt.slice(sp+1);h1.appendChild(a);h1.appendChild(b)}
+    else{const a=document.createElement('span');a.className='t1';a.textContent=tt;h1.appendChild(a)}}
+  if(dl){dl.textContent=p.depot;dl.style.display=p.depot?'':'none'}
   document.title=p.title;
   const dark=p.theme==='dark'||(p.theme==='system'&&window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches);
   document.documentElement.dataset.theme=dark?'dark':'light';
@@ -7267,6 +7270,18 @@ html body .hdr .meta span{display:flex;align-items:center;flex:0 1 auto;min-widt
 html body .hdr .meta span+span::before{content:"";flex:none;width:2px;height:13px;margin-right:7px;border-radius:2px;background:#ffd23f}
 html body .hdr .meta svg{display:none}
 html body .hdr .meta b{font-weight:700}
+</style>
+<style id="rdl-hdr-fit">
+/* ===== Header title fit: smaller logo + icons, "RDL" larger, "Credit Tracker" smaller, whole title always visible ===== */
+html body .hdr{grid-template-columns:auto minmax(0,1fr) auto auto auto;column-gap:7px;padding:11px 10px 10px}
+html body .hdr .logo{width:44px!important;height:44px!important;padding:1.5px!important;flex:none}
+@media(max-width:380px){html body .hdr .logo{width:42px!important;height:42px!important}}
+html body .hdr>.ib{width:34px;height:34px;border-radius:50%}
+html body .hdr>.ib svg{width:18px;height:18px}
+html body .hdr .ttl h1{display:flex;align-items:baseline;gap:5px;overflow:visible;text-overflow:clip;white-space:nowrap;font-size:inherit;line-height:1.15;min-width:0}
+html body .hdr .ttl h1 .t1{font-size:clamp(19px,6vw,25px);font-weight:900;letter-spacing:.4px;flex:none}
+html body .hdr .ttl h1 .t2{font-size:clamp(11px,3.4vw,14px);font-weight:700;letter-spacing:0;opacity:.95;min-width:0;overflow:hidden;text-overflow:ellipsis}
+@media(max-width:345px){html body .hdr{column-gap:5px;padding:11px 8px 10px}html body .hdr .logo{width:38px!important;height:38px!important}html body .hdr>.ib{width:31px;height:31px}html body .hdr>.ib svg{width:16px;height:16px}html body .hdr .ttl h1{gap:4px}html body .hdr .ttl h1 .t1{font-size:18px;letter-spacing:.2px}html body .hdr .ttl h1 .t2{font-size:10.5px}}
 </style>
 </body>
 </html>
