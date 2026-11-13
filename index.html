@@ -2084,7 +2084,7 @@ const num=v=>typeof v==='number'?v:0, str=v=>v==null?'':String(v).trim();
    "Days 1" (SAP export) = the app's "Days Limit"; rows whose Days 1 is 0 are NOT taken. Old files with a "Days Limit" column still work. */
 const nk=v=>typeof v==='string'?v.toLowerCase().replace(/\s+/g,' ').trim():'';
 function parseOutstanding(R){
-  const ALI={co:['company code'],cu:['customer'],nd:['net due date symbol'],doc:['document type'],nm:['customer name'],amt:['amount in local currency','amount local currency'],post:['posting date'],due:['payment date'],arr:['arrears by net due date'],d1:['days 1'],dl:['days limit'],bill:['billing document'],dp:['depot']};
+  const ALI={co:['company code'],cu:['customer'],nd:['net due date symbol'],doc:['document type'],nm:['customer name'],amt:['amount in local currency','amount local currency'],post:['posting date'],due:['payment date'],arr:['arrears by net due date'],d1:['days 1'],dl:['days limit'],bill:['billing document'],dp:['depot name','depot','depot_name']};
   let h=null;
   for(const i of keys(R).slice(0,15)){const a=R[i];if(!a)continue;const m={};a.forEach((v,j)=>{const k=nk(v);if(k&&!(k in m))m[k]=j});
     const col={};for(const k in ALI){const f=ALI[k].find(n=>n in m);col[k]=f==null?-1:m[f]}
@@ -2098,7 +2098,7 @@ function parseOutstanding(R){
     out.push({co:g(a,'co'),cu:g(a,'cu'),nm:str(g(a,'nm')),
       amt:g(a,'amt'),post:iso(g(a,'post')),due:iso(g(a,'due')),
       arr:g(a,'arr'),days:c.d1>=0?d1:g(a,'dl'),bill:String(g(a,'bill')),doc:str(g(a,'doc')),...(c.dp>=0&&str(g(a,'dp'))?{dp:str(g(a,'dp'))}:{})});}
-  out.skipped=skipped;
+  out.skipped=skipped;out.hasDp=c.dp>=0;out.nodp=out.filter(r=>!r.dp).length;
   return out.length?out:null;
 }
 /* Credit limit file: columns are matched by NAME (any order, extra columns ignored, capital/small letters do not matter).
@@ -2106,7 +2106,7 @@ function parseOutstanding(R){
    Rows whose Credit Limit is 0 / blank are NOT taken. Old files (separate Company + Day Limit columns) still work. */
 const CO_LET={R:[1000,'RPL'],N:[2000,'RNL'],P:[3000,'PCL'],B:[5000,'RBCL'],J:[6000,'Jenphar'],V:[7000,'NLS'],X:[9000,'Rexime']};
 function parseCredit(R){
-  const ALI={bp:['business partner','bp code'],nm:['description','bp name','customer name'],co:['company code'],cn:['company'],seg:['credit segment'],dl:['day limit','days limit'],exp:['credit exposure'],lim:['credit limit'],util:['utilization %','utilisation %','utilization','utilisation'],ex:['exposure amount'],sn:['name of credit segment'],dp:['depot']};
+  const ALI={bp:['business partner','bp code'],nm:['description','bp name','customer name'],co:['company code'],cn:['company'],seg:['credit segment'],dl:['day limit','days limit'],exp:['credit exposure'],lim:['credit limit'],util:['utilization %','utilisation %','utilization','utilisation'],ex:['exposure amount'],sn:['name of credit segment'],dp:['depot name','depot','depot_name']};
   let h=null;
   for(const i of keys(R).slice(0,15)){const a=R[i];if(!a)continue;const m={};a.forEach((v,j)=>{const k=nk(v);if(k&&!(k in m))m[k]=j});
     const col={};for(const k in ALI){const f=ALI[k].find(n=>n in m);col[k]=f==null?-1:m[f]}
@@ -2119,7 +2119,7 @@ function parseCredit(R){
     if(mm&&CO_LET[mm[1]]){co=CO_LET[mm[1]][0];cn=CO_LET[mm[1]][1];dl=(+mm[2])+' Days'}
     else if(co==null||str(co)===''){unknown++;continue}
     out.push({bp:g(a,'bp'),nm:str(g(a,'nm')),co:co,cn:cn,seg:str(g(a,'seg')),dl:dl,exp:num(g(a,'exp')),lim:lim,util:num(g(a,'util')),ex:num(g(a,'ex')),sn:str(g(a,'sn')),...(c.dp>=0&&str(g(a,'dp'))?{dp:str(g(a,'dp'))}:{})});}
-  out.skipped=skipped;out.unknown=unknown;
+  out.skipped=skipped;out.unknown=unknown;out.hasDp=c.dp>=0;out.nodp=out.filter(r=>!r.dp).length;
   return out.length?out:null;
 }
 function parseDcrSheet(R){
@@ -2148,11 +2148,49 @@ async function parseDcr(buf){
   return{rows:last.rows,lastSheet:last.name,lastDate};
 }
 
+/* ---- Depot Name: capital/small letters and extra spaces do not matter; the first spelling seen (existing database first) is kept ---- */
+const dpKey=v=>String(v==null?'':v).toLowerCase().replace(/\s+/g,' ').trim();
+function unifyDepots(seed,lists){
+  const map=new Map();
+  const take=(r,fix)=>{if(!r||!r.dp)return;const k=dpKey(r.dp);if(!k)return;
+    if(!map.has(k))map.set(k,String(r.dp).replace(/\s+/g,' ').trim());if(fix)r.dp=map.get(k)};
+  (seed||[]).forEach(l=>(l||[]).forEach(r=>take(r,true)));
+  (lists||[]).forEach(l=>(l||[]).forEach(r=>take(r,true)));
+  return map;
+}
+function depotsOf(...lists){const o={};lists.forEach(l=>(l||[]).forEach(r=>{if(r&&r.dp)o[r.dp]=(o[r.dp]||0)+1}));return o}
 /* ---- local storage (single phone, no server) ---- */
 const K={m:'rdl.master.v1',d:'rdl.dcr.v1'};
 const store={get:k=>{try{return JSON.parse(localStorage.getItem(K[k]))}catch(e){return null}},
   set:(k,v)=>localStorage.setItem(K[k],JSON.stringify(v))};
-window.RDL={get master(){return store.get('m')},get dcr(){return store.get('d')},fmt,curStatus:()=>curStatus()};
+/* ---- Depot view (admin): one selected depot -> every screen that reads RDL.master sees only that depot. Raw data and uploads stay untouched. ---- */
+const DSK='rdl.dsel.v1',dKey=x=>String(x||'').trim().toLowerCase().replace(/\s+/g,' ');
+const dAdmin=()=>{try{const g=window.RDLGATE&&RDLGATE.session&&RDLGATE.session();return !g||g.role==='admin'}catch(e){return true}};
+const dSel=()=>{try{return dAdmin()?(localStorage.getItem(DSK)||''):''}catch(e){return''}};
+function depotView(m){const s=dSel();if(!m||!s)return m;const t=dKey(s),f=r=>dKey(r.dp)===t;return Object.assign({},m,{out:(m.out||[]).filter(f),cr:(m.cr||[]).filter(f)})}
+let _cm=null,_cr='';
+function cuMap(){const raw=localStorage.getItem('rdl.master.v1')||'';if(_cm&&_cr===raw)return _cm;const m=store.get('m'),o=new Map();
+  if(m){(m.cr||[]).forEach(r=>{if(r.dp)o.set(String(r.bp),dKey(r.dp))});(m.out||[]).forEach(r=>{if(r.dp)o.set(String(r.cu),dKey(r.dp))})}_cm=o;_cr=raw;return o}
+let _dn=null,_dr='';
+function cuDn(){const raw=localStorage.getItem('rdl.master.v1')||'';if(_dn&&_dr===raw)return _dn;const m=store.get('m'),o=new Map();
+  if(m){(m.cr||[]).forEach(r=>{if(r.dp)o.set(String(r.bp),String(r.dp))});(m.out||[]).forEach(r=>{if(r.dp)o.set(String(r.cu),String(r.dp))})}_dn=o;_dr=raw;return o}
+const cuIn=cu=>{const s=dSel();return !s||cuMap().get(String(cu))===dKey(s)};
+const ledFl=L=>{if(!L||!dSel())return L;return Object.assign({},L,{rv:(L.rv||[]).filter(x=>cuIn(x.cu)),dz:(L.dz||[]).filter(x=>cuIn(x.cu))})};
+window.RDLDEPOT={admin:dAdmin,sel:dSel,key:dKey,cuIn,fl:ledFl,nameOf:cu=>cuDn().get(String(cu))||'',
+  names:()=>{const m=store.get('m'),o={};if(m)(m.out||[]).concat(m.cr||[]).forEach(r=>{if(r.dp)o[r.dp]=1});return Object.keys(o).sort()},
+  set:v=>{try{v?localStorage.setItem(DSK,v):localStorage.removeItem(DSK)}catch(e){}location.reload()}};
+document.addEventListener('click',e=>{const t=e.target&&e.target.closest&&e.target.closest('#depotLine');if(!t||!dAdmin())return;
+  e.stopPropagation();e.preventDefault();if(document.getElementById('dpPick'))return;
+  const ov=document.createElement('div');ov.id='dpPick';ov.style.cssText='position:fixed;inset:0;z-index:99999;background:#0008;display:flex;align-items:center;justify-content:center;padding:18px';
+  const bx=document.createElement('div');bx.style.cssText='background:#fff;color:#0b2a5b;border-radius:16px;max-width:380px;width:100%;max-height:80vh;overflow:auto;padding:14px;font:600 15px system-ui,sans-serif';
+  const h=document.createElement('div');h.textContent='Select Depot';h.style.cssText='font-weight:800;font-size:17px;margin:2px 4px 10px';bx.appendChild(h);
+  const cur=dSel(),add=(lab,val)=>{const b=document.createElement('button');b.type='button';b.textContent=lab+(dKey(val)===dKey(cur)?'  ✓':'');
+    b.style.cssText='display:block;width:100%;text-align:left;padding:13px 12px;margin:0 0 6px;border:1px solid #c9d6ee;border-radius:11px;background:'+(dKey(val)===dKey(cur)?'#e3edff':'#f6f9ff')+';color:#0b2a5b;font:inherit';
+    b.onclick=()=>{ov.remove();if(dKey(val)!==dKey(cur))RDLDEPOT.set(val)};bx.appendChild(b)};
+  add('All Depots','');RDLDEPOT.names().forEach(n=>add(n,n));
+  const c=document.createElement('button');c.type='button';c.textContent='Cancel';c.style.cssText='display:block;width:100%;padding:12px;border:0;background:none;color:#4a6a9f;font:inherit';c.onclick=()=>ov.remove();bx.appendChild(c);
+  ov.appendChild(bx);ov.onclick=ev=>{if(ev.target===ov)ov.remove()};document.body.appendChild(ov)},true);
+window.RDL={get master(){return depotView(store.get('m'))},get dcr(){return store.get('d')},fmt,curStatus:()=>curStatus()};
 /* company display: RPL(1000), RNL(2000) ...; every list of companies runs from 1000 up to 9000 */
 (function(){let cm=null,cmM=null;
   window.RDL.coName=c=>{c=String(c);const m=window.RDL.master;if(!m)return c;if(cmM!==m){cmM=m;cm=new Map();m.cr.forEach(r=>{const k=String(r.co);if(r.cn&&!cm.get(k))cm.set(k,String(r.cn).trim());else if(!cm.has(k))cm.set(k,'')})}
@@ -2183,8 +2221,14 @@ async function onDb(kind,file){
     const x=await readXlsx(await file.arrayBuffer()), R=await x.rows(x.sheets[0]);
     const r=kind==='out'?parseOutstanding(R):parseCredit(R);
     if(!r){say(id,'✗ Wrong file — expected columns for '+(kind==='out'?'Outstanding data':'Credit limit data'),'bad');}
-    else{pend[kind]=r;say(id,kind==='out'?`✓ ${fmt(r.length)} bills • ${new Set(r.map(a=>a.cu)).size} customers • ${__m(r.reduce((s,a)=>s+a.amt,0))}`+(r.skipped?` • ${fmt(r.skipped)} rows skipped (Days 1 = 0 / blank)`:'')
-      :`✓ ${fmt(r.length)} credit lines • ${new Set(r.map(a=>a.bp)).size} customers`+(r.skipped?` • ${fmt(r.skipped)} rows skipped (Credit Limit = 0)`:'')+(r.unknown?` • ⚠ ${fmt(r.unknown)} rows skipped (unknown Credit Segment)`:''),r.unknown?'warn':'ok');}
+    else{pend[kind]=r;const o0=store.get('m')||{out:[],cr:[]};unifyDepots([o0.out,o0.cr],[r]);
+      const dn=Object.keys(depotsOf(r)).sort(),kn=Object.keys(depotsOf(o0.out,o0.cr)),nw=kn.length?dn.filter(n=>!kn.includes(n)):[];
+      let dt='',dw=false;
+      if(!r.hasDp){dt=' • ⚠ No "Depot Name" column found';dw=true}
+      else{dt=' • '+dn.length+' depot(s): '+dn.join(', ');if(r.nodp){dt+=' • ⚠ '+fmt(r.nodp)+' row(s) without Depot Name';dw=true}
+        if(nw.length){dt+=' • ⚠ New depot name(s): '+nw.join(', ')+' — check the spelling';dw=true}}
+      say(id,(kind==='out'?`✓ ${fmt(r.length)} bills • ${new Set(r.map(a=>a.cu)).size} customers • ${__m(r.reduce((s,a)=>s+a.amt,0))}`+(r.skipped?` • ${fmt(r.skipped)} rows skipped (Days 1 = 0 / blank)`:'')
+      :`✓ ${fmt(r.length)} credit lines • ${new Set(r.map(a=>a.bp)).size} customers`+(r.skipped?` • ${fmt(r.skipped)} rows skipped (Credit Limit = 0)`:'')+(r.unknown?` • ⚠ ${fmt(r.unknown)} rows skipped (unknown Credit Segment)`:''))+dt,(r.unknown||dw)?'warn':'ok');}
   }catch(e){say(id,'✗ Could not read this file','bad')}
   $('#bDb').disabled=!(pend.out||pend.cr);
 }
@@ -2213,11 +2257,13 @@ function reconcile(L,newOut,cut){
 async function applyDb(){
   if(!(pend.out||pend.cr))return;
   const old=store.get('m')||{out:[],cr:[]},L=ledgerRaw(),has=!!(L&&(L.rv.length||L.dz.length)),what=pend.out&&pend.cr?'both files':pend.out?'the Outstanding data':'the Credit limit data';
+  unifyDepots([old.out,old.cr],[pend.out,pend.cr]);
+  const dTxt=(()=>{const n=Object.keys(depotsOf(pend.out,pend.cr)).sort();return n.length?' Depots in the new file: '+n.join(', ')+'.':''})();
   let cut=null;
   if(has){
-    cut=await RDLUI.ask({title:'Data complete up to which date?',msg:'Bills and collections you posted in the app on or before this date are already inside the new file. They will be retired so nothing is counted twice. Posts after this date stay.',date:isoToday(),max:isoToday(),ok:'Upload'});
+    cut=await RDLUI.ask({title:'Data complete up to which date?',msg:'Bills and collections you posted in the app on or before this date are already inside the new file. They will be retired so nothing is counted twice. Posts after this date stay.'+dTxt,date:isoToday(),max:isoToday(),ok:'Upload'});
     if(cut===null)return;
-  }else if(!await RDLUI.ask({title:'Upload database?',msg:'The new '+what+' will replace the current one.',ok:'Upload'}))return;
+  }else if(!await RDLUI.ask({title:'Upload database?',msg:'The new '+what+' will replace the current one.'+dTxt,ok:'Upload'}))return;
   let note='';
   try{
     const nm={out:pend.out||old.out,cr:pend.cr||old.cr,at:Date.now(),rev:0};
@@ -2300,7 +2346,7 @@ if(document.readyState==='complete')setTimeout(backToSettings,0);else window.add
 <script>
 (function(){'use strict';
 /* ===== LEDGER overlay: loads right after the Settings module, before every other module, so Outstanding / Overdue / Upcoming / Notifications / Customers all see posted RV bills and DZ collections from the first moment ===== */
-const R=window.RDL,LK='rdl.ledger.v1',uid=b=>[b.bill,b.co,b.cu].join('|');
+const R=window.RDL;R.DP=window.RDLDEPOT;const LK='rdl.ledger.v1',uid=b=>[b.bill,b.co,b.cu].join('|');
 const ld=()=>{try{const x=JSON.parse(localStorage.getItem(LK));if(x&&x.rv)return x}catch(e){}return{rv:[],dz:[],n:{RV:0,DZ:0},ps:{},pc:{},pl:{}}};
 /* merged master: SAP database + posted RV bills, with DZ collections/TDS applied; credit exposure follows */
 const g=Object.getOwnPropertyDescriptor(R,'master').get;let cache=null,ck='';
@@ -2310,7 +2356,7 @@ Object.defineProperty(R,'master',{configurable:true,get(){const m=g();if(!m)retu
   L.rv.forEach(b=>{if(b.nx)return;const q=b.cu+'|'+b.co;dl[q]=(dl[q]||0)+b.amt});
   const mk=b=>({...b,collected:(+b.collected||0)+(c[uid(b)]||0),tds:(+b.tds||0)+(t[uid(b)]||0)});
   const cr=m.cr.map(r=>{const q=r.bp+'|'+r.co;if(!dl[q]||seen[q])return r;seen[q]=1;const e=r.exp+dl[q];return{...r,exp:e,ex:e-r.lim,util:r.lim?Math.round(e/r.lim*1000)/10:r.util}});
-  ck=k;return cache={...m,out:m.out.map(mk).concat(L.rv.map(b=>mk({...b}))),cr}}});
+  ck=k;return cache={...m,out:m.out.map(mk).concat(L.rv.filter(b=>R.DP.cuIn(b.cu)).map(b=>mk({...b}))),cr}}});
 })();
 </script>
 <script>
@@ -3489,7 +3535,7 @@ const uid=b=>[b.bill,b.co,b.cu].join('|');
 const coName=c=>R.coName(c);
 function records(w){
   if(w==='a')return records('s').map(r=>({...r,kd:'RV'})).concat(records('c').map(r=>({...r,kd:'DZ'})));
-  const L=ld(),m=R.master,map=new Map(),t=ymd(new Date());(m?m.out:[]).forEach(b=>map.set(uid(b),b));
+  const L=RDLDEPOT.fl(ld()),m=R.master,map=new Map(),t=ymd(new Date());(m?m.out:[]).forEach(b=>map.set(uid(b),b));
   /* rows that came from the SAP database file (not posted inside this app): RV = sales bills, DZ = receipts */
   const mine=new Set((L.rv||[]).map(uid)),dbRows=k=>(m?m.out:[]).filter(b=>!mine.has(uid(b))&&String(b.doc||'').trim().toUpperCase()===k);
   if(w==='s')return(L.rv||[]).map(r=>{const b=map.get(uid(r))||r,col=+b.collected||0,tds=+b.tds||0,bal=Math.max(0,(+r.amt||0)-col-tds);
@@ -3742,7 +3788,7 @@ function applyPrefs(){
   const p=prefs(),h1=$('.ttl h1'),dl=$('#depotLine');if(h1){const tt=String(p.title||'').trim(),sp=tt.indexOf(' ');h1.textContent='';h1.setAttribute('aria-label',tt);
     if(sp>0){const a=document.createElement('span'),b=document.createElement('span');a.className='t1';a.textContent=tt.slice(0,sp);b.className='t2';b.textContent=tt.slice(sp+1);h1.appendChild(a);h1.appendChild(b)}
     else{const a=document.createElement('span');a.className='t1';a.textContent=tt;h1.appendChild(a)}}
-  if(dl){dl.textContent=p.depot;dl.style.display=p.depot?'':'none'}
+  if(dl){if(window.RDLDEPOT&&RDLDEPOT.admin()){dl.textContent=(RDLDEPOT.sel()||'All Depots')+' \u25be';dl.style.display='';dl.style.cursor='pointer'}else{dl.textContent=p.depot;dl.style.display=p.depot?'':'none'}}
   document.title=p.title;
   const dark=p.theme==='dark'||(p.theme==='system'&&window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches);
   document.documentElement.dataset.theme=dark?'dark':'light';
@@ -4569,7 +4615,7 @@ const el=(t,c,x)=>{const e=document.createElement(t);if(c)e.className=c;if(x!=nu
 const ymd=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
 const dd=s=>{if(!s)return '—';const d=new Date(s+'T00:00:00');return pad(d.getDate())+' '+d.toLocaleString('en',{month:'short'})+' '+d.getFullYear()};
 const bal=b=>Math.max(0,(+b.amt||0)-(+b.collected||0)-(+b.tds||0));
-const ledger=()=>{try{const x=JSON.parse(localStorage.getItem('rdl.ledger.v1'));if(x&&x.rv)return x}catch(e){}return{rv:[],dz:[]}};
+const ledger=()=>{try{const x=JSON.parse(localStorage.getItem('rdl.ledger.v1'));if(x&&x.rv)return RDLDEPOT.fl(x)}catch(e){}return{rv:[],dz:[]}};
 const BK='<svg class="bk-ar" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 12h-15M10.5 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="4.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 const st=document.createElement('style');
 st.textContent='.cs-opts{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 10px}.cs-opt{display:inline-flex;align-items:center;gap:6px;border:1px solid #cfe0f6;border-radius:12px;padding:8px 11px;font-size:13px;font-weight:700}.cs-opt input,.cs-pick input{width:18px;height:18px;flex:none;margin:0}'
@@ -5042,11 +5088,20 @@ const diff=(a,b)=>Math.round((new Date(a+'T00:00:00')-new Date(b+'T00:00:00'))/8
 const addD=(s,n)=>{const d=new Date(s+'T00:00:00');d.setDate(d.getDate()+n);return ymd(d)};
 const bal=b=>Math.max(0,(+b.amt||0)-(+b.collected||0)-(+b.tds||0));
 const UP=7,PAGE=200,VK='rdl.orv.v1';   /* Upcoming window = same 7 days as the dashboard card */
-const ledgerDz=()=>{try{const x=JSON.parse(localStorage.getItem('rdl.ledger.v1'));return x&&x.dz?x.dz.filter(z=>!z.orphan):[]}catch(e){return[]}};
+const ledgerDz=()=>{try{const x=JSON.parse(localStorage.getItem('rdl.ledger.v1'));return x&&x.dz?x.dz.filter(z=>!z.orphan&&RDLDEPOT.cuIn(z.cu)):[]}catch(e){return[]}};
 const dayStyle=d=>{const k=Math.min(1,Math.max(0,(7-d)/8.4)),h=Math.round(48*(1-k));return `background:linear-gradient(135deg,hsl(${h},100%,82%),hsl(${h},100%,68%));color:hsl(${h},100%,11%);font-weight:800;border:1px solid hsl(${h},95%,50%)`};
 const BK='<svg class="bk-ar" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 12h-15M10.5 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="4.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const dpOf=c=>RDLDEPOT.nameOf(c),dpEq=(c,list)=>!list.length||list.some(n=>RDLDEPOT.key(n)===RDLDEPOT.key(dpOf(c)));
+const dpT=T=>{T.wrap.firstChild.classList.add('od-dp');return T};
+const dpTd=(tr,c)=>nameTd(tr,dpOf(c)||'\u2014');
+const n2Td=(tr,top,sub)=>{const td=nameTd(tr,top,sub);td.classList.add('c-n2');return td};
 const st=document.createElement('style');
 st.textContent=`
+#orp .od-dp th:first-child,#orp .od-dp td.c-name{min-width:96px!important;max-width:96px!important;width:96px}
+#orp .od-dp td.c-n2{position:sticky;left:96px;z-index:2;min-width:140px!important;max-width:150px!important;width:150px}
+#orp .od-dp thead th:nth-child(2){position:sticky;left:96px;z-index:3;min-width:140px}
+#orp .od-dp tbody tr:nth-child(even) td.c-n2{background:#f4f8ff}
+#orp .od-dp tr.cs-tot>td.c-n2{background:#0b2a8a!important}
 #orp .orp-seg{display:flex;gap:4px;background:#e6effc;border:1px solid #cfe0f6;border-radius:16px;padding:4px;margin:4px 0 8px}
 #orp .orp-seg button{flex:1;border:0;background:transparent;border-radius:12px;padding:9px 2px;font:700 12.5px/1.2 inherit;font-family:inherit;color:#12306b;cursor:pointer}
 #orp .orp-seg button.on{background:linear-gradient(135deg,#0a49b5,#1a73e8);color:#fff;box-shadow:0 2px 8px -2px #0a49b5aa}
@@ -5141,7 +5196,7 @@ const app=$('.app');
 const P=el('div','pg st');P.id='orp';app.appendChild(P);
 {const top=el('div','st-top'),b=el('button');b.type='button';b.innerHTML=BK;b.setAttribute('aria-label','Back');b.onclick=()=>{if(backFn){const f=backFn;backFn=null;f()}else $('.nav button[data-p="home"]').click()};top.appendChild(b);top.appendChild(el('h2',null,'Outstanding Register'));P.appendChild(top)}
 const B=el('div','sbody');P.appendChild(B);
-const fresh=()=>({q:'',cos:[],st:'all',d1:'',d2:'',c1:'',c2:'',lim:PAGE});
+const fresh=()=>({q:'',cos:[],dps:[],st:'all',d1:'',d2:'',c1:'',c2:'',lim:PAGE});
 let S=fresh(),view='cc',D=null,res=null,tbHost=null;
 try{const v=localStorage.getItem(VK);if(v==='cc'||v==='cu'||v==='bl')view=v}catch(e){}
 
@@ -5153,9 +5208,9 @@ function compute(){
   const nameOf=c=>nm.get(String(c))||('Customer '+c);
   const okCo=co=>!S.cos.length||S.cos.includes(String(co));
   const bills=m.out.filter(b=>{
-    if(!b.due||bal(b)<=0||!okCo(b.co))return false;
+    if(!b.due||bal(b)<=0||!okCo(b.co)||!dpEq(b.cu,S.dps))return false;
     if(S.d1&&(b.post||'')<S.d1)return false;if(S.d2&&(b.post||'')>S.d2)return false;
-    if(k&&!(String(b.cu).toLowerCase().includes(k)||nameOf(b.cu).toLowerCase().includes(k)||String(b.nm||'').toLowerCase().includes(k)||String(b.bill||'').toLowerCase().includes(k)))return false;
+    if(k&&!(dpOf(b.cu).toLowerCase().includes(k)||String(b.cu).toLowerCase().includes(k)||nameOf(b.cu).toLowerCase().includes(k)||String(b.nm||'').toLowerCase().includes(k)||String(b.bill||'').toLowerCase().includes(k)))return false;
     if(S.st==='due'&&b.due<t)return false;if(S.st==='over'&&!(b.due<t))return false;if(S.st==='up'&&!(b.due>=t&&b.due<=T7))return false;
     return true});
   const g=new Map();let out=0,over=0,up=0;
@@ -5167,7 +5222,7 @@ function compute(){
     y.bills.push(b);y.out+=v;if(od){y.over+=v;y.ag[bk]+=v;const n=diff(t,b.due);if(y.old==null||n>y.old)y.old=n}else y.due+=v;if(u)y.up+=v});
   const grp=[...g.values()].sort((a,b)=>a.name.localeCompare(b.name));
   grp.forEach(x=>{x.list=[...x.cos.values()].sort((a,b)=>R.coCmp(a.co,b.co))});
-  const dz=ledgerDz().filter(z=>okCo(z.co)&&(!S.c1||z.date>=S.c1)&&(!S.c2||z.date<=S.c2)),col=new Map(),last=new Map();
+  const dz=ledgerDz().filter(z=>okCo(z.co)&&dpEq(z.cu,S.dps)&&(!S.c1||z.date>=S.c1)&&(!S.c2||z.date<=S.c2)),col=new Map(),last=new Map();
   dz.forEach(z=>{const c=String(z.cu);let a=col.get(c);if(!a)col.set(c,a={col:0,tds:0});a.col+=+z.col||0;a.tds+=+z.tds||0;
     const key=c+'|'+String(z.co),l=last.get(key);if(!l||z.date>l.date)last.set(key,{date:z.date,amt:+z.col||0});else if(z.date===l.date)l.amt+=+z.col||0});
   const agT=[0,0,0,0];grp.forEach(x=>x.ag.forEach((v,i)=>agT[i]+=v));
@@ -5200,18 +5255,18 @@ const more=(host,left)=>{if(left<=0)return;const b=el('button','st-btn orp-mb','
 
 /* ---------- three views ---------- */
 function viewCC(){
-  const heads=['Company','Credit Limit','Exposure','Utilization','Days Limit','Outstanding','Overdue','Due'].concat(AGH,['Oldest Overdue','Open Bills','Last Collection']),N=heads.length,root=el('div','orp-ccs');
+  const heads=['Depot Name','Company','Credit Limit','Exposure','Utilization','Days Limit','Outstanding','Overdue','Due'].concat(AGH,['Oldest Overdue','Open Bills','Last Collection']),N=heads.length,root=el('div','orp-ccs');
   let rows=0,i=0,tl=0,te=0,ob=0;
   D.grp.forEach(x=>x.list.forEach(y=>{const ln=D.cr.get(x.code+'|'+y.co);if(ln&&!ln.off){tl+=+ln.lim||0;te+=+ln.exp||0}ob+=y.bills.length}));
-  const totCells=(tr,v)=>v.forEach((q,j)=>cell(tr,q,[0,1,4,5,6,7,8,9,10].includes(j)?'num':'c-lim',[0,1,4,5,6,7,8,9,10].includes(j)?'cn2':'cl'));
-  for(;i<D.grp.length&&rows<S.lim;i++){const x=D.grp[i],T=tbl(heads,1900),card=el('div','orp-cc');
+  const totCells=(tr,v)=>{n2Td(tr,'');v.forEach((q,j)=>cell(tr,q,[0,1,4,5,6,7,8,9,10].includes(j)?'num':'c-lim',[0,1,4,5,6,7,8,9,10].includes(j)?'cn2':'cl'))};
+  for(;i<D.grp.length&&rows<S.lim;i++){const x=D.grp[i],T=dpT(tbl(heads,2000)),card=el('div','orp-cc');
     const bi=el('div','orp-bi');
     bi.appendChild(el('b','orp-bn',x.name));
     const bs=el('div','orp-bs'),s1=el('span',null,'Outstanding '),a=el('b',null,money(x.out));s1.appendChild(a);const s2=el('span',null,'Overdue '),b2=el('b',x.over>0?'r':'',money(x.over));s2.appendChild(b2);bs.appendChild(s1);bs.appendChild(s2);bi.appendChild(bs);
-    bi.appendChild(stBtn('orp-sb',x.code));bi.appendChild(el('small','orp-bc','Code: '+x.code+' • '+x.list.length+(x.list.length===1?' company':' companies')));
+    bi.appendChild(stBtn('orp-sb',x.code));bi.appendChild(el('small','orp-bc',(dpOf(x.code)?dpOf(x.code)+' • ':'')+'Code: '+x.code+' • '+x.list.length+(x.list.length===1?' company':' companies')));
     card.appendChild(bi);card.appendChild(T.wrap);root.appendChild(card);
     x.list.forEach(y=>{rows++;const ln=D.cr.get(x.code+'|'+y.co),tr=el('tr','row-ok orp-tap '+rc(y));if(ln&&ln.off)tr.style.opacity='.55';
-      nameTd(tr,R.coName(y.co));
+      dpTd(tr,x.code);n2Td(tr,R.coName(y.co));
       cell(tr,ln?money(ln.lim):'—','num',ln?'cn2':'cl');cell(tr,ln?money(ln.exp):'—','num',ln?'cn2':'cl');
       {const td=el('td','c-arr');if(!ln)td.appendChild(el('span','chip-g cl','—'));else{const u=+ln.util||0,w=Math.max(0,Math.min(100,u)),c=u>100?'#dc2626':u>=85?'#f59e0b':u>=60?'#eab308':'#16a34a',d=el('div','orp-ut');d.appendChild(el('b',null,u+'%'));const bar=el('div','orp-bar'),f=el('i');f.style.width=w+'%';f.style.background=c;bar.appendChild(f);d.appendChild(bar);td.appendChild(d)}tr.appendChild(td)}
       {const dn=ln?parseInt(ln.dl):NaN;cell(tr,ln?(isNaN(dn)?(ln.dl||'—'):dn+' Days'):'—','c-lim','cl')}
@@ -5243,49 +5298,49 @@ function dfItems(base,body,K,L,i,unit,stF,colF){
   const m=new Map();base.forEach((r,ix)=>{const k=String(K[i](r));let a=m.get(k);if(!a)m.set(k,a={n:0,r,st:'',ix});a.n++;const q=stF(r);if(q)a.st=stWorse(a.st,q)});
   const seen=new Map();let q=0;[...body.children].forEach(tr=>{const r=tr._rec;if(!r)return;const k=String(K[i](r));if(!seen.has(k))seen.set(k,q++)});
   return[...m].map(([k,a])=>({k,a,o:seen.has(k)?seen.get(k):1e6+a.ix})).sort((x,y)=>x.o-y.o).map(({k,a})=>[k,L[i](a.r,k),a.n+' '+unit+(a.n===1?'':'s'),colF&&colF[i]?colF[i](k):(STC[a.st]||'')])}
-function hookCols(T,heads,vk,base,K,L,unit,stF,colF){
+function hookCols(T,heads,vk,base,K,L,unit,stF,colF,ni){ni=ni||0;
   [...T.wrap.querySelectorAll('thead th')].forEach((th,i)=>{
     th.classList.add('df-th');th.title='Tap to select '+heads[i];
     const fb=el('button','fb','\u25be');fb.type='button';if(F[vk][i]&&F[vk][i].size)fb.classList.add('on');th.appendChild(fb);
-    if(i===0){th.classList.add('nm-th');const a=el('span','pd-arw');a.title='A\u2192Z / Z\u2192A';a.innerHTML='<b class="u">\u2191</b><b class="d">\u2193</b>';
+    if(i===ni){th.classList.add('nm-th');const a=el('span','pd-arw');a.title='A\u2192Z / Z\u2192A';a.innerHTML='<b class="u">\u2191</b><b class="d">\u2193</b>';
       a.firstChild.classList.toggle('on',NS[vk]==='asc');a.lastChild.classList.toggle('on',NS[vk]==='desc');
       a.onclick=e=>{e.stopPropagation();NS[vk]=NS[vk]==='asc'?'desc':'asc';S.lim=PAGE;drawTable()};th.appendChild(a)}
     th.onclick=()=>{if(!window.RDLDF)return;window.RDLDF(heads[i],F[vk][i],dfItems(base,T.body,K,L,i,unit,stF,colF),v=>{if(v&&v.size)F[vk][i]=v;else delete F[vk][i];S.lim=PAGE;drawTable()})}})}
 function viewCU(){
-  const heads=['Customer Name','Outstanding','Overdue','Due'].concat(AGH,['Open Bills','Companies','Collected (period)','TDS (period)']),N=heads.length,T=tbl(heads,1360);
+  const heads=['Depot Name','Customer Name','Outstanding','Overdue','Due'].concat(AGH,['Open Bills','Companies','Collected (period)','TDS (period)']),N=heads.length,T=dpT(tbl(heads,1480));
   const cuA=x=>D.col.get(x.code)||{col:0,tds:0};
-  const K=[x=>x.code,x=>r2(x.out),x=>r2(x.over),x=>r2(x.due),x=>r2(x.ag[0]),x=>r2(x.ag[1]),x=>r2(x.ag[2]),x=>r2(x.ag[3]),x=>x.bills.length,x=>x.list.length,x=>r2(cuA(x).col),x=>r2(cuA(x).tds)];
+  const K=[x=>dpOf(x.code),x=>x.code,x=>r2(x.out),x=>r2(x.over),x=>r2(x.due),x=>r2(x.ag[0]),x=>r2(x.ag[1]),x=>r2(x.ag[2]),x=>r2(x.ag[3]),x=>x.bills.length,x=>x.list.length,x=>r2(cuA(x).col),x=>r2(cuA(x).tds)];
   const mo=(r,k)=>money(+k),ag=(r,k)=>+k>0?money(+k):'\u2014',ct=(r,k)=>fmt(+k);
-  const L=[x=>[x.name,'Code: '+x.code],mo,mo,mo,ag,ag,ag,ag,ct,ct,mo,mo];
+  const L=[(x,k)=>k||'\u2014',x=>[x.name,'Code: '+x.code],mo,mo,mo,ag,ag,ag,ag,ct,ct,mo,mo];
   const stF=x=>x.over>0?'late':x.list.reduce((s,y)=>s+y.up,0)>0?'soon':'';
   const G=nameSort('cu',D.grp.filter(x=>fOK('cu',x,K)),x=>x.name),sum=f=>G.reduce((s,x)=>s+f(x),0);
   let i=0;
   for(;i<G.length&&i<S.lim;i++){const x=G[i],a=cuA(x),tr=el('tr','row-ok orp-tap '+rc({over:x.over,up:x.list.reduce((s,y)=>s+y.up,0)}));tr._rec=x;
-    nameTd(tr,x.name,'Code: '+x.code);cell(tr,money(x.out),'num','cn2 cb');cell(tr,money(x.over),'num',x.over>0?'cn2 st-late':'cn2');cell(tr,money(x.due),'num','cn2');agCells(tr,x.ag);cell(tr,String(x.bills.length),'c-lim','cl');cell(tr,String(x.list.length),'c-lim','cl');cell(tr,money(a.col),'num','cn2 cg2');cell(tr,money(a.tds),'num','cn2 ct');
+    dpTd(tr,x.code);n2Td(tr,x.name,'Code: '+x.code);cell(tr,money(x.out),'num','cn2 cb');cell(tr,money(x.over),'num',x.over>0?'cn2 st-late':'cn2');cell(tr,money(x.due),'num','cn2');agCells(tr,x.ag);cell(tr,String(x.bills.length),'c-lim','cl');cell(tr,String(x.list.length),'c-lim','cl');cell(tr,money(a.col),'num','cn2 cg2');cell(tr,money(a.tds),'num','cn2 ct');
     tr.onclick=()=>toggleX(tr,N,h=>{h.appendChild(miniBills(x.bills,true,D.t,'Outstanding Register › Customers',closeX(tr)));h.appendChild(stBtn('st-btn orp-mb',x.code,'Outstanding Register › Customers'))});T.body.appendChild(tr)}
-  if(G.length){const t=el('tr','row-ok cs-tot');nameTd(t,'Total • '+fmt(G.length)+' customer'+(G.length===1?'':'s'));
+  if(G.length){const t=el('tr','row-ok cs-tot');nameTd(t,'Total • '+fmt(G.length)+' customer'+(G.length===1?'':'s'));n2Td(t,'');
     [money(sum(x=>x.out)),money(sum(x=>x.over)),money(sum(x=>x.due))].concat(agTxt([0,1,2,3].map(j=>sum(x=>x.ag[j]))),[fmt(sum(x=>x.bills.length)),'',money(sum(x=>cuA(x).col)),money(sum(x=>cuA(x).tds))]).forEach((v,j)=>cell(t,v,[0,1,2,3,4,5,6,9,10].includes(j)?'num':'c-lim',[0,1,2,3,4,5,6,9,10].includes(j)?'cn2':'cl'));T.body.appendChild(t)}
-  hookCols(T,heads,'cu',D.grp,K,L,'customer',stF);
+  hookCols(T,heads,'cu',D.grp,K,L,'customer',stF,undefined,1);
   return{node:T.wrap,left:G.length-i}}
 function viewBL(){
-  const heads=['Customer Name','Company','Billing Doc','Posting Date','Due Date','Bill Amount','Collected (bill)','TDS','Balance','Days Limit','Days to Due / Overdue','Net Due Symbol'],T=tbl(heads,1280),t=D.t;
+  const heads=['Depot Name','Customer Name','Company','Billing Doc','Posting Date','Due Date','Bill Amount','Collected (bill)','TDS','Balance','Days Limit','Days to Due / Overdue','Net Due Symbol'],T=dpT(tbl(heads,1400)),t=D.t;
   const all=D.bills.slice().sort((a,b)=>a.due<b.due?-1:a.due>b.due?1:0),ld=new Map();
   const LD=b=>{const k=b.cu+'|'+b.co;let v=ld.get(k);if(v===undefined){const l=D.cr.get(String(b.cu)+'|'+String(b.co)),n=l?parseInt(l.dl):NaN;v=isNaN(n)?'—':n+' Days';ld.set(k,v)}return v};
   const nmap=new Map(D.grp.map(x=>[x.code,x.name])),nm=b=>nmap.get(String(b.cu))||('Customer '+b.cu);
   const sOf=b=>b.due<t?'late':diff(t,b.due)>=-7?'soon':'due',SN={late:'Overdue',soon:'Upcoming overdue',due:'Due'};
-  const K=[b=>String(b.cu),b=>String(b.co),b=>String(b.bill||'—'),b=>b.post||'',b=>b.due||'',b=>r2(b.amt),b=>r2(b.collected||0),b=>r2(b.tds||0),b=>r2(bal(b)),b=>LD(b),b=>diff(t,b.due),sOf];
+  const K=[b=>dpOf(b.cu),b=>String(b.cu),b=>String(b.co),b=>String(b.bill||'—'),b=>b.post||'',b=>b.due||'',b=>r2(b.amt),b=>r2(b.collected||0),b=>r2(b.tds||0),b=>r2(bal(b)),b=>LD(b),b=>diff(t,b.due),sOf];
   const mo=(r,k)=>money(+k);
-  const L=[b=>[nm(b),'Code: '+b.cu],b=>R.coName(b.co),b=>String(b.bill||'—'),b=>dd(b.post),b=>dd(b.due),mo,mo,mo,mo,b=>LD(b),(b,k)=>__d(+k),(b,k)=>SN[k]];
-  const colF=[];colF[11]=k=>({late:'#d90000',soon:'#f59a2e',due:'#16a34a'})[k];
+  const L=[(b,k)=>k||'\u2014',b=>[nm(b),'Code: '+b.cu],b=>R.coName(b.co),b=>String(b.bill||'—'),b=>dd(b.post),b=>dd(b.due),mo,mo,mo,mo,b=>LD(b),(b,k)=>__d(+k),(b,k)=>SN[k]];
+  const colF=[];colF[12]=k=>({late:'#d90000',soon:'#f59a2e',due:'#16a34a'})[k];
   const stF=b=>{const q=sOf(b);return q==='due'?'':q};
   const rows=nameSort('bl',all.filter(b=>fOK('bl',b,K)),nm);let i=0;
   for(;i<rows.length&&i<S.lim;i++){const b=rows[i],od=b.due<t,n=diff(t,b.due),tr=el('tr',od?'row-late':n>=-7?'row-soon':'row-ok');tr._rec=b;
-    nameTd(tr,nmap.get(String(b.cu))||('Customer '+b.cu),'Code: '+b.cu);cell(tr,R.coName(b.co),'c-co','cc');cell(tr,String(b.bill||'—'),'c-lim','cl');cell(tr,dd(b.post),'','cd');cell(tr,dd(b.due),'','cd');
+    dpTd(tr,b.cu);n2Td(tr,nmap.get(String(b.cu))||('Customer '+b.cu),'Code: '+b.cu);cell(tr,R.coName(b.co),'c-co','cc');cell(tr,String(b.bill||'—'),'c-lim','cl');cell(tr,dd(b.post),'','cd');cell(tr,dd(b.due),'','cd');
     cell(tr,money(b.amt),'num','cn2 ca');cell(tr,money(b.collected||0),'num','cn2 cg2');cell(tr,money(b.tds||0),'num','cn2 ct');cell(tr,money(bal(b)),'num','cn2 cb');cell(tr,LD(b),'c-lim','cl');dayCell(tr,b,t);
     const x=el('td','c-sym'),pl=RDLNDS(od?'late':n>=-7?'soon':'due');x.appendChild(pl);tr.appendChild(x);T.body.appendChild(tr)}
-  if(rows.length){const S2=f=>rows.reduce((s,b)=>s+f(b),0),tr=el('tr','row-ok cs-tot'),V=['','','','',money(S2(b=>+b.amt||0)),money(S2(b=>+b.collected||0)),money(S2(b=>+b.tds||0)),money(S2(bal)),'','',''];
+  if(rows.length){const S2=f=>rows.reduce((s,b)=>s+f(b),0),tr=el('tr','row-ok cs-tot'),V=['','','','','',money(S2(b=>+b.amt||0)),money(S2(b=>+b.collected||0)),money(S2(b=>+b.tds||0)),money(S2(bal)),'','',''];
     nameTd(tr,'Total • '+fmt(rows.length)+' bill'+(rows.length===1?'':'s'));V.forEach((v,j)=>cell(tr,v,v?'num':'',v?'cn2':''));T.body.appendChild(tr)}
-  hookCols(T,heads,'bl',all,K,L,'bill',stF,colF);
+  hookCols(T,heads,'bl',all,K,L,'bill',stF,colF,1);
   {const tb=T.body.closest('table');if(NS.bl)tb._pdOff=!0;   /* a name sort replaces the Posting Date sort until the date arrows are tapped */
    tb._onPd=()=>{NS.bl='';const a=T.wrap.querySelector('th.nm-th .pd-arw');if(a){a.firstChild.classList.remove('on');a.lastChild.classList.remove('on')}}}
   return{node:T.wrap,left:rows.length-i,tot:rows}}
@@ -5318,11 +5373,12 @@ function build(){
   if(!m){B.appendChild(el('div','cu-empty','Upload the database from Settings first.'));return}
   const box=el('div','od-filters rg-panel');
   const sr=el('div','rg-sr'),q=el('input','list-search'),sg=el('div','od-suggestions'),fb=el('button','rg-fb','Filter \u25be');fb.type='button';
-  q.autocomplete='off';q.placeholder='Customer, Code or Document';q.value=S.q;sr.appendChild(q);sr.appendChild(fb);fb.onclick=()=>box.classList.toggle('open');
+  q.autocomplete='off';q.placeholder='Customer, Code, Depot or Document';q.value=S.q;sr.appendChild(q);sr.appendChild(fb);fb.onclick=()=>box.classList.toggle('open');
   q.addEventListener('input',()=>{const v=q.value.trim().toLowerCase();sg.textContent='';if(res)res.classList.toggle('orp-nosum',v!=='');if(v.length<2)return;
     const f=new Map();m.cr.forEach(r=>{if(String(r.bp).toLowerCase().includes(v)||String(r.nm||'').toLowerCase().includes(v))f.set(String(r.bp),r.nm)});m.out.forEach(b=>{if(!f.has(String(b.cu))&&(String(b.cu).toLowerCase().includes(v)||String(b.nm||'').toLowerCase().includes(v)))f.set(String(b.cu),b.nm||('Customer '+b.cu))});
     [...f].slice(0,8).forEach(([k,n])=>{const x=el('button','od-sug',n+' ');x.type='button';x.appendChild(el('small',null,k));x.onclick=()=>{q.value=k;sg.textContent='';apply()};sg.appendChild(x)})});
   q.addEventListener('keydown',e=>{if(e.key==='Enter')apply()});
+  if(!RDLDEPOT.sel()){const dn=RDLDEPOT.names();if(dn.length){box.appendChild(el('label','od-label','Depot Name'));box.appendChild(RDLRange.multi(dn.map(n=>[n,n]),()=>S.dps,v=>{S.dps=v},()=>{}).el)}}
   box.appendChild(el('label','od-label','Company'));
   const codes=R.coSort(new Set(m.cr.map(r=>String(r.co)).concat(m.out.map(b=>String(b.co)))));
   box.appendChild(RDLRange.multi(codes.map(c=>[c,R.coName(c)]),()=>S.cos,v=>{S.cos=v},()=>{}).el);
@@ -5487,7 +5543,7 @@ const ymd=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
 const dd=s=>{if(!s)return '—';const d=new Date(s+'T00:00:00');return pad(d.getDate())+' '+d.toLocaleString('en',{month:'short'})+' '+d.getFullYear()};
 const bal=b=>Math.max(0,(+b.amt||0)-(+b.collected||0)-(+b.tds||0));
 const lc=s=>String(s==null?'':s).toLowerCase();
-const ledger=()=>{try{const x=JSON.parse(localStorage.getItem('rdl.ledger.v1'));if(x&&x.rv)return x}catch(e){}return{rv:[],dz:[]}};
+const ledger=()=>{try{const x=JSON.parse(localStorage.getItem('rdl.ledger.v1'));if(x&&x.rv)return RDLDEPOT.fl(x)}catch(e){}return{rv:[],dz:[]}};
 const RK='rdl.recent.v1',recent=()=>{try{return JSON.parse(localStorage.getItem(RK))||[]}catch(e){return[]}},remember=q=>{q=q.trim();if(q.length<2)return;try{localStorage.setItem(RK,JSON.stringify([q,...recent().filter(x=>x!==q)].slice(0,8)))}catch(e){}};
 const dateForms=iso=>{if(!iso)return '';const[y,m,d]=iso.split('-'),mon=new Date(iso+'T00:00:00').toLocaleString('en',{month:'short'}).toLowerCase();return iso+' '+d+'/'+m+'/'+y+' '+d+'-'+m+'-'+y+' '+(+d)+' '+mon+' '+d+' '+mon+' '+y+' '+mon+' '+y};
 const amtForms=n=>String(Math.round(n))+' '+fmt(n);
@@ -6354,7 +6410,7 @@ const money=n=>window.__m?window.__m(n):String(Math.round(n));
 const el=(t,c,x)=>{const e=document.createElement(t);if(c)e.className=c;if(x!=null)e.textContent=x;return e};
 const ld=()=>{try{const x=JSON.parse(localStorage.getItem(K));if(x&&Array.isArray(x.items))return x}catch(e){}return{items:[]}};
 const sv=S=>{try{localStorage.setItem(K,JSON.stringify(S))}catch(e){}};
-const dz=()=>{try{const x=JSON.parse(localStorage.getItem('rdl.ledger.v1'));return x&&x.dz?x.dz.filter(z=>!z.orphan):[]}catch(e){return[]}};
+const dz=()=>{try{const x=JSON.parse(localStorage.getItem('rdl.ledger.v1'));return x&&x.dz?x.dz.filter(z=>!z.orphan&&RDLDEPOT.cuIn(z.cu)):[]}catch(e){return[]}};
 const EPS=.5,BROKEN_DAYS=30;
 /* paid = DZ collected amount of that customer (that company, if one was chosen) from the day the promise was written until the promised date */
 function judge(p,Z,t){
@@ -6420,7 +6476,7 @@ const money=n=>window.__m?window.__m(n):String(Math.round(n));
 const dd=s=>{if(!s)return '—';const d=new Date(s+'T00:00:00');return pad(d.getDate())+' '+d.toLocaleString('en',{month:'short'})+' '+d.getFullYear()};
 const el=(t,c,x)=>{const e=document.createElement(t);if(c)e.className=c;if(x!=null)e.textContent=x;return e};
 const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
-const ledger=()=>{try{const x=JSON.parse(localStorage.getItem('rdl.ledger.v1'));if(x&&x.dz)return x}catch(e){}return{dz:[]}};
+const ledger=()=>{try{const x=JSON.parse(localStorage.getItem('rdl.ledger.v1'));if(x&&x.dz)return RDLDEPOT.fl(x)}catch(e){}return{dz:[]}};
 function group(rows,amtOf,extra){const mp=new Map();rows.forEach(b=>{const k=String(b.cu);let g=mp.get(k);if(!g){g={code:k,name:b.nm||('Customer '+k),amt:0,n:0,ex:null};mp.set(k,g)}g.amt+=amtOf(b);g.n++;g.ex=extra(g.ex,b)});return[...mp.values()].sort((a,b)=>b.amt-a.amt)}
 function data(){
   const m=R.master;if(!m)return null;const t=today(),end=plus(6),open=m.out.filter(b=>b.due&&bal(b)>0);
@@ -6549,7 +6605,7 @@ const bal=b=>Math.max(0,(+b.amt||0)-(+b.collected||0)-(+b.tds||0));
 const money=n=>window.__m?window.__m(n):String(Math.round(n));
 const el=(t,c,x)=>{const e=document.createElement(t);if(c)e.className=c;if(x!=null)e.textContent=x;return e};
 const lc=s=>String(s==null?'':s).toLowerCase(),words=x=>lc(x).split(/[^a-z0-9]+/).filter(Boolean);
-const ledger=()=>{try{const x=JSON.parse(localStorage.getItem('rdl.ledger.v1'));if(x&&x.dz)return x}catch(e){}return{dz:[]}};
+const ledger=()=>{try{const x=JSON.parse(localStorage.getItem('rdl.ledger.v1'));if(x&&x.dz)return RDLDEPOT.fl(x)}catch(e){}return{dz:[]}};
 const KW={overdue:['overdue'],upcoming:['upcoming'],statement:['statement','stmt'],outstanding:['outstanding'],cheque:['cheque','chq','beftn']};
 const KWL={overdue:'Overdue',upcoming:'Upcoming 7 days',statement:'Statement',outstanding:'Outstanding',cheque:'Cheque'};
 const kwOf=t=>{for(const k in KW)if(KW[k].includes(t))return k;return''};
