@@ -1394,6 +1394,11 @@ html body .pg .rvx small{font-size:9.5px}
 html body .pg .rvx strong{font-size:12px}
 html body .pg .rvx em{font-size:9px}
 </style>
+<script id="rdl-restore-head">
+/* after a pull-to-refresh reload, keep the screen hidden until the same page is shown again (no flash of the dashboard) */
+try{if(sessionStorage.getItem('rdl.ptrPage')){document.documentElement.classList.add('rdl-restoring');setTimeout(function(){document.documentElement.classList.remove('rdl-restoring')},9000)}}catch(e){}
+</script>
+<style id="rdl-restore-css">html.rdl-restoring .app,html.rdl-restoring .nav{visibility:hidden}</style>
 </head>
 <body>
 <script>
@@ -1409,6 +1414,69 @@ html body .pg .rvx em{font-size:9px}
   if(window.indexedDB&&indexedDB.databases)indexedDB.databases().then(function(a){a.forEach(function(d){if(d&&d.name)indexedDB.deleteDatabase(d.name)})}).catch(function(){});
   localStorage.setItem(F,'1');
 }catch(e){}})();
+</script>
+<script>
+/* ===== RDL ACCESS LIMITS: what each signed-in person may open or change.
+   The Admin sets the limits in Settings > App Security > User Manage & Access Control. They are kept in the Google Sheet (tab "Perms"),
+   downloaded to the phone at sign-in and applied here. Level: 2 = full access, 1 = view only, 0 = no access.
+   Defaults when the Admin has set nothing: Admins = full everywhere. Users = full for the daily work (Daily Collection & Order Upload,
+   hand entry, WhatsApp, notifications, theme / font, backup, activity log) and NO access to Database Upload, Correction & Update,
+   Add New Customer and Database Erase. The Main Admin is never limited. ===== */
+(function(){
+'use strict';
+var MODS=[
+ {k:'dcr',t:'Daily Collection & Order Upload',d:'Upload the daily Collection & Order file',def:2,ro:1},
+ {k:'entry',t:'Hand entry of Sales (RV) and Collection (DZ)',d:'Sales and Collection tabs: quick entry, drafts, posting',def:2},
+ {k:'wa',t:'WhatsApp Message',d:'Wording of the overdue message',def:2},
+ {k:'notif',t:'Notification Settings',d:'Due-bill notifications',def:2},
+ {k:'theme',t:'Theme, Font & Header Text',d:'How the app looks',def:2},
+ {k:'backup',t:'Database Backup',d:'Backup file and restore',def:2},
+ {k:'actlog',t:'Activity Log',d:'What was changed on this phone, and undo',def:2,ro:1},
+ {k:'dbup',t:'Database Upload',d:'Outstanding and Credit limit files',def:0,ro:1},
+ {k:'corr',t:'Database Correction & Update',d:'Edit / delete posted entries, Outstanding and Credit Line update, Credit Line On/Off',def:0,ro:1},
+ {k:'newcust',t:'Add New Customer',d:'Create a customer in the database',def:0},
+ {k:'erase',t:'Database Erase',d:'Delete Outstanding, Credit limit, Collection & Order or all data',def:0},
+ {k:'users',t:'User Manage & Access Control',d:'Create, turn off, delete users and admins, set limits, see what users changed',def:2,ro:1,adminOnly:1}
+];
+function J(k){try{return JSON.parse(localStorage.getItem(k))||{}}catch(e){return {}}}
+function find(k){for(var i=0;i<MODS.length;i++)if(MODS[i].k===k)return MODS[i];return null}
+var A={MODS:MODS};
+A.modsFor=function(role){return MODS.filter(function(m){return role==='admin'||!m.adminOnly})};
+/* level of module k for an account of this role holding these saved limits */
+A.lvl=function(p,role,k){var m=find(k);if(!m)return 2;if(m.adminOnly&&role!=='admin')return 0;
+  var v=p&&p[k];if(v===0||v===1||v===2)return(v===1&&!m.ro)?0:v;
+  return role==='admin'?2:m.def};
+A.level=function(k){var s=J('rdlgate.session');if(s.root)return 2;return A.lvl(J('rdlgate.perms'),s.role==='admin'?'admin':'user',k)};
+A.can=function(k){return A.level(k)>0};
+A.any=function(ks){for(var i=0;i<ks.length;i++)if(A.can(ks[i]))return true;return false};
+A.apply=function(){try{if(window.RDL_ACC_REFRESH)window.RDL_ACC_REFRESH()}catch(e){}};
+/* View-only: the page stays readable, but every button that would change something is switched off */
+var WRITE=/delete|edit selected|save|upload|update|erase|post|undo|apply|restore|create|add |turn|confirm|remove|permanent|reset/i;
+function isW(b){var t=(b.textContent||'').trim();return WRITE.test(t)||/^(on|off)$/i.test(t)||b.classList.contains('danger')}
+A.lock=function(root,on){
+  if(!root)return;
+  if(!document.getElementById('accCss')){var cs=document.createElement('style');cs.id='accCss';
+    cs.textContent='.acc-ro .acc-w{pointer-events:none!important;opacity:.4!important;filter:grayscale(1)}.acc-note{margin:10px 12px;padding:10px 12px;border-radius:10px;background:#fff4d6;color:#7a5200;font-size:13.5px;font-weight:600}';
+    document.head.appendChild(cs)}
+  if(root._accObs){root._accObs.disconnect();root._accObs=null}
+  var old=root.querySelector(':scope>.acc-note');if(old)old.remove();
+  root.classList.toggle('acc-ro',!!on);
+  [].forEach.call(root.querySelectorAll('.acc-w'),function(x){x.classList.remove('acc-w')});
+  [].forEach.call(root.querySelectorAll('input[type=file]'),function(x){x.disabled=false});
+  if(!on)return;
+  var n=document.createElement('div');n.className='acc-note';n.textContent='View only: you can look at this page, but you cannot change anything.';root.insertBefore(n,root.firstChild);
+  function pass(){
+    [].forEach.call(root.querySelectorAll('button'),function(x){if(isW(x))x.classList.add('acc-w')});
+    [].forEach.call(root.querySelectorAll('label.fp,.od-table input[type=checkbox]'),function(x){x.classList.add('acc-w')});
+    [].forEach.call(root.querySelectorAll('input[type=file]'),function(x){x.disabled=true})}
+  pass();
+  var q=0;root._accObs=new MutationObserver(function(){if(!q)q=requestAnimationFrame(function(){q=0;if(root.classList.contains('acc-ro'))pass()})});
+  root._accObs.observe(root,{childList:true,subtree:true});
+  if(!root._accBlk){root._accBlk=1;['click','change'].forEach(function(ev){root.addEventListener(ev,function(e){
+    if(root.classList.contains('acc-ro')&&e.target.closest&&e.target.closest('.acc-w')){e.stopPropagation();e.preventDefault()}},true)})}
+};
+window.RDLACC=A;
+})();
 </script>
 <script>
 /* ===== RDL GATE: Google sign-in, depot data, auto backup, admin push / merge. (added for multi-user use) ===== */
@@ -1486,17 +1554,17 @@ function showLogin(){
 function setLogin(t,bad){var m=document.getElementById('rgx-lm');if(m){m.textContent=t;m.className='rgx-msg'+(bad?' bad':'')}}
 function setDepotLabel(){if(S&&S.role==='user'&&S.depot){var p=jget('rdl.prefs.v1')||{};if(p.depot!==S.depot){p.depot=S.depot;LS.setItem('rdl.prefs.v1',JSON.stringify(p))}}}
 function wipeUserData(){Object.keys(LS).filter(function(k){return k.indexOf('rdl.')===0&&k!=='rdl.prefs.v1'&&k!=='rdl.cleanstart.v2'}).forEach(function(k){LS.removeItem(k)});
-  ['rdlgate.dataAt','rdlgate.dcrAt','rdlgate.asg','rdlgate.bk','rdlgate.bkdirty','rdlgate.perms'].forEach(function(k){LS.removeItem(k)})}
+  ['rdlgate.dataAt','rdlgate.dcrAt','rdlgate.asg','rdlgate.bk','rdlgate.bkdirty','rdlgate.perms','rdlgate.chg'].forEach(function(k){LS.removeItem(k)})}
 function firstLogin(){
   setLogin('Checking access…');
   api('me').then(function(j){
-    var u=j.user;S={email:u.email,name:u.name,role:u.role,depot:u.depot,seq:u.seq};
+    var u=j.user;S={email:u.email,name:u.name,role:u.role,depot:u.depot,seq:u.seq,root:!!u.root};
     if(u.role==='user'){setLogin('Downloading your depot data…');wipeUserData();
       return pullData(true).then(function(){setDepotLabel();jset(SK,S);location.reload()})}
     jset(SK,S);location.reload()
   }).catch(function(e){S=null;tok=null;setLogin(msgOf(e),true)})}
 function forcedOut(msg){
-  if(S&&S.role==='user')wipeUserData();clearPin();LS.removeItem(SK);
+  if(S&&S.role==='user')wipeUserData();clearPin();LS.removeItem(SK);LS.removeItem('rdlgate.perms');
   try{google.accounts.id.disableAutoSelect()}catch(e){}
   alert(msg||'Your access was removed. Please contact the admin.');location.reload()}
 
@@ -1510,7 +1578,8 @@ function pullData(force){
     if(p.dcr&&p.dcr.at>dcrAt)part.dcr=p.dcr;
     if(!part.out&&!part.dcr)return false;
     if(!window.RDL||!RDL.applyRemote)throw new Error('App is not ready, reload and try again');
-    if(!RDL.applyRemote(part))throw new Error('Could not save the data on this phone');
+    var okA=false;sysW=1;try{okA=RDL.applyRemote(part)}finally{sysW=0}
+    if(!okA)throw new Error('Could not save the data on this phone');
     if(part.at)LS.setItem('rdlgate.dataAt',String(part.at));
     if(part.dcr)LS.setItem('rdlgate.dcrAt',String(part.dcr.at));
     if(asg)LS.setItem('rdlgate.asg',asg);
@@ -1520,14 +1589,66 @@ function pullData(force){
 function collect(){var o={};for(var i=0;i<LS.length;i++){var k=LS.key(i);if(k.indexOf('rdl.')===0)o[k]=LS.getItem(k)}return o}
 function sendBackup(noPrompt){
   return api('putBackup',{data:collect(),meta:{dataAt:+LS.getItem('rdlgate.dataAt')||0}},noPrompt).then(function(){
-    LS.setItem('rdlgate.bk',String(Date.now()));LS.removeItem('rdlgate.bkdirty');try{_s.call(LS,'rdl.bkp.v1',JSON.stringify({at:Date.now()}));window.dispatchEvent(new Event('rdl:remind'))}catch(e){}status('Backup saved '+hhmm(),'ok')})}
+    LS.setItem('rdlgate.bk',String(Date.now()));LS.removeItem('rdlgate.bkdirty');try{_s.call(LS,'rdl.bkp.v1',JSON.stringify({at:Date.now()}));window.dispatchEvent(new Event('rdl:remind'))}catch(e){}status('Backup saved '+hhmm(),'ok');return flushChg(noPrompt)})}
 function backupIfDue(){
   var last=+LS.getItem('rdlgate.bk')||0,lastDay=last?new Date(last):null;
   var dueDay=!lastDay||(lastDay.getFullYear()+'-'+('0'+(lastDay.getMonth()+1)).slice(-2)+'-'+('0'+lastDay.getDate()).slice(-2))!==today();
   if(LS.getItem('rdlgate.bkdirty')==='1'||dueDay)return sendBackup().catch(function(e){status('Backup pending: '+msgOf(e),'warn')});
   status('Backup up to date','ok');return Promise.resolve()}
 var P=Storage.prototype,_s=P.setItem;
-P.setItem=function(k){var r=_s.apply(this,arguments);
+/* ---------- who changed what ----------
+   Every change to the posted data on this phone (a record added, edited or deleted, an upload ...) is noted in a short list.
+   The list travels to the Google Sheet (tab "Changes") together with the backup. The Admin reads it in User Manage. */
+var CHG='rdlgate.chg',sysW=0;
+var KIND={'rdl.ledger.v1':'Posted data','rdl.tds.v1':'TDS','rdl.notes.v1':'Notes','rdl.promise.v1':'Promise','rdl.sched.v1':'Schedule','rdl.visit.v1':'Visit','rdl.croff.v1':'Credit line On/Off','rdl.master.v1':'Database','rdl.dcr.v1':'Daily Collection & Order'};
+var SUB={dz:'Collection (DZ)',rv:'Sales (RV)',dr:'Collection draft',sd:'Sales draft'};
+function idOf(x){return isObj(x)?(x.bill||x.id||''):''}
+function brief(x){
+  if(!isObj(x))return String(JSON.stringify(x)).slice(0,100);
+  var p=[],doc=x.bill||x.doc||x.bn,nm=x.nm||x.n||x.name;
+  if(doc)p.push(doc);if(nm)p.push(nm);else if(x.cu)p.push('Customer '+x.cu);
+  if(x.amt!=null)p.push('Amount '+x.amt);if(x.col!=null)p.push('Collected '+x.col);if(x.tds)p.push('TDS '+x.tds);
+  var dt=x.date||x.post||x.pdt;if(dt)p.push(dt);
+  if(!p.length)p.push(JSON.stringify(x).slice(0,100));
+  return p.join(' • ').slice(0,200)}
+function diffArr(kind,a,b,out){
+  a=Array.isArray(a)?a:[];b=Array.isArray(b)?b:[];
+  var ma={},mb={},k;
+  a.forEach(function(x){ma[idOf(x)||strip(x)]=x});b.forEach(function(x){mb[idOf(x)||strip(x)]=x});
+  for(k in mb){if(!(k in ma))out.push([kind,'add',brief(mb[k])]);else if(isObj(mb[k])&&strip(mb[k])!==strip(ma[k]))out.push([kind,'edit',brief(mb[k])])}
+  for(k in ma){if(!(k in mb))out.push([kind,'del',brief(ma[k])])}}
+function diffVal(kind,a,b,out){
+  if(Array.isArray(a)||Array.isArray(b))return diffArr(kind,a,b,out);
+  if(isObj(a)||isObj(b)){a=isObj(a)?a:{};b=isObj(b)?b:{};var ks={},k;for(k in a)ks[k]=1;for(k in b)ks[k]=1;
+    for(k in ks){var x=a[k],y=b[k],sx=JSON.stringify(x),sy=JSON.stringify(y);if(sx===sy)continue;
+      if(Array.isArray(x)||Array.isArray(y))diffArr(SUB[k]||(kind+' '+k),x,y,out);
+      else out.push([kind,y===undefined?'del':x===undefined?'add':'edit',k+(y!==undefined?': '+String(sy).slice(0,100):'')])}
+    return}
+  if(JSON.stringify(a)!==JSON.stringify(b))out.push([kind,'edit',String(JSON.stringify(b)).slice(0,100)])}
+function noteChange(k,oldS,newS){
+  if(sysW||!S||!KIND[k]||oldS===newS)return;
+  var kind=KIND[k],out=[],a,b;
+  try{b=JSON.parse(newS)}catch(e){return}
+  if(k==='rdl.master.v1')out.push([kind,'edit','Main database saved: '+((b&&b.out||[]).length)+' outstanding rows, '+((b&&b.cr||[]).length)+' credit lines']);
+  else if(k==='rdl.dcr.v1')out.push([kind,'edit','Daily Collection & Order saved: '+((b&&b.rows||[]).length)+' rows'+(b&&b.fileName?' • '+b.fileName:'')]);
+  else{
+    try{a=oldS==null?null:JSON.parse(oldS)}catch(e){a=null}
+    if(k==='rdl.ledger.v1'&&isObj(b)){var a2={},b2={};Object.keys(SUB).forEach(function(s2){a2[s2]=a&&a[s2];b2[s2]=b[s2]});a=a2;b=b2}
+    diffVal(kind,a,b,out)}
+  if(!out.length)return;
+  var list=jget(CHG)||[],cap=12,now=Date.now();
+  out.slice(0,cap).forEach(function(r){list.push({t:now,k:r[0],o:r[1],d:String(r[2]||'').slice(0,240)})});
+  if(out.length>cap)list.push({t:now,k:kind,o:'edit',d:'... and '+(out.length-cap)+' more changes in the same step'});
+  if(list.length>600)list=list.slice(list.length-600);
+  try{jset(CHG,list)}catch(e){}}
+function flushChg(noPrompt){
+  var a=jget(CHG)||[];if(!a.length)return Promise.resolve();
+  var n=Math.min(a.length,400);
+  return api('putChanges',{items:a.slice(0,n)},noPrompt).then(function(){var cur=jget(CHG)||[];jset(CHG,cur.slice(n))}).catch(function(){})}
+P.setItem=function(k,v){
+  var ch=(this===LS&&S&&typeof k==='string'&&KIND[k]&&!sysW),old=null;if(ch){try{old=LS.getItem(k)}catch(e){}}
+  var r=_s.apply(this,arguments);
+  if(ch){try{noteChange(k,old,String(v))}catch(e){}}
   if(this===LS&&typeof k==='string'&&k.indexOf('rdl.')===0&&k!=='rdl.bkp.v1'&&S){_s.call(LS,'rdlgate.bkdirty','1');clearTimeout(timer);timer=setTimeout(function(){
     if(Date.now()-lastPrompt<600000&&!(tok&&tok.exp-120000>Date.now()))return;lastPrompt=Date.now();sendBackup().catch(function(){})},10000)}
   return r};
@@ -1569,18 +1690,19 @@ function mergeVal(base,inc,who){
 function mergeBackups(){
   return api('listBackups').then(function(j){
     var m=jget('rdl.master.v1'),mAt=m?m.at:0,done=[],late=[];
-    j.backups.forEach(function(b){
+    sysW=1;j.backups.forEach(function(b){
       if(((b.meta&&b.meta.dataAt)||0)<mAt){late.push(b);return}
       Object.keys(b.data).forEach(function(k){var inc;try{inc=JSON.parse(b.data[k])}catch(e){return}if(inc==null)return;LS.setItem(k,JSON.stringify(mergeVal(jget(k),inc,b.email)))});
-      done.push(b)});
+      done.push(b)});sysW=0;
     function line(b){return '• '+(b.name||b.email)+' ('+b.depot+') — backup of '+b.day}
     return{done:done,late:late,text:(done.length?'Merged:\n'+done.map(line).join('\n'):'Nothing was merged.')+(late.length?'\n\nSkipped — these users have not opened the app since the latest database was published, so their posts are not yet adjusted to it:\n'+late.map(line).join('\n'):'')}})}
 
 /* ---------- user access limits (set by the admin in App Security > User Manage & Access Control) ---------- */
 function loadPerms(){
-  if(!S||S.role!=='user')return;
+  if(!S)return;
   return api('myPerms',null,true).then(function(j){
-    if(j&&j.perms&&typeof j.perms==='object'){LS.setItem('rdlgate.perms',JSON.stringify(j.perms));if(window.RDLACC)RDLACC.apply()}
+    if(j&&j.perms&&typeof j.perms==='object')LS.setItem('rdlgate.perms',JSON.stringify(j.perms));
+    if(window.RDLACC)RDLACC.apply()
   }).catch(function(e){if(/ACCESS_DENIED/.test(e.message))throw e})}
 
 /* ---------- admin: missed-backup alerts (server writes them at ~11:30 pm; shown in the notification bell) ---------- */
@@ -1597,7 +1719,7 @@ function afterLogin(){
   afterAt=Date.now();status('Checking…');
   api('me').then(function(j){
     var u=j.user,ch=u.role!==S.role||u.depot!==S.depot||u.seq!==S.seq;
-    S={email:u.email,name:u.name,role:u.role,depot:u.depot,seq:u.seq};jset(SK,S);
+    S={email:u.email,name:u.name,role:u.role,depot:u.depot,seq:u.seq,root:!!u.root};jset(SK,S);
     setDepotLabel();if(ch){location.reload();return}
     if(S.role==='user')return pullData(false).then(function(changed){if(changed){toast('New data received — reloading…');setTimeout(function(){location.reload()},900);throw new Error('__reload')}});
     if(S.role==='admin'&&sigNow()&&LS.getItem('rdlgate.sig')!==sigNow())return pushData().then(function(t){toast('Database published to depots')}).catch(function(e){status(msgOf(e),'warn')})
@@ -1637,7 +1759,7 @@ function openChangeEmail(){
 
 /* ---------- floating button + menu ---------- */
 function signOut(){
-  var go=function(){if(S.role==='user')wipeUserData();clearPin();LS.removeItem(SK);try{google.accounts.id.disableAutoSelect()}catch(e){}location.reload()};
+  var go=function(){if(S.role==='user')wipeUserData();clearPin();LS.removeItem(SK);LS.removeItem('rdlgate.perms');try{google.accounts.id.disableAutoSelect()}catch(e){}location.reload()};
   if(S.role==='user'){
     if(!confirm('Sign out? Your work is first saved to the server, then removed from this phone.'))return;
     sendBackup().then(go).catch(function(e){if(confirm('Backup could not be saved ('+msgOf(e)+').\nSigning out now will LOSE unsaved work. Sign out anyway?'))go()})
@@ -1875,7 +1997,7 @@ function openUsers(){
 /* ---------- start ---------- */
 function start(){
   if(!S){showLogin();return}
-  lockInit();buildChip();if(window.RDLACC)RDLACC.apply();if(S.role==='user')hideAdminTiles();
+  lockInit();buildChip();if(window.RDLACC)RDLACC.apply();
   loadGIS(function(err){if(err){status('Offline — working on this phone','warn');return}initGIS(true);
     if(tok){afterLogin();return}
     try{google.accounts.id.prompt()}catch(e){}
@@ -3962,11 +4084,23 @@ function show(id){$$('.pg').forEach(x=>x.classList.remove('on'));$$('.nav button
 const BK='<svg class="bk-ar" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 12h-15M10.5 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="4.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 function page(id,title,parent,build){
   const p=el('div','pg st');p.id=id;app.appendChild(p);
-  const top=el('div','st-top'),b=el('button');b.type='button';b.innerHTML=BK;b.setAttribute('aria-label','Back');b.onclick=()=>open(parent);
+  const top=el('div','st-top'),b=el('button');b.type='button';b.innerHTML=BK;b.setAttribute('aria-label','Back');b.onclick=()=>open(window.RDL_ROLE==='user'&&parent==='setsec'?'settings':parent);
   top.appendChild(b);top.appendChild(el('h2',null,title));p.appendChild(top);
   const body=el('div','sbody');p.appendChild(body);pages[id]={body,build};return p}
 const PROT=new Set(['bcu','updoff','setdb','setcu','setup','setdcr','setupd','updout','updcr','seterase','setbp','setbackup']);
-function open(id){if(window.RDL_ROLE==='user'&&(PROT.has(id)||['setsec','setlog','setcorr','setusers'].indexOf(id)>=0))return;if(PROT.has(id)&&!unlocked()){unlock().then(ok=>{if(ok)open(id)});return}const pg=pages[id];if(pg&&pg.build){pg.body.textContent='';pg.build(pg.body)}show(id);if(id==='setup'||id==='setdcr')R.curStatus&&R.curStatus()}
+/* access limits (set by the Admin): which module each page belongs to */
+const PAGEMOD={setup:'dbup',setdcr:'dcr',setbackup:'backup',setcorr:'corr',updout:'corr',updcr:'corr',updoff:'corr',setbp:'newcust',seterase:'erase',setlog:'actlog',setusers:'users',setwa:'wa',setnotif:'notif',settheme:'theme',sethdr:'theme',setfont:'theme',setfsize:'theme',setfdesign:'theme'};
+const PAGEANY={setdb:['dcr','dbup','backup'],setcu:['corr','newcust','erase'],setupd:['corr','newcust','erase'],bcu:['corr','newcust']};
+const accOK=id=>{const A=window.RDLACC;if(!A)return window.RDL_ROLE!=='user';
+  if(window.RDL_ROLE==='user'&&(id==='setsec'||id==='setusers'))return false;
+  if(PAGEMOD[id])return A.can(PAGEMOD[id]);if(PAGEANY[id])return A.any(PAGEANY[id]);return true};
+function open(id){
+  if(!accOK(id)){RDLUI.alert('Not allowed','The Admin has not given you access to this part.');return}
+  if(PROT.has(id)&&window.RDL_ROLE!=='user'&&!unlocked()){unlock().then(ok=>{if(ok)open(id)});return}
+  const pg=pages[id];if(pg&&pg.build){pg.body.textContent='';pg.build(pg.body)}
+  show(id);
+  if(pg&&window.RDLACC&&PAGEMOD[id])RDLACC.lock(pg.body,RDLACC.level(PAGEMOD[id])===1);   /* view only: buttons that change something are switched off */
+  if(id==='setup'||id==='setdcr')R.curStatus&&R.curStatus()}
 const card=(h,hint)=>{const c=el('div','st-card');if(h)c.appendChild(el('h3',null,h));if(hint)c.appendChild(el('p','hint',hint));return c};
 const msgBox=()=>el('div','stt');
 const say=(e,t,cls)=>{e.textContent=t;e.className='stt '+(cls||'')};
@@ -3995,23 +4129,39 @@ const pUp=page('setup','Database Upload','setdb'),pDcr=page('setdcr','Daily Coll
 if(upCard){upCard.querySelector('.hint').textContent='Upload either file or both. Credit limit data replaces only the credit limits. Outstanding data replaces the bills; bills and collections you posted in the app are reconciled by date.';
   const bd=upCard.querySelector('#bDb');if(bd)bd.textContent='Upload Database';pages.setup.body.appendChild(upCard)}
 if(dcrCard)pages.setdcr.body.appendChild(dcrCard);
-if(window.RDL_ROLE!=='user')mainList.appendChild(tile(IC.lock,G.red,'App Security','Users, PIN, corrections and activity log',async()=>{if(await unlock())open('setsec')}));
-mainList.appendChild(tile(IC.pen,G.red,'Header Text','Change the app title and depot name',()=>open('sethdr')));
-mainList.appendChild(tile(IC.bell,G.amber,'Notification Settings','Choose which due bills notify you',()=>open('setnotif')));
-mainList.appendChild(tile(svg('<path d="M20 2H4a2 2 0 00-2 2v18l4-4h14a2 2 0 002-2V4a2 2 0 00-2-2z"/>'),G.green,'WhatsApp Message','Change the wording of the overdue message',()=>open('setwa')));
-mainList.appendChild(tile(IC.theme,G.purple,'Theme Settings','Light, dark or follow the phone',()=>open('settheme')));
-mainList.appendChild(tile(IC.font,G.grey,'Font Settings','Text size and font design',()=>open('setfont')));
+function buildMainList(){
+  const A=window.RDLACC,can=k=>A?A.can(k):true,role=window.RDL_ROLE;
+  mainList.textContent='';
+  if(role!=='user')mainList.appendChild(tile(IC.lock,G.red,'App Security','Users, PIN, corrections and activity log',async()=>{if(await unlock())open('setsec')}));
+  if(role==='user'){   /* a user has no App Security: the parts the Admin allowed are listed here */
+    if(A&&A.any(['dcr','dbup','backup']))mainList.appendChild(tile(IC.db,G.blue,'Database Settings','Daily Collection & Order upload and other database tools',()=>open('setdb')));
+    if(A&&A.any(['corr','newcust','erase']))mainList.appendChild(tile(IC.pen,G.red,'Database Correction & Update','Correction, update, new customer and erase',()=>open('setcu')));
+    if(can('actlog'))mainList.appendChild(tile(IC.cal,G.blue,'Activity Log','What was changed, and undo the last change',()=>open('setlog')))}
+  if(can('theme'))mainList.appendChild(tile(IC.pen,G.red,'Header Text','Change the app title and depot name',()=>open('sethdr')));
+  if(can('notif'))mainList.appendChild(tile(IC.bell,G.amber,'Notification Settings','Choose which due bills notify you',()=>open('setnotif')));
+  if(can('wa'))mainList.appendChild(tile(svg('<path d="M20 2H4a2 2 0 00-2 2v18l4-4h14a2 2 0 002-2V4a2 2 0 00-2-2z"/>'),G.green,'WhatsApp Message','Change the wording of the overdue message',()=>open('setwa')));
+  if(can('theme')){
+    mainList.appendChild(tile(IC.theme,G.purple,'Theme Settings','Light, dark or follow the phone',()=>open('settheme')));
+    mainList.appendChild(tile(IC.font,G.grey,'Font Settings','Text size and font design',()=>open('setfont')))}}
+/* the Admin's limits changed (or arrived): rebuild the menu, the bottom tabs and leave a page that is now closed */
+function accRefresh(){
+  const A=window.RDLACC;buildMainList();
+  $$('.nav button').forEach(b=>{const p=b.dataset.p;if(p==='sales'||p==='collection')b.style.display=(A&&!A.can('entry'))?'none':''});
+  const on=document.querySelector('.pg.on');
+  if(on&&((on.id&&!accOK(on.id))||((on.id==='sales'||on.id==='collection')&&A&&!A.can('entry'))))show('home')}
+window.RDL_ACC_REFRESH=accRefresh;buildMainList();
+setTimeout(accRefresh,0);
 
 /* ---------- Database Settings menu ---------- */
 page('setdb','Database Settings','setsec',b=>{
-  const l=el('div','set-list');
+  const l=el('div','set-list'),A=window.RDLACC;
   /* order and colours: each box has its own soft gradient; Daily Collection & Order Upload (daily work) is the bright one */
   const bx=(t,ic,g,bg,bd,sub,fn,hot)=>{const x=tile(ic,g,t,sub,fn);x.style.background=bg;x.style.borderColor=bd;
     if(hot){x.style.boxShadow='0 8px 18px -8px #ff8a3d99,0 0 0 2px #ffe0b8'}
     l.appendChild(x);return x};
-  bx('Database Backup',IC.backup,G.green,'linear-gradient(135deg,#e3f8ec,#c6f0d9)','#8fd9b0','Save or restore all app data',()=>open('setbackup'));
-  bx('Database Upload',IC.up,G.blue,'linear-gradient(135deg,#e4f0ff,#c9defa)','#8fb4ee','Outstanding data and Credit limit data',()=>open('setup'));
-  bx('Daily Collection & Order Upload',IC.cal,'linear-gradient(135deg,#ff7a18,#ff3d6e)','linear-gradient(135deg,#fffaf0,#ffe9c7 50%,#ffd3dc)','#ffb36b','Every day: upload the Daily Collection and Order file',()=>open('setdcr'),1);
+  if(A.can('backup'))bx('Database Backup',IC.backup,G.green,'linear-gradient(135deg,#e3f8ec,#c6f0d9)','#8fd9b0','Save or restore all app data',()=>open('setbackup'));
+  if(A.can('dbup'))bx('Database Upload',IC.up,G.blue,'linear-gradient(135deg,#e4f0ff,#c9defa)','#8fb4ee','Outstanding data and Credit limit data',()=>open('setup'));
+  if(A.can('dcr'))bx('Daily Collection & Order Upload',IC.cal,'linear-gradient(135deg,#ff7a18,#ff3d6e)','linear-gradient(135deg,#fffaf0,#ffe9c7 50%,#ffd3dc)','#ffb36b','Every day: upload the Daily Collection and Order file',()=>open('setdcr'),1);
   b.appendChild(l)});
 
 /* ---------- Theme ---------- */
@@ -4267,11 +4417,11 @@ async function deleteMany(items){
 /* ---------- pages ---------- */
 page('setsec','App Security','settings',b=>{
   if(!unlocked()){b.appendChild(el('p','hint','Locked. Go back and open App Security again.'));return}
-  const l=el('div','set-list');
-  l.appendChild(tile(IC.db,G.blue,'Database Settings','Backup, database upload and daily Collection & Order upload',()=>open('setdb')));
-  l.appendChild(tile(IC.pen,G.red,'Database Correction & Update','Correction, database update, new customer create and erase',()=>open('setcu')));
-  l.appendChild(tile(svg('<path d="M16 11a3 3 0 100-6 3 3 0 000 6zM8 11a3 3 0 100-6 3 3 0 000 6zm0 2c-2.3 0-7 1.2-7 3.5V19h14v-2.5C15 14.2 10.3 13 8 13zm8 0c-.4 0-.7 0-1.1.1 1.2.8 2.100 1.900 2.100 3.400V19h6v-2.500c0-2.300-4.700-3.500-7-3.500z"/>'),G.green,'User Manage & Access Control','Create, disable, delete users and set what each can do',()=>open('setusers')));
-  l.appendChild(tile(IC.cal,G.blue,'Activity Log','What was changed, and undo the last change',()=>open('setlog')));
+  const l=el('div','set-list'),A=window.RDLACC;
+  if(A.any(['dcr','dbup','backup']))l.appendChild(tile(IC.db,G.blue,'Database Settings','Backup, database upload and daily Collection & Order upload',()=>open('setdb')));
+  if(A.any(['corr','newcust','erase']))l.appendChild(tile(IC.pen,G.red,'Database Correction & Update','Correction, database update, new customer create and erase',()=>open('setcu')));
+  if(A.can('users'))l.appendChild(tile(svg('<path d="M16 11a3 3 0 100-6 3 3 0 000 6zM8 11a3 3 0 100-6 3 3 0 000 6zm0 2c-2.3 0-7 1.2-7 3.5V19h14v-2.5C15 14.2 10.3 13 8 13zm8 0c-.4 0-.7 0-1.1.1 1.2.8 2.100 1.900 2.100 3.400V19h6v-2.500c0-2.300-4.700-3.500-7-3.500z"/>'),G.green,'User Manage & Access Control','Create, disable, delete users and set what each can do',()=>open('setusers')));
+  if(A.can('actlog'))l.appendChild(tile(IC.cal,G.blue,'Activity Log','What was changed, and undo the last change',()=>open('setlog')));
   l.appendChild(tile(IC.lock,G.purple,secG().on?'Change PIN':'Set PIN',secG().on?'Set a new 4-digit PIN':'PIN lock is OFF. Tap to set a new PIN and recovery code',async()=>{if(await setPin('Change PIN',true)){open('setsec')}}));
   if(window.RDLGATE){
     l.appendChild(tile(IC.lock,G.grey,'Change Lock PIN','PIN that locks the app on this phone',()=>window.RDLGATE.changePin()));
@@ -4285,6 +4435,7 @@ page('setusers','User Manage & Access Control','setsec',b=>{
   if(!unlocked()){b.appendChild(el('p','hint','Locked. Go back and open App Security again.'));return}
   const GT=window.RDLGATE,ACC=window.RDLACC;
   if(!GT||!ACC){b.appendChild(el('p','hint','Not available on this device.'));return}
+  const me=(GT.session&&GT.session())||{},meMail=String(me.email||'').toLowerCase(),iAmRoot=!!me.root;
   if(!document.getElementById('uaCss')){const cs=document.createElement('style');cs.id='uaCss';
     cs.textContent='.ua-in{display:block;width:100%;box-sizing:border-box;margin:7px 0;padding:11px;border-radius:10px;border:1px solid #8aa0c466;background:transparent;color:inherit;font-size:15px}'
     +'.ua-u{margin:10px 0;padding:12px;border-radius:14px;border:1px solid #8aa0c455}.ua-u.off{opacity:.62}'
@@ -4294,59 +4445,101 @@ page('setusers','User Manage & Access Control','setsec',b=>{
     +'.ua-b{padding:8px 12px;border-radius:10px;border:0;background:#1f4e78;color:#fff;font-size:13px;cursor:pointer}.ua-b.alt{background:#e8eef5;color:#1f4e78}.ua-b.red{background:#fde8e6;color:#c0392b}.ua-b:disabled{opacity:.5}'
     +'.ua-ed{margin-top:10px;padding-top:8px;border-top:1px dashed #8aa0c466}'
     +'.ua-r{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:7px 0}.ua-r small{display:block;opacity:.7;font-size:11.5px}'
-    +'.ua-r select{padding:7px;border-radius:8px;border:1px solid #8aa0c466;background:transparent;color:inherit;font-size:13.5px}'
-    +'.ua-lr{font-size:12px;padding:5px 0;border-bottom:1px solid #8aa0c433;word-break:break-word}.ua-lr.bad{color:#c0392b}';
+    +'.ua-r select,.ua-in.sel{padding:7px;border-radius:8px;border:1px solid #8aa0c466;background:transparent;color:inherit;font-size:13.5px}'
+    +'.ua-h{font-weight:700;font-size:13.5px;margin:12px 0 2px}'
+    +'.ua-lr{font-size:12px;padding:5px 0;border-bottom:1px solid #8aa0c433;word-break:break-word}.ua-lr.bad{color:#c0392b}.ua-lr b{font-weight:700}';
     document.head.appendChild(cs)}
   const msg=e=>String(e&&e.message||e||'').replace(/^Error:\s*/,'').replace(/^ACCESS_DENIED:\s*/,'');
-  const depots=(()=>{const m=base(),o={};if(m)(m.out||[]).concat(m.cr||[]).forEach(r=>{if(r.dp)o[r.dp]=1});return Object.keys(o).sort()})();
+  const LV=[[2,'Full access'],[1,'View only'],[0,'No access']],LVT={2:'full',1:'view only',0:'no access'};
+  /* one row per part of the app: Full access / View only / No access. Returns the chosen limits. */
+  const accEditor=(host,role,cur)=>{
+    const sel={};
+    ACC.modsFor(role).forEach(m=>{const row=el('div','ua-r'),lb=el('div');lb.appendChild(document.createTextNode(m.t));lb.appendChild(el('small',null,m.d||''));row.appendChild(lb);
+      const s=el('select');LV.forEach(o=>{if(o[0]===1&&!m.ro)return;const op=el('option',null,o[1]);op.value=o[0];s.appendChild(op)});
+      s.value=String(ACC.lvl(cur,role,m.k));sel[m.k]=s;row.appendChild(s);host.appendChild(row)});
+    return{get:()=>{const p={};ACC.modsFor(role).forEach(m=>{p[m.k]=+sel[m.k].value});return p}}};
+  /* short text: where this account differs from the usual defaults */
+  const summary=(p,role)=>{const r=[];ACC.modsFor(role).forEach(m=>{const v=ACC.lvl(p,role,m.k),d=ACC.lvl({},role,m.k);if(v!==d)r.push(m.t+': '+LVT[v])});
+    return r.length?'Changed from default — '+r.join(' • '):'Default access'};
 
-  /* add a user */
-  const add=card('Add a user','The user is added to the Google Sheet and can sign in with this Gmail. A new user has full access until you set limits.');
+  /* ---- add a user or an admin ---- */
+  const add=card('Add a user or an admin','The account is added to the Google Sheet and can sign in with this Gmail. Choose below what it may open and change. You can change this later.');
   const mk=(ph,type)=>{const i=el('input','ua-in');i.placeholder=ph;i.type=type||'text';i.autocomplete='off';add.appendChild(i);return i};
   const fe=mk('Gmail address','email'),fn=mk('Name');
-  const asgF=RDLAssign.field(add,{users:()=>GT.api('listUsers').then(j=>j.users),email:()=>fe.value});
-  const ab=el('button','st-btn','Add user');ab.type='button';add.appendChild(ab);const am=msgBox();add.appendChild(am);b.appendChild(add);
+  const rs=el('select','ua-in sel');[['user','User — works on chosen depots and customers'],['admin','Admin — sees every depot and customer']].forEach(o=>{const op=el('option',null,o[1]);op.value=o[0];rs.appendChild(op)});add.appendChild(rs);
+  const asgBox=el('div');add.appendChild(asgBox);
+  const asgF=RDLAssign.field(asgBox,{users:()=>GT.api('listUsers').then(j=>j.users),email:()=>fe.value});
+  add.appendChild(el('div','ua-h','Access limits for this account'));
+  const accHost=el('div');add.appendChild(accHost);let ed=null;
+  const paint=()=>{accHost.textContent='';ed=accEditor(accHost,rs.value,{});asgBox.style.display=rs.value==='admin'?'none':''};
+  rs.onchange=paint;paint();
+  const ab=el('button','st-btn','Add account');ab.type='button';add.appendChild(ab);const am=msgBox();add.appendChild(am);b.appendChild(add);
 
-  const listCard=card('Users');const list=el('div');listCard.appendChild(list);b.appendChild(listCard);
-  const summary=p=>{const r=[];ACC.MODS.forEach(m=>{const v=p&&p[m.k];if(v===0)r.push(m.t+': no access');else if(v===1)r.push(m.t+': view only')});return r.length?'Limited — '+r.join(' • '):'Full access'};
+  const listCard=card('Accounts');const list=el('div');listCard.appendChild(list);b.appendChild(listCard);
+
+  /* ---- what users changed ---- */
+  const cc=card('What users changed','Who changed what, and when. A phone sends its list together with its backup, so a phone that was offline appears later.');
+  const usel=el('select','ua-in sel'),d1=el('input','ua-in'),d2=el('input','ua-in');d1.type=d2.type='date';
+  const fromD=new Date();fromD.setDate(fromD.getDate()-7);d1.value=ymd(fromD);d2.value=ymd(new Date());
+  cc.appendChild(el('label','od-label','User'));cc.appendChild(usel);cc.appendChild(el('label','od-label','From'));cc.appendChild(d1);cc.appendChild(el('label','od-label','To'));cc.appendChild(d2);
+  const cb=el('button','st-btn','Show changes');cb.type='button';const cl=el('div');cc.appendChild(cb);cc.appendChild(cl);b.appendChild(cc);
+  const OP={add:'Added',edit:'Edited',del:'Deleted'};
+  cb.onclick=async()=>{cl.textContent='Loading…';cb.disabled=true;
+    try{const j=await GT.api('listChanges',{email:usel.value,from:d1.value,to:d2.value});cl.textContent='';
+      if(!j.rows.length){cl.textContent='No changes found for this selection.';cb.disabled=false;return}
+      j.rows.forEach(r=>{const d=el('div','ua-lr');let t=r.at;try{t=new Date(r.at).toLocaleString('en-GB')}catch(e){}
+        d.appendChild(el('b',null,(OP[r.op]||r.op)+' • '+r.kind));d.appendChild(document.createTextNode(' • '+(r.name||r.email)+' • '+t+' • '+r.detail));cl.appendChild(d)});
+      if(j.rows.length>=300)cl.appendChild(el('p','hint','Showing the newest 300. Narrow the dates or choose one user.'))}
+    catch(e){cl.textContent=msg(e)}cb.disabled=false};
 
   const load=async()=>{
     list.textContent='Loading…';let us,pm;
     try{us=(await GT.api('listUsers')).users}catch(e){list.textContent=msg(e);return}
     try{pm=(await GT.api('listPerms')).perms||{}}catch(e){pm=null}
     list.textContent='';
-    if(pm===null)list.appendChild(el('p','ua-w','⚠ Access limits and Delete need the Apps Script update (file Apps-Script-User-Access.gs). Add, Turn off and Turn on still work.'));
+    const keep=usel.value;usel.textContent='';const o0=el('option',null,'All users');o0.value='';usel.appendChild(o0);
+    us.forEach(u=>{const o=el('option',null,(u.name||u.email)+' ('+u.email+')');o.value=u.email;usel.appendChild(o)});usel.value=keep;
+    if(pm===null)list.appendChild(el('p','ua-w','⚠ Access limits, admins and the changes list need the Apps Script update (new Code.gs). Add, Turn off and Turn on still work.'));
     us.forEach(u=>{
+      const em=u.email.toLowerCase(),self=em===meMail,isAdm=u.role==='admin';
       const r=el('div','ua-u'+(u.active?'':' off'));
-      r.appendChild(el('div','ua-n',(u.name||u.email)+(u.role==='admin'?'  (Admin)':'')));
+      r.appendChild(el('div','ua-n',(u.name||u.email)+(u.root?'  (Main Admin)':isAdm?'  (Admin)':'')+(self?'  — you':'')));
       r.appendChild(el('div','ua-s',u.email));
-      r.appendChild(el('div','ua-s',(RDLAssign.describe(u.assign)||u.depot||'all depots')+' • '+(u.active?'Active':'Turned off')));
-      if(u.role!=='user'){r.appendChild(el('div','ua-s','Admin — full access, cannot be limited or deleted here'));list.appendChild(r);return}
-      const cur=(pm&&pm[u.email.toLowerCase()])||{};
-      r.appendChild(el('div','ua-s',pm===null?'':summary(cur)));
-      if(u.depot&&!u.depotKnown)r.appendChild(el('div','ua-w','⚠ No data published under this depot name. Check the spelling.'));
+      {const t=u.lastBackup?new Date(u.lastBackup):null,mins=t?Math.max(0,Math.round((Date.now()-t)/60000)):null,
+        ago=mins===null?'no backup yet':mins<2?'just now':mins<60?mins+' min ago':mins<1440?Math.round(mins/60)+' h ago':Math.round(mins/1440)+' day'+(Math.round(mins/1440)===1?'':'s')+' ago',
+        d=el('div','ua-s','Last backup: '+ago);if(u.active&&(mins===null||mins>1440)){d.style.color='#d90000';d.style.fontWeight='800'}r.appendChild(d)}
+      r.appendChild(el('div','ua-s',(isAdm?'All depots and customers':(RDLAssign.describe(u.assign)||u.depot||'all depots'))+' • '+(u.active?'Active':'Turned off')));
+      if(u.root){r.appendChild(el('div','ua-s','Main Admin: cannot be limited, turned off or deleted.'));list.appendChild(r);return}
+      const cur=(pm&&pm[em])||{};
+      r.appendChild(el('div','ua-s',pm===null?'':summary(cur,u.role)));
+      if(!isAdm&&u.depot&&!u.depotKnown)r.appendChild(el('div','ua-w','⚠ No data published under this depot name. Check the spelling.'));
+      if(self){r.appendChild(el('div','ua-s','You cannot limit, turn off or delete your own account.'));list.appendChild(r);return}
       const bs=el('div','ua-bs');r.appendChild(bs);
       const btn=(t,cls,fn)=>{const x=el('button','ua-b '+(cls||''),t);x.type='button';x.onclick=()=>fn(x);bs.appendChild(x);return x};
-      btn(u.active?'Turn off':'Turn on','',async x=>{
+      const mayStop=!isAdm||iAmRoot;   /* only the Main Admin may turn off or delete another admin */
+      if(mayStop)btn(u.active?'Turn off':'Turn on','',async x=>{
         if(u.active&&!await RDLUI.ask({title:'Turn off '+u.email+'?',msg:'They lose access the next time they open the app. You can turn them on again later.'}))return;
         x.disabled=true;try{await GT.api('saveUser',{email:u.email,active:!u.active});load()}catch(e){x.disabled=false;await RDLUI.alert('Could not change',msg(e))}});
-      btn('Depots & customers','alt',()=>RDLAssign.open({title:(u.name||u.email),assign:u.assign,email:u.email,users:()=>Promise.resolve(us),save:a=>GT.api('saveUser',{email:u.email,assign:a}).then(load)}));
-      let ed=null;
+      if(!isAdm)btn('Depots & customers','alt',()=>RDLAssign.open({title:(u.name||u.email),assign:u.assign,email:u.email,users:()=>Promise.resolve(us),save:a=>GT.api('saveUser',{email:u.email,assign:a}).then(load)}));
+      let box=null;
       btn('Access','alt',()=>{
-        if(ed){ed.remove();ed=null;return}
-        ed=el('div','ua-ed');r.appendChild(ed);const sel={};
-        ACC.MODS.forEach(m=>{const row=el('div','ua-r');const lb=el('div');lb.appendChild(document.createTextNode(m.t));lb.appendChild(el('small',null,m.d));row.appendChild(lb);
-          const s=el('select');[[2,'Full'],[1,'View only'],[0,'No access']].forEach(o=>{if(o[0]===1&&!m.ro)return;const op=el('option',null,o[1]);op.value=o[0];s.appendChild(op)});
-          const v=cur[m.k];s.value=String(v===0||v===1?(v===1&&!m.ro?2:v):2);sel[m.k]=s;row.appendChild(s);ed.appendChild(row)});
-        const sv=el('button','st-btn','Save access');sv.type='button';const st=msgBox();ed.appendChild(sv);ed.appendChild(st);
-        sv.onclick=async()=>{const perms={};ACC.MODS.forEach(m=>{const v=+sel[m.k].value;if(v!==2)perms[m.k]=v});
-          sv.disabled=true;try{await GT.api('setPerms',{email:u.email,perms});say(st,'Saved. It applies the next time this user opens the app with internet.','ok');load()}catch(e){sv.disabled=false;say(st,msg(e),'bad')}}});
-      btn('Delete','red',async x=>{
-        if(!await RDLUI.ask({title:'Delete '+u.email+'?',msg:'The user is removed from the Google Sheet and loses access. Their backups are kept. This cannot be undone.'}))return;
+        if(box){box.remove();box=null;return}
+        box=el('div','ua-ed');r.appendChild(box);
+        const e2=accEditor(box,u.role,cur);
+        const sv=el('button','st-btn','Save access');sv.type='button';const st=msgBox();box.appendChild(sv);box.appendChild(st);
+        sv.onclick=async()=>{sv.disabled=true;try{await GT.api('setPerms',{email:u.email,perms:e2.get()});say(st,'Saved. It applies the next time this account opens the app with internet.','ok');load()}catch(e){sv.disabled=false;say(st,msg(e),'bad')}}});
+      if(mayStop)btn('Delete','red',async x=>{
+        if(!await RDLUI.ask({title:'Delete '+u.email+'?',msg:'The account is removed from the Google Sheet and loses access. Its backups are kept. This cannot be undone.'}))return;
         x.disabled=true;try{await GT.api('deleteUser',{email:u.email});load()}catch(e){x.disabled=false;await RDLUI.alert('Could not delete',msg(e))}});
       list.appendChild(r)})};
   ab.onclick=async()=>{am.textContent='';ab.disabled=true;
-    try{const j=await GT.api('saveUser',{email:fe.value,name:fn.value,assign:asgF.get()||undefined,active:true});say(am,j.created?'User added.':'User updated.','ok');fe.value='';fn.value='';asgF.clear();load()}
+    try{const role=rs.value,perms=ed.get(),mail=fe.value.trim().toLowerCase();
+      if(role==='user'&&!asgF.get())throw new Error('Choose at least one depot or customer for this user.');
+      const j=await GT.api('saveUser',{email:mail,name:fn.value,role,assign:role==='user'?asgF.get():undefined,active:true});
+      if(!j.created){say(am,'This Gmail is already an account. Use Access on its card below to change what it may do.','bad');load();ab.disabled=false;return}
+      try{await GT.api('setPerms',{email:mail,perms})}
+      catch(e){say(am,'Account added, but the access limits were not saved ('+msg(e)+'). Open Access on its card below and save again.','bad');fe.value='';fn.value='';asgF.clear();paint();load();ab.disabled=false;return}
+      say(am,role==='admin'?'Admin added.':'User added.','ok');fe.value='';fn.value='';asgF.clear();paint();load()}
     catch(e){say(am,msg(e),'bad')}ab.disabled=false};
 
   /* sign-in / backup log kept by the server */
@@ -4358,9 +4551,9 @@ page('setusers','User Manage & Access Control','setsec',b=>{
 /* ---------- Database Correction & Update menu ---------- */
 page('setcu','Database Correction & Update','setsec',b=>{
   if(!unlocked()){b.appendChild(el('p','hint','Locked. Go back and open App Security again.'));return}
-  const l=el('div','set-list');
-  l.appendChild(tile(IC.pen,G.red,'Database Correction','Edit or delete posted sales, collections and drafts',()=>{CV.set=0;CED.clear();CDL.clear();open('setcorr')}));
-  l.appendChild(tile(IC.edit,G.amber,'Database Update','Update Outstanding and Credit limit, create customers, erase data',()=>open('setupd')));
+  const l=el('div','set-list'),A=window.RDLACC;
+  if(A.can('corr'))l.appendChild(tile(IC.pen,G.red,'Database Correction','Edit or delete posted sales, collections and drafts',()=>{CV.set=0;CED.clear();CDL.clear();open('setcorr')}));
+  if(A.any(['corr','newcust','erase']))l.appendChild(tile(IC.edit,G.amber,'Database Update','Update Outstanding and Credit limit, create customers, erase data',()=>open('setupd')));
   b.appendChild(l)});
 
 const CV={tab:'dz',q:'',d1:'',d2:'',set:0,sel:null,lit:false};
@@ -4476,17 +4669,17 @@ const customers=()=>{const m=R.master,mp=new Map();if(!m)return[];m.cr.forEach(r
 
 /* ---------- Database Update ---------- */
 page('setupd','Database Update','setcu',b=>{
-  const l=el('div','set-list');
-  l.appendChild(tile(IC.edit,G.blue,'Outstanding Update','Edit bills of one customer, business and date',()=>open('updout')));
-  l.appendChild(tile(IC.edit,G.purple,'Business & Credit Update','Credit line update, credit line on / off and add new customer',()=>open('bcu')));
-  l.appendChild(tile(IC.del,G.red,'Database Erase','Delete Outstanding, Credit limit, Collection & Order or ALL data',()=>open('seterase')));
+  const l=el('div','set-list'),A=window.RDLACC;
+  if(A.can('corr'))l.appendChild(tile(IC.edit,G.blue,'Outstanding Update','Edit bills of one customer, business and date',()=>open('updout')));
+  if(A.any(['corr','newcust']))l.appendChild(tile(IC.edit,G.purple,'Business & Credit Update','Credit line update, credit line on / off and add new customer',()=>open('bcu')));
+  if(A.can('erase'))l.appendChild(tile(IC.del,G.red,'Database Erase','Delete Outstanding, Credit limit, Collection & Order or ALL data',()=>open('seterase')));
   b.appendChild(l)});
 
 page('bcu','Business & Credit Update','setupd',b=>{
-  const l=el('div','set-list');
-  l.appendChild(tile(IC.edit,G.purple,'Credit Line Update','Edit credit & days limit, or add a new business to a customer',()=>open('updcr')));
-  l.appendChild(tile(IC.edit,G.amber,'Credit Line On / Off','Switch off credit lines with 0% utilization (removed from total limit)',()=>open('updoff')));
-  l.appendChild(tile(IC.user,G.green,'Add New Customer','Add a new customer to the database',()=>open('setbp')));
+  const l=el('div','set-list'),A=window.RDLACC;
+  if(A.can('corr'))l.appendChild(tile(IC.edit,G.purple,'Credit Line Update','Edit credit & days limit, or add a new business to a customer',()=>open('updcr')));
+  if(A.can('corr'))l.appendChild(tile(IC.edit,G.amber,'Credit Line On / Off','Switch off credit lines with 0% utilization (removed from total limit)',()=>open('updoff')));
+  if(A.can('newcust'))l.appendChild(tile(IC.user,G.green,'Add New Customer','Add a new customer to the database',()=>open('setbp')));
   b.appendChild(l)});
 
 page('updoff','Credit Line On / Off','bcu',b=>{
@@ -7475,7 +7668,7 @@ html.rdl-fit,html.rdl-fit body{height:100%;overflow:hidden;overscroll-behavior:n
   function navTop(){var n=document.querySelector('.nav > div');return n?n.getBoundingClientRect().top:innerHeight-80}
   function bottom(){var m=0;for(var i=0;i<home.children.length;i++){var r=home.children[i].getBoundingClientRect();if(r.height>0&&r.bottom>m)m=r.bottom}return m}
   function hdrBottom(){var h=document.querySelector('.hdr');return h?h.getBoundingClientRect().bottom:0}
-  function reset(){home.style.zoom='';app.style.zoom='';root.classList.remove('rdl-fit')}
+  function reset(){app.style.zoom='';root.classList.remove('rdl-fit')}   /* keep home's last zoom so Home never flashes full-size when you come back */
   function fit(){
     if(!home.classList.contains('on')){reset();return}
     var a=document.activeElement;if(a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName))return;
@@ -7493,7 +7686,7 @@ html.rdl-fit,html.rdl-fit body{height:100%;overflow:hidden;overscroll-behavior:n
   window.addEventListener('load',function(){later(200)});
   document.addEventListener('focusout',function(){later(300)});
   document.addEventListener('visibilitychange',function(){if(!document.hidden)later(100)});
-  new MutationObserver(function(){later(40)}).observe(home,{attributes:true,attributeFilter:['class']});
+  new MutationObserver(function(){fit();later(120)}).observe(home,{attributes:true,attributeFilter:['class']});   /* fit immediately (before the screen repaints) = no jerk */
   var rb=document.getElementById('remindBar');if(rb)new MutationObserver(function(){later(60)}).observe(rb,{childList:true,attributes:true});
   document.addEventListener('click',function(e){if(e.target.closest&&e.target.closest('.nav'))later(120)},true);
   later(50);setTimeout(fit,600);setTimeout(fit,1800);
@@ -7548,47 +7741,6 @@ html body .grid .cnt{font-size:clamp(12px,3.8vw,16px)!important}
 @media(prefers-reduced-motion:reduce){.pg.on{animation:none}.card,.total,.regcard .rc-p,.regcard .rc-h,.set-item,.qa,.nav button,.grid>*{transition:none}}
 </style>
 <style id="rdl-ptr-css">
-#rdl-ptr{position:fixed;top:0;left:50%;width:38px;height:38px;margin-left:-19px;border-radius:50%;background:#fff;color:#1d4ed8;box-shadow:0 4px 14px rgba(0,0,0,.22);display:flex;align-items:center;justify-content:center;z-index:99999;pointer-events:none;opacity:0;transform:translateY(-50px);will-change:transform,opacity}
-#rdl-ptr svg{width:20px;height:20px;transition:transform .1s}
-#rdl-ptr.spin svg{animation:rdlSpin .7s linear infinite}
-#rdl-ptr.snap{transition:transform .25s cubic-bezier(.22,.8,.3,1),opacity .25s}
-@keyframes rdlSpin{to{transform:rotate(360deg)}}
-</style>
-<script id="rdl-ptr-js">
-(function(){
-var el=document.createElement('div');el.id='rdl-ptr';
-el.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>';
-document.body.appendChild(el);
-var y0=0,dy=0,on=false,busy=false,TH=70;
-function scrolled(t){
- if((window.pageYOffset||document.documentElement.scrollTop||0)>0)return true;
- while(t&&t!==document.body&&t.nodeType===1){if(t.scrollTop>0)return true;t=t.parentNode}
- return false}
-function blocked(t){return t.closest&&t.closest('input,textarea,select,[role=dialog],.modal,.sheet,.overlay,.mask,[class*=modal],[class*=sheet],[class*=drawer]')}
-document.addEventListener('touchstart',function(e){
- if(busy||e.touches.length!==1||blocked(e.target)||scrolled(e.target)){on=false;return}
- y0=e.touches[0].clientY;dy=0;on=true;el.classList.remove('snap')},{passive:true});
-document.addEventListener('touchmove',function(e){
- if(!on||busy)return;
- var d=e.touches[0].clientY-y0;
- if(d<=0){dy=0;el.style.opacity=0;return}
- dy=Math.min(d*.5,95);
- el.style.opacity=Math.min(1,dy/40);
- el.style.transform='translateY('+(dy-30)+'px)';
- el.querySelector('svg').style.transform='rotate('+(dy*4)+'deg)'},{passive:true});
-function end(){
- if(!on)return;on=false;
- if(dy>=TH*.6&&!busy){
-  busy=true;el.classList.add('snap','spin');el.style.opacity=1;el.style.transform='translateY(50px)';
-  if(navigator.vibrate){try{navigator.vibrate(10)}catch(x){}}
-  setTimeout(function(){location.reload()},550);
- }else{el.classList.add('snap');el.style.opacity=0;el.style.transform='translateY(-50px)'}
- dy=0}
-document.addEventListener('touchend',end,{passive:true});
-document.addEventListener('touchcancel',end,{passive:true});
-})();
-</script>
-<style id="rdl-ptr-css">
 #rdl-ptr{position:fixed;top:0;left:50%;width:38px;height:38px;margin-left:-19px;border-radius:50%;background:#fff;color:#1d4ed8;box-shadow:0 4px 14px rgba(0,0,0,.2);display:flex;align-items:center;justify-content:center;z-index:99999;pointer-events:none;opacity:0;transform:translateY(-50px)}
 #rdl-ptr svg{width:20px;height:20px;transition:transform .1s}
 #rdl-ptr.spin svg{animation:rdlSpin .7s linear infinite}
@@ -7633,12 +7785,87 @@ html{overscroll-behavior-y:contain}
     if(dy>=TH*.8&&!busy){
       busy=true;el.classList.add('spin');el.style.opacity=1;el.style.transform='translateY(60px)';
       if(navigator.vibrate)try{navigator.vibrate(12)}catch(x){}
+      try{window.__rdlSavePage&&window.__rdlSavePage()}catch(x){}
       setTimeout(function(){location.reload()},500);
     }else{el.style.opacity=0;el.style.transform='translateY(-50px)'}
     dy=0;
   }
   document.addEventListener('touchend',end,{passive:true});
   document.addEventListener('touchcancel',end,{passive:true});
+})();
+</script>
+<style id="rdl-home-type">
+/* ===== Home cards: bigger titles / numbers (sizes follow the card width, so nothing gets cut) ===== */
+html body .grid .card,html body .regcard .rc-p{container-type:inline-size}
+html body .grid .card h3{font-size:clamp(13px,6cqw,18px)!important;letter-spacing:-.2px}
+html body .grid .card .amt{font-size:clamp(14px,8.8cqw,24px)!important}
+html body .grid .card .cnt{font-size:clamp(12px,6.4cqw,17px)!important}
+html body .grid .card .pill{font-size:clamp(10.5px,5cqw,14px)!important}
+html body .regcard .rc-p small{font-size:clamp(13px,6.6cqw,19px)!important}
+html body .regcard .rc-p b.rc-sa,html body .regcard .rc-p b.rc-ca,html body .regcard .rc-p b{font-size:clamp(14px,10cqw,25px)!important;letter-spacing:-.2px!important}
+html body .regcard .rc-p i{font-size:clamp(11px,6cqw,16px)!important}
+html body .qa .card h4{font-size:clamp(16px,4.9vw,21px)!important}
+html body .qa .card p{font-size:clamp(12.5px,3.6vw,15px)!important}
+/* header: bigger "Credit Tracker" (fills the gap before the icons, still fully visible) */
+html body .hdr .ttl h1 .t2{font-size:clamp(14px,4.6vw,19px)!important}
+@media(max-width:345px){html body .hdr .ttl h1 .t2{font-size:13px!important}}
+/* going back to Home: no bounce, only a very light fade */
+@keyframes rdlHomeIn{from{opacity:.55}to{opacity:1}}
+#home.pg.on{animation:rdlHomeIn .16s ease-out both!important}
+html,body{overscroll-behavior-y:contain}
+</style>
+<script id="rdl-restore-js">
+/* ===== Pull-to-refresh keeps you on the SAME page (it no longer jumps to the Dashboard) ===== */
+(function(){
+  var K='rdl.ptrPage';
+  function $(s){return document.querySelector(s)}
+  window.__rdlSavePage=function(){
+    var p=$('.pg.on'),n=$('.nav button.on');
+    try{sessionStorage.setItem(K,JSON.stringify({page:p?p.id:'home',nav:n?n.dataset.p:'home',y:window.scrollY||0}))}catch(e){}
+  };
+  var raw=null;try{raw=sessionStorage.getItem(K);sessionStorage.removeItem(K)}catch(e){}
+  if(!raw)return;
+  var st;try{st=JSON.parse(raw)}catch(e){return}
+  function done(){document.documentElement.classList.remove('rdl-restoring')}
+  if(!st||!st.page||st.page==='home'){done();return}
+  var MORE={tdsl:/TDS\s*Ledger/i,sched:/Schedule/i,schedf:/Schedule/i,dcrp:/\bDCR\b/,dcrf:/\bDCR\b/,notes:/Notes?/i,notef:/Notes?/i};
+  function nav(p){var b=$('.nav button[data-p="'+p+'"]');if(b)b.click();return !!b}
+  function open(){
+    var id=st.page,R=window.RDL||{};
+    if(id==='customer'||id==='sales'||id==='collection'||id==='more'){nav(id);return}
+    if(id==='settings'){var ib=document.querySelectorAll('.hdr>.ib');if(ib[1])ib[1].click();return}
+    if(id==='notif'){var ib2=document.querySelectorAll('.hdr>.ib');if(ib2[0])ib2[0].click();return}
+    if(id==='upl'&&R.openUpload){R.openUpload();return}
+    if(id==='drf'&&R.openDrafts){R.openDrafts();return}
+    if(MORE[id]){nav('more');var it=[].filter.call(document.querySelectorAll('#more .set-item'),function(x){return MORE[id].test(x.textContent)})[0];if(it)it.click();return}
+    /* deeper pages (a specific statement, a filtered table...) cannot be rebuilt exactly: go to the tab they were opened from */
+    if(st.nav&&st.nav!=='home')nav(st.nav)
+  }
+  var tries=0;
+  (function wait(){
+    tries++;
+    var ready=document.readyState==='complete'&&!document.getElementById('rgx-login')&&$('.nav button[data-p="customer"]')&&window.RDL;
+    if(ready||tries>80){
+      try{if(ready){open();if(st.y)setTimeout(function(){window.scrollTo(0,st.y)},60)}}catch(e){}
+      setTimeout(done,40);return}
+    setTimeout(wait,100)})();
+})();
+</script>
+<script id="rdl-amt-fit">
+/* big amounts shrink a little only when they would not fit the card (never cut) */
+(function(){
+  var SEL='.grid .card .amt,.regcard .rc-sa,.regcard .rc-ca';
+  function one(e){
+    e.style.removeProperty('font-size');if(!e.clientWidth)return;
+    var fs=parseFloat(getComputedStyle(e).fontSize),n=0;
+    while(e.scrollWidth>e.clientWidth+1&&fs>10&&n++<30){fs-=.5;e.style.setProperty('font-size',fs+'px','important')}
+  }
+  var t=0;function all(){clearTimeout(t);t=setTimeout(function(){document.querySelectorAll(SEL).forEach(one)},30)}
+  var mo=new MutationObserver(all);
+  function hook(){document.querySelectorAll(SEL).forEach(function(e){mo.observe(e,{childList:true,characterData:true,subtree:true})});all()}
+  window.addEventListener('load',function(){hook();setTimeout(all,600);setTimeout(all,1800)});
+  window.addEventListener('resize',all);
+  var h=document.getElementById('home');if(h)new MutationObserver(all).observe(h,{attributes:true,attributeFilter:['class','style']});
 })();
 </script>
 </body>
