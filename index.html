@@ -1396,7 +1396,7 @@ html body .pg .rvx em{font-size:9px}
 </style>
 <script id="rdl-restore-head">
 /* after a pull-to-refresh reload, keep the screen hidden until the same page is shown again (no flash of the dashboard) */
-try{if(sessionStorage.getItem('rdl.ptrPage')){document.documentElement.classList.add('rdl-restoring');setTimeout(function(){document.documentElement.classList.remove('rdl-restoring')},9000)}}catch(e){}
+try{document.documentElement.classList.add('rdl-restoring');setTimeout(function(){document.documentElement.classList.remove('rdl-restoring')},sessionStorage.getItem('rdl.ptrPage')?6000:2500)}catch(e){}
 </script>
 <style id="rdl-restore-css">html.rdl-restoring .app,html.rdl-restoring .nav{visibility:hidden}</style>
 </head>
@@ -7681,6 +7681,7 @@ html.rdl-fit,html.rdl-fit body{height:100%;overflow:hidden;overscroll-behavior:n
     if(bottom()>avail+2&&z<=MIN)root.classList.remove('rdl-fit')   /* extremely small screen: allow scrolling instead of clipping */
   }
   function later(ms){clearTimeout(t);t=setTimeout(fit,ms||80)}
+  window.__rdlFitNow=function(){try{fit()}catch(e){}};
   window.addEventListener('resize',function(){later(150)});
   window.addEventListener('orientationchange',function(){later(350)});
   window.addEventListener('load',function(){later(200)});
@@ -7815,21 +7816,56 @@ html body .hdr .ttl h1 .t2{font-size:clamp(14px,4.6vw,19px)!important}
 html,body{overscroll-behavior-y:contain}
 </style>
 <script id="rdl-restore-js">
-/* ===== Pull-to-refresh keeps you on the SAME page (it no longer jumps to the Dashboard) ===== */
+/* ===== Reload keeps you on the SAME page (and the same scroll spot), with no flash and no jolt =====
+   - every opener (R.openXxx) is recorded with its arguments, so a customer / statement / register page can be rebuilt exactly
+   - pages that are opened by tapping a Home card (Total Overdue, Upcoming, Outstanding Register ...) are re-opened by tapping that card
+   - the screen stays hidden until the page is built AND the Home fit is done, so nothing moves after it appears */
 (function(){
-  var K='rdl.ptrPage';
+  var K='rdl.ptrPage',root=document.documentElement;
   function $(s){return document.querySelector(s)}
+  function curId(){var p=$('.pg.on');return p?p.id:''}
+  function safe(v){try{JSON.stringify(v);return typeof v!=='function'}catch(e){return false}}
+  var last=null;
+  function wrap(){
+    var R=window.RDL;if(!R||R.__rdlWrapped)return;R.__rdlWrapped=1;
+    Object.keys(R).forEach(function(k){
+      if(!/^open/.test(k)||typeof R[k]!=='function')return;
+      var f=R[k];
+      R[k]=function(){
+        var a=[].slice.call(arguments).map(function(x){return safe(x)?x:undefined});
+        var r=f.apply(this,arguments);
+        last={k:k,a:a,p:curId()};
+        return r};
+    });
+  }
   window.__rdlSavePage=function(){
-    var p=$('.pg.on'),n=$('.nav button.on');
-    try{sessionStorage.setItem(K,JSON.stringify({page:p?p.id:'home',nav:n?n.dataset.p:'home',y:window.scrollY||0}))}catch(e){}
+    var p=$('.pg.on'),n=$('.nav button.on'),id=p?p.id:'home',l=(last&&last.p===id)?last:null;
+    try{sessionStorage.setItem(K,JSON.stringify({page:id,nav:n?n.dataset.p:'home',y:window.scrollY||0,last:l}))}catch(e){}
   };
   var raw=null;try{raw=sessionStorage.getItem(K);sessionStorage.removeItem(K)}catch(e){}
-  if(!raw)return;
-  var st;try{st=JSON.parse(raw)}catch(e){return}
-  function done(){document.documentElement.classList.remove('rdl-restoring')}
-  if(!st||!st.page||st.page==='home'){done();return}
+  var st=null;if(raw){try{st=JSON.parse(raw)}catch(e){st=null}}
+  var rid=0;
+  function reveal(){
+    var p=$('.pg.on'),last=Date.now(),t0=last,mo=null;
+    function fitAll(){try{window.__rdlTextFit&&window.__rdlTextFit();window.__rdlFitNow&&window.__rdlFitNow();window.__rdlTextFit&&window.__rdlTextFit()}catch(e){}}
+    function go(){root.classList.remove('rdl-restoring')}
+    /* show the screen only when the page has stopped changing (late-added buttons, summary rows ...), so nothing shifts after it appears */
+    if(p){try{mo=new MutationObserver(function(){last=Date.now()});mo.observe(p,{childList:true,subtree:true,attributes:true,characterData:true})}catch(e){}}
+    (function poll(){
+      var now=Date.now();
+      if((now-last>=140&&now-t0>=160)||now-t0>900){
+        if(mo)mo.disconnect();fitAll();try{if(st&&st.y&&st.page!=='home')window.scrollTo(0,st.y)}catch(e){}
+        requestAnimationFrame(function(){requestAnimationFrame(go)});return}
+      setTimeout(poll,40)})();
+  }
   var MORE={tdsl:/TDS\s*Ledger/i,sched:/Schedule/i,schedf:/Schedule/i,dcrp:/\bDCR\b/,dcrf:/\bDCR\b/,notes:/Notes?/i,notef:/Notes?/i};
   function nav(p){var b=$('.nav button[data-p="'+p+'"]');if(b)b.click();return !!b}
+  function homeCards(){
+    var o=[],g=document.querySelectorAll('#home .grid .card');
+    for(var i=0;i<g.length;i++)o.push(g[i]);
+    var t=$('#home .total');if(t)o.push(t);
+    [].forEach.call(document.querySelectorAll('#home .qa .card,#home .regcard .rc-h,#home .regcard .rc-p'),function(x){o.push(x)});
+    return o}
   function open(){
     var id=st.page,R=window.RDL||{};
     if(id==='customer'||id==='sales'||id==='collection'||id==='more'){nav(id);return}
@@ -7837,35 +7873,100 @@ html,body{overscroll-behavior-y:contain}
     if(id==='notif'){var ib2=document.querySelectorAll('.hdr>.ib');if(ib2[0])ib2[0].click();return}
     if(id==='upl'&&R.openUpload){R.openUpload();return}
     if(id==='drf'&&R.openDrafts){R.openDrafts();return}
-    if(MORE[id]){nav('more');var it=[].filter.call(document.querySelectorAll('#more .set-item'),function(x){return MORE[id].test(x.textContent)})[0];if(it)it.click();return}
-    /* deeper pages (a specific statement, a filtered table...) cannot be rebuilt exactly: go to the tab they were opened from */
-    if(st.nav&&st.nav!=='home')nav(st.nav)
+    if(MORE[id]){nav('more');var it=[].filter.call(document.querySelectorAll('#more .set-item'),function(x){return MORE[id].test(x.textContent)})[0];if(it)it.click();if(curId()===id)return}
+    /* 1) replay the exact opener (with its arguments) that built this page */
+    if(st.last&&typeof R[st.last.k]==='function'){
+      try{R[st.last.k].apply(R,st.last.a||[])}catch(e){}
+      if(curId()===id)return}
+    /* 2) a page that a Home card opens: tap the card that gives this page */
+    var cs=homeCards();
+    for(var i=0;i<cs.length;i++){
+      if(!$('#home.on')){var hb=$('.nav button[data-p="home"]');if(hb)hb.click()}
+      try{cs[i].click()}catch(e){}
+      if(curId()===id)return}
+    /* 3) give up gracefully: the tab it was opened from, otherwise Home */
+    if(st.nav&&st.nav!=='home')nav(st.nav);
+    else if(!$('#home.on')){var h2=$('.nav button[data-p="home"]');if(h2)h2.click()}
   }
   var tries=0;
   (function wait(){
     tries++;
     var ready=document.readyState==='complete'&&!document.getElementById('rgx-login')&&$('.nav button[data-p="customer"]')&&window.RDL;
     if(ready||tries>80){
-      try{if(ready){open();if(st.y)setTimeout(function(){window.scrollTo(0,st.y)},60)}}catch(e){}
-      setTimeout(done,40);return}
-    setTimeout(wait,100)})();
+      try{if(ready)wrap()}catch(e){}
+      try{
+        if(ready&&st&&st.page&&st.page!=='home'){
+          open();
+          var p=$('.pg.on');
+          if(p&&st.y){window.scrollTo(0,st.y);setTimeout(function(){window.scrollTo(0,st.y)},80)}
+          /* the restored page must not slide in again: switch its entrance animation off until the next tap */
+          if(p){p.style.animation='none';
+            var undo=function(){document.querySelectorAll('.pg').forEach(function(x){x.style.animation=''});document.removeEventListener('pointerdown',undo,true);document.removeEventListener('keydown',undo,true)};
+            document.addEventListener('pointerdown',undo,true);document.addEventListener('keydown',undo,true)}
+        }
+      }catch(e){}
+      setTimeout(reveal,30);return}
+    setTimeout(wait,60)})();
 })();
 </script>
-<script id="rdl-amt-fit">
-/* big amounts shrink a little only when they would not fit the card (never cut) */
+
+
+<style id="rdl-v3">
+/* ===== v3: header stays the same size at every Text-size setting (title never cut) ===== */
+html body .hdr{zoom:var(--hdrz,1)}
+html body .hdr .ttl h1 .t1,html body .hdr .ttl h1 .t2{white-space:nowrap}
+
+/* ===== v3: Home cards - bigger text. Lines that must stay on one row shrink only when they would not fit (see rdl-v3-js) ===== */
+html body .total .tx small{font-size:clamp(16.5px,5vw,21px)!important}
+html body .total .tx .depot{font-size:14px!important}
+html body .total b{font-size:clamp(20px,6.8vw,29px)!important}
+html body .grid .card h3{font-size:clamp(15px,7cqw,20px)!important}
+html body .grid .card .amt{font-size:clamp(16px,10cqw,26px)!important}
+html body .grid .card .cnt{font-size:clamp(13.5px,7.4cqw,19px)!important}
+html body .grid .card .pill{font-size:clamp(11.5px,5.8cqw,15.5px)!important}
+html body .regcard .rc-t h3{font-size:clamp(16px,4.9vw,21px)!important}
+html body .regcard .rc-p small{font-size:clamp(14.5px,7.4cqw,20px)!important}
+html body .regcard .rc-p b.rc-sa,html body .regcard .rc-p b.rc-ca,html body .regcard .rc-p b{font-size:clamp(15.5px,12cqw,26px)!important;margin-right:-26px}
+html body .regcard .rc-p i{font-size:clamp(12.5px,7cqw,17px)!important}
+html body .qa .card h4{font-size:clamp(17px,5.2vw,22px)!important}
+html body .qa .card p{font-size:clamp(13.5px,3.9vw,16px)!important}
+/* one-row lines: no wrapping, nothing painted outside the card */
+html body .grid .card .amt,html body .grid .card .cnt,html body .grid .card .pill span,html body .total .tx b,html body .total .tx small,html body .regcard .rc-p b,html body .regcard .rc-p i span,html body .regcard .rc-p small,html body .qa .card h4,html body .qa .card p{white-space:nowrap;overflow:hidden;min-width:0;text-overflow:clip}
+</style>
+<script id="rdl-v3-js">
+/* ===== v3 helpers: header zoom compensation, header title fit, Home text fit ===== */
 (function(){
-  var SEL='.grid .card .amt,.regcard .rc-sa,.regcard .rc-ca';
+  var root=document.documentElement;
+  function bodyZoom(){return parseFloat(document.body.style.zoom)||1}
+  function hdrZoom(){var z=bodyZoom();root.style.setProperty('--hdrz',z>1?String(+(1/z).toFixed(4)):'1')}
+  function titleFit(){
+    var h1=document.querySelector('.hdr .ttl h1');if(!h1)return;
+    var a=h1.querySelector('.t1'),b=h1.querySelector('.t2');if(!a)return;
+    a.style.removeProperty('font-size');if(b)b.style.removeProperty('font-size');
+    if(!h1.clientWidth)return;
+    var fa=parseFloat(getComputedStyle(a).fontSize),fb=b?parseFloat(getComputedStyle(b).fontSize):0,n=0;
+    function over(){return (b&&b.scrollWidth>b.clientWidth+.5)||h1.scrollWidth>h1.clientWidth+.5}
+    while(over()&&n++<60&&(b?fb>9.5:fa>12)){fa*=.97;fb*=.97;a.style.setProperty('font-size',fa+'px','important');if(b)b.style.setProperty('font-size',fb+'px','important')}
+  }
+  var FIT='.grid .card .amt,.grid .card .cnt,.grid .card .pill span,.total .tx b,.total .tx small,.regcard .rc-p b,.regcard .rc-p i span,.regcard .rc-p small,.qa .card h4,.qa .card p';
   function one(e){
     e.style.removeProperty('font-size');if(!e.clientWidth)return;
     var fs=parseFloat(getComputedStyle(e).fontSize),n=0;
-    while(e.scrollWidth>e.clientWidth+1&&fs>10&&n++<30){fs-=.5;e.style.setProperty('font-size',fs+'px','important')}
+    while(e.scrollWidth>e.clientWidth+1&&fs>9.5&&n++<40){fs-=.5;e.style.setProperty('font-size',fs+'px','important')}
   }
-  var t=0;function all(){clearTimeout(t);t=setTimeout(function(){document.querySelectorAll(SEL).forEach(one)},30)}
-  var mo=new MutationObserver(all);
-  function hook(){document.querySelectorAll(SEL).forEach(function(e){mo.observe(e,{childList:true,characterData:true,subtree:true})});all()}
-  window.addEventListener('load',function(){hook();setTimeout(all,600);setTimeout(all,1800)});
-  window.addEventListener('resize',all);
-  var h=document.getElementById('home');if(h)new MutationObserver(all).observe(h,{attributes:true,attributeFilter:['class','style']});
+  function textFit(){document.querySelectorAll(FIT).forEach(one)}
+  window.__rdlTextFit=function(){try{hdrZoom();titleFit();textFit()}catch(e){}};
+  var t=0;function later(ms){clearTimeout(t);t=setTimeout(function(){window.__rdlTextFit();try{window.__rdlFitNow&&window.__rdlFitNow()}catch(e){}window.__rdlTextFit()},ms||40)}
+  function hook(){
+    var h1=document.querySelector('.hdr .ttl h1');if(h1)new MutationObserver(function(){later(10)}).observe(h1,{childList:true});
+    new MutationObserver(function(){later(10)}).observe(document.body,{attributes:true,attributeFilter:['style']});
+    document.querySelectorAll(FIT).forEach(function(e){new MutationObserver(function(){later(60)}).observe(e,{childList:true,characterData:true,subtree:true})});
+    var h=document.getElementById('home');if(h)new MutationObserver(function(){later(30)}).observe(h,{attributes:true,attributeFilter:['class']});
+    window.__rdlTextFit();later(120);
+  }
+  window.addEventListener('load',function(){hook();setTimeout(later,500);setTimeout(later,1500);if(document.fonts&&document.fonts.ready)document.fonts.ready.then(function(){later(20)})});
+  window.addEventListener('resize',function(){later(120)});
+  window.addEventListener('orientationchange',function(){later(350)});
 })();
 </script>
 </body>
