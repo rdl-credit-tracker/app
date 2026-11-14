@@ -5902,7 +5902,7 @@ function makePage(id,title,kind){
     B.appendChild(T.wrap);
     if(rows.length>i){const mb=el('button','st-btn pgmore','Show more ('+fmt(rows.length-i)+' left)');mb.type='button';mb.onclick=()=>{lim+=PAGE;draw()};B.appendChild(mb)}
   }
-  P._run=()=>{if(R.master)draw()};
+  P._run=()=>{if(R.master)draw()};P._dp={get:()=>F.dp,set:v=>{F.dp=new Set(v);lim=PAGE;draw()}};
   return{open(){lim=PAGE;draw();$$('.pg').forEach(x=>x.classList.remove('on'));$$('.nav button').forEach(x=>x.classList.remove('on'));P.classList.add('on');window.scrollTo(0,0)}}
 }
 const PO=makePage('overdue','Total Overdue','over'),PU=makePage('upcoming','Upcoming Overdue','up');
@@ -7967,6 +7967,101 @@ html body .grid .card .amt,html body .grid .card .cnt,html body .grid .card .pil
   window.addEventListener('load',function(){hook();setTimeout(later,500);setTimeout(later,1500);if(document.fonts&&document.fonts.ready)document.fonts.ready.then(function(){later(20)})});
   window.addEventListener('resize',function(){later(120)});
   window.addEventListener('orientationchange',function(){later(350)});
+})();
+</script>
+<style id="rdl-tidy">
+/* ===== RDL TABLE TIDY (header size, Depot column not frozen, Depot header filter, tight columns). Delete this block + the script below to undo. ===== */
+/* 1) page header: smaller back icon, Excel icon and title */
+html body .st-top{gap:8px;margin-bottom:8px}
+html body .st-top button:has(>svg.bk-ar){width:30px;height:30px;border-radius:10px;flex:none}
+html body .st-top button svg.bk-ar{width:17px;height:17px}
+html body .st-top .xl-btn{width:32px!important;height:32px!important;border-width:1.5px!important}
+html body .st-top .xl-btn svg{width:21px;height:21px}
+html body .st-top h2{font-size:17px;line-height:1.2;min-width:0}
+/* 2) Depot Name column scrolls away; only the next column (Customer / Company) stays frozen */
+html body .od-table.cs-dpt th:first-child:not(#_a):not(#_b):not(#_c),
+html body .od-table.od-dp th:first-child:not(#_a):not(#_b):not(#_c),
+html body .od-table:has(td.c-dp) th:first-child:not(#_a):not(#_b):not(#_c),
+html body .od-table.cs-dpt td.c-dp:not(#_a):not(#_b):not(#_c),
+html body .od-table.od-dp td.c-dp:not(#_a):not(#_b):not(#_c),
+html body .od-table:has(td.c-dp) td.c-dp:not(#_a):not(#_b):not(#_c),
+html body .od-table.od-dp td.c-name:not(.c-n2):not(#_a):not(#_b):not(#_c){position:static!important;left:auto!important;z-index:auto!important;box-shadow:none!important;min-width:0!important;max-width:none!important;width:auto!important}
+html body .od-table.cs-dpt td.c-dp:not(#_a):not(#_b):not(#_c),
+html body .od-table.od-dp td.c-dp:not(#_a):not(#_b):not(#_c),
+html body .od-table:has(td.c-dp) td.c-dp:not(#_a):not(#_b):not(#_c),
+html body .od-table.od-dp td.c-name:not(.c-n2):not(#_a):not(#_b):not(#_c){white-space:nowrap!important}
+html body .od-table.od-dp td.c-n2:not(#_a):not(#_b):not(#_c),
+html body .od-table.cs-dpt td.c-name:not(.c-dp):not(#_a):not(#_b):not(#_c),
+html body .od-table:has(td.c-dp) td.c-name:not(.c-dp):not(#_a):not(#_b):not(#_c){position:sticky!important;left:0!important;z-index:2!important;width:auto!important}
+html body .od-table.cs-dpt th:nth-child(2):not(#_a):not(#_b):not(#_c),
+html body .od-table.od-dp th:nth-child(2):not(#_a):not(#_b):not(#_c),
+html body .od-table:has(td.c-dp) th:nth-child(2):not(#_a):not(#_b):not(#_c){position:sticky!important;left:0!important;z-index:3!important}
+/* 3) tight columns: no stretching to the screen width, no fixed minimum widths */
+html body .od-table.od-table.od-table.od-table:not(#_a):not(#_b):not(#_c):not(#_d):not(.dpu-fixed):not(.orp-cc .od-table){min-width:0!important;width:min-content!important}
+html body #orp .orp-cc .od-table.od-table.od-table:not(#_a):not(#_b):not(#_c):not(.dpu-fixed){table-layout:auto!important;min-width:0!important;width:min-content!important}
+html body #orp .orp-cc .od-table.dpu-fixed.dpu-fixed.dpu-fixed:not(#_a):not(#_b){table-layout:fixed!important;min-width:0!important;width:var(--w)!important}
+html body .od-table th{box-sizing:border-box}
+html body .od-table.od-table.od-table th:not(#_a):not(#_b):not(#_c){min-width:0!important}
+html body .od-table tr.dpf-h{display:none!important}
+</style>
+<script>
+(function(){'use strict';
+var NAME='Depot Name',SEL={};
+function T(x){return(x.textContent||'').replace(/[\u25be\u25b8\u2191\u2193]/g,'').replace(/\s+/g,' ').trim()}
+function dTables(){return[].filter.call(document.querySelectorAll('table.od-table'),function(t){var r=t.tHead&&t.tHead.rows[0];return r&&r.cells[0]&&T(r.cells[0])===NAME})}
+function dCell(t,tr){var c=tr.cells[0];if(!c||c.tagName!=='TD'||c.colSpan>1)return null;
+  if(c.classList.contains('c-dp'))return c;
+  if(t.classList.contains('od-dp')&&c.classList.contains('c-name')&&!c.classList.contains('c-n2'))return c;return null}
+function vals(c){var s=(c.textContent||'').trim();return s?s.split(/\s*,\s*/):[]}
+function rows(t){var o=[];[].forEach.call(t.tBodies,function(b){[].forEach.call(b.rows,function(r){o.push(r)})});return o}
+function count(t){var m={};rows(t).forEach(function(tr){var c=dCell(t,tr);if(!c||tr.classList.contains('cs-tot'))return;vals(c).forEach(function(v){m[v]=(m[v]||0)+1})});return m}
+function hide(tr,h){if(tr.classList.contains('dpf-h')!==h)tr.classList.toggle('dpf-h',h)}
+function filt(t,sel){var vis=true;rows(t).forEach(function(tr){var c=dCell(t,tr);
+  if(c){var v=vals(c);vis=!sel||!sel.size||!v.length||v.some(function(x){return sel.has(x)})}
+  if(tr.classList.contains('cs-tot'))vis=true;
+  hide(tr,!vis)})}
+function mode(t){var pg=t.closest('.pg');if(pg&&pg._dp)return'od';if(pg&&pg.querySelector('.dpo input'))return'reg';return'gen'}
+function curSel(t,m,key){var pg=t.closest('.pg');
+  if(m==='od')return new Set(Array.from(pg._dp.get()));
+  if(m==='reg'){var s=new Set();pg.querySelectorAll('.dpo input:checked').forEach(function(i){s.add(i.value)});return s}
+  return SEL[key]||new Set()}
+function items(t,m){var pg=t.closest('.pg'),o=[];
+  if(m==='od'){RDLDEPOT.names().forEach(function(n){o.push([RDLDEPOT.key(n),n,''])});return o}
+  if(m==='reg'){pg.querySelectorAll('.dpo input').forEach(function(i){o.push([i.value,i.value,''])});return o}
+  var c=count(t);Object.keys(c).sort().forEach(function(k){o.push([k,k,c[k]+' row'+(c[k]===1?'':'s')])});return o}
+function apply(t,m,key,v){var pg=t.closest('.pg');
+  if(m==='od'){pg._dp.set(v?Array.from(v):[]);return}
+  if(m==='reg'){var ch=null;pg.querySelectorAll('.dpo input').forEach(function(i){var on=!!(v&&v.has(i.value));if(i.checked!==on){i.checked=on;ch=ch||i}});if(ch)ch.dispatchEvent(new Event('change'));return}
+  if(v&&v.size)SEL[key]=v;else delete SEL[key];filt(t,SEL[key]);scan()}
+function scan(){var n={};
+  dTables().forEach(function(t){var pg=t.closest('.pg'),id=pg?pg.id:'',i=n[id]=(n[id]||0)+1,
+    key=id+'|'+i+'|'+[].map.call(t.tHead.rows[0].cells,T).join('/'),m=mode(t),th=t.tHead.rows[0].cells[0];
+    if(m==='gen'&&SEL[key])filt(t,SEL[key]);
+    var nat=th.querySelector('.fb')&&!th._dpf;if(nat)return;
+    var on=curSel(t,m,key).size>0,many;
+    if(m==='od')many=!RDLDEPOT.sel()&&RDLDEPOT.names().length>1;
+    else if(m==='reg')many=true;
+    else many=Object.keys(count(t)).length>1;
+    var b=th.querySelector('.fb');
+    if(many||on){
+      if(!b){b=document.createElement('button');b.type='button';b.className='fb';b.textContent='\u25be';th.appendChild(b);th.classList.add('df-th');th.title='Tap to select '+NAME;th._dpf=1}
+      b.classList.toggle('on',on);
+      th.onclick=function(e){if(!window.RDLDF)return;window.RDLDF(NAME,curSel(t,m,key),items(t,m),function(v){apply(t,m,key,v)})}}
+    else if(b&&th._dpf){b.remove();th.onclick=null;th.classList.remove('df-th');th._dpf=0}});
+  unify()}
+/* Outstanding Register cards: one common (tightest) width per column, so all cards still line up while scrolling together */
+function unify(){document.querySelectorAll('#orp .orp-ccs').forEach(function(root){
+  var ts=[].slice.call(root.querySelectorAll('.orp-cc .od-table'));if(!ts.length||!ts[0].offsetWidth)return;
+  var sig=ts.length+'|'+root.clientWidth;if(root._us===sig)return;
+  ts.forEach(function(t){t.classList.remove('dpu-fixed');[].forEach.call(t.tHead.rows[0].cells,function(th){th.style.removeProperty('width')})});
+  var W=[];ts.forEach(function(t){[].forEach.call(t.tHead.rows[0].cells,function(th,i){W[i]=Math.max(W[i]||0,parseFloat(getComputedStyle(th).width)||0)})});
+  ts.forEach(function(t){var s=0;[].forEach.call(t.tHead.rows[0].cells,function(th,i){th.style.setProperty('width',W[i]+'px','important');s+=W[i]});t.style.setProperty('--w',s+'px');t.classList.add('dpu-fixed')});
+  root._us=sig})}
+var mo,tm=0;
+function sched(){clearTimeout(tm);tm=setTimeout(function(){try{scan()}catch(e){}if(mo)mo.takeRecords()},120)}
+function start(){mo=new MutationObserver(sched);mo.observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['class']});sched()}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start);else start();
+window.addEventListener('resize',sched);
 })();
 </script>
 </body>
