@@ -1456,7 +1456,9 @@ function loadGIS(cb){
   var s=document.createElement('script');s.src='https://accounts.google.com/gsi/client';s.async=true;
   s.onload=function(){cb()};s.onerror=function(){cb(new Error('No internet'))};document.head.appendChild(s)}
 function initGIS(auto){google.accounts.id.initialize({client_id:CFG.cid,callback:onCred,auto_select:!!auto,cancel_on_tap_outside:false});gis=true}
+var emailChg=null;
 function onCred(r){
+  if(emailChg){var ef=emailChg;emailChg=null;ef(r.credential);return}   /* credential of the NEW Gmail, used only by Change Gmail */
   tok={id:r.credential,exp:jwtExp(r.credential)};try{sessionStorage.setItem('rdlgate.tok',JSON.stringify(tok))}catch(e){}
   waiters.splice(0).forEach(function(w){w.res(tok.id)});
   if(!S)firstLogin();else{if(Date.now()-afterAt>600000)afterLogin();if(panelOn)renderPanel()}}
@@ -1484,7 +1486,7 @@ function showLogin(){
 function setLogin(t,bad){var m=document.getElementById('rgx-lm');if(m){m.textContent=t;m.className='rgx-msg'+(bad?' bad':'')}}
 function setDepotLabel(){if(S&&S.role==='user'&&S.depot){var p=jget('rdl.prefs.v1')||{};if(p.depot!==S.depot){p.depot=S.depot;LS.setItem('rdl.prefs.v1',JSON.stringify(p))}}}
 function wipeUserData(){Object.keys(LS).filter(function(k){return k.indexOf('rdl.')===0&&k!=='rdl.prefs.v1'&&k!=='rdl.cleanstart.v2'}).forEach(function(k){LS.removeItem(k)});
-  ['rdlgate.dataAt','rdlgate.dcrAt','rdlgate.bk','rdlgate.bkdirty','rdlgate.perms'].forEach(function(k){LS.removeItem(k)})}
+  ['rdlgate.dataAt','rdlgate.dcrAt','rdlgate.asg','rdlgate.bk','rdlgate.bkdirty','rdlgate.perms'].forEach(function(k){LS.removeItem(k)})}
 function firstLogin(){
   setLogin('Checking access…');
   api('me').then(function(j){
@@ -1502,7 +1504,8 @@ function forcedOut(msg){
 function pullData(force){
   return api('getData').then(function(p){
     if(p.empty){if(force)throw new Error('No data has been published for "'+S.depot+'" yet. Ask the admin.');return false}
-    var dataAt=+LS.getItem('rdlgate.dataAt')||0,dcrAt=+LS.getItem('rdlgate.dcrAt')||0,part={};
+    var dataAt=+LS.getItem('rdlgate.dataAt')||0,dcrAt=+LS.getItem('rdlgate.dcrAt')||0,part={},asg=p.asg||'';
+    if(asg&&asg!==(LS.getItem('rdlgate.asg')||'')){dataAt=0;dcrAt=0}   /* the admin changed this user's depots / customers: download everything again */
     if(p.at>dataAt){part.out=p.out;part.cr=p.cr;part.at=p.at;part.cut=p.cut||''}
     if(p.dcr&&p.dcr.at>dcrAt)part.dcr=p.dcr;
     if(!part.out&&!part.dcr)return false;
@@ -1510,6 +1513,7 @@ function pullData(force){
     if(!RDL.applyRemote(part))throw new Error('Could not save the data on this phone');
     if(part.at)LS.setItem('rdlgate.dataAt',String(part.at));
     if(part.dcr)LS.setItem('rdlgate.dcrAt',String(part.dcr.at));
+    if(asg)LS.setItem('rdlgate.asg',asg);
     return true})}
 
 /* ---------- backup (user and admin) ---------- */
@@ -1525,9 +1529,13 @@ function backupIfDue(){
 var P=Storage.prototype,_s=P.setItem;
 P.setItem=function(k){var r=_s.apply(this,arguments);
   if(this===LS&&typeof k==='string'&&k.indexOf('rdl.')===0&&k!=='rdl.bkp.v1'&&S){_s.call(LS,'rdlgate.bkdirty','1');clearTimeout(timer);timer=setTimeout(function(){
-    if(Date.now()-lastPrompt<600000&&!(tok&&tok.exp-120000>Date.now()))return;lastPrompt=Date.now();sendBackup().catch(function(){})},45000)}
+    if(Date.now()-lastPrompt<600000&&!(tok&&tok.exp-120000>Date.now()))return;lastPrompt=Date.now();sendBackup().catch(function(){})},10000)}
   return r};
 document.addEventListener('visibilitychange',function(){if(document.visibilityState==='hidden'&&S&&LS.getItem('rdlgate.bkdirty')==='1'&&tok&&tok.exp-120000>Date.now())sendBackup(true).catch(function(){})});
+/* instant backup, retried: a failed backup (no internet, expired sign-in) is tried again every 3 minutes, when the net returns and when the app is opened again */
+function retryBackup(){if(S&&LS.getItem('rdlgate.bkdirty')==='1'&&tok&&tok.exp-120000>Date.now())sendBackup(true).catch(function(){})}
+setInterval(retryBackup,180000);window.addEventListener('online',function(){setTimeout(retryBackup,2000)});
+document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible')setTimeout(retryBackup,1500)});
 
 /* ---------- admin: push database to depots ---------- */
 function sigNow(){var m=jget('rdl.master.v1'),d=jget('rdl.dcr.v1');return m?(m.at+'|'+(d?d.at:0)+'|'+(LS.getItem('rdlgate.cut')||'')):''}
@@ -1575,6 +1583,15 @@ function loadPerms(){
     if(j&&j.perms&&typeof j.perms==='object'){LS.setItem('rdlgate.perms',JSON.stringify(j.perms));if(window.RDLACC)RDLACC.apply()}
   }).catch(function(e){if(/ACCESS_DENIED/.test(e.message))throw e})}
 
+/* ---------- admin: missed-backup alerts (server writes them at ~11:30 pm; shown in the notification bell) ---------- */
+function pullAlerts(){
+  if(!S||S.role!=='admin')return Promise.resolve();
+  return api('listAlerts',{},true).then(function(j){
+    var old={};try{(JSON.parse(LS.getItem('rdlgate.alerts'))||[]).forEach(function(a){old[a.id]=1})}catch(e){}
+    var list=j.alerts||[],fresh=list.filter(function(a){return !old[a.id]});
+    LS.setItem('rdlgate.alerts',JSON.stringify(list));window.dispatchEvent(new Event('rdl:alerts'));
+    if(fresh.length)toast('Backup missing: '+fresh.length+' user'+(fresh.length===1?'':'s')+' — see the notification bell')
+  }).catch(function(){})}
 /* ---------- after sign-in (every app start) ---------- */
 function afterLogin(){
   afterAt=Date.now();status('Checking…');
@@ -1584,10 +1601,39 @@ function afterLogin(){
     setDepotLabel();if(ch){location.reload();return}
     if(S.role==='user')return pullData(false).then(function(changed){if(changed){toast('New data received — reloading…');setTimeout(function(){location.reload()},900);throw new Error('__reload')}});
     if(S.role==='admin'&&sigNow()&&LS.getItem('rdlgate.sig')!==sigNow())return pushData().then(function(t){toast('Database published to depots')}).catch(function(e){status(msgOf(e),'warn')})
-  }).then(loadPerms).then(function(){return backupIfDue()}).catch(function(e){
+  }).then(loadPerms).then(function(){return backupIfDue()}).then(function(){return pullAlerts()}).catch(function(e){
     if(e.message==='__reload')return;
     if(/ACCESS_DENIED/.test(e.message))return forcedOut(msgOf(e));
     status('Offline or not synced: '+msgOf(e),'warn')})}
+
+/* ---------- change my own Gmail (admin and users) ---------- */
+function jwtMail(t){try{return String(JSON.parse(atob(t.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'))).email||'')}catch(e){return ''}}
+function openChangeEmail(){
+  panelOn=false;renderPanel();var old=document.getElementById('rgx-chg');if(old)old.remove();
+  var ov=h('div');ov.id='rgx-chg';ov.style.cssText='position:fixed;inset:0;z-index:100001;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif';
+  var c=h('div','rgx-card');c.appendChild(h('h1',null,'Change Gmail'));
+  c.appendChild(h('p',null,'Current Gmail: '+S.email));
+  c.appendChild(h('p',null,'Tap the button and sign in with your NEW Gmail (choose Use another account if needed). Your data, depot access and permissions stay the same. The old Gmail stops working.'));
+  var b=h('div');b.style.cssText='display:flex;justify-content:center;min-height:44px';c.appendChild(b);
+  var m=h('div','rgx-msg','Loading…');c.appendChild(m);
+  var cx=h('button','rgx-b alt','Cancel');cx.type='button';cx.style.cssText='display:block;width:100%;margin-top:12px;padding:11px;border-radius:10px;border:0;background:#e8eef5;color:#1f4e78;font-size:14.5px;cursor:pointer';
+  cx.onclick=function(){emailChg=null;ov.remove()};c.appendChild(cx);ov.appendChild(c);document.body.appendChild(ov);
+  function say(t,bad){m.textContent=t;m.className='rgx-msg'+(bad?' bad':'')}
+  var handler=function(cred){
+    var ne=jwtMail(cred);
+    if(!ne){say('Sign-in failed. Try again.',true);emailChg=handler;return}
+    if(ne.toLowerCase()===String(S.email).toLowerCase()){say('That is your current Gmail. Choose a different one.',true);emailChg=handler;return}
+    if(!confirm('Change your Gmail from\n'+S.email+'\nto\n'+ne+'\n?')){say('Cancelled.');emailChg=handler;return}
+    say('Changing…');cx.disabled=true;
+    api('changeMyEmail',{newToken:cred}).then(function(j){
+      S.email=j.email;jset(SK,S);tok={id:cred,exp:jwtExp(cred)};try{sessionStorage.setItem('rdlgate.tok',JSON.stringify(tok))}catch(e){}
+      say('Done. Your Gmail is now '+j.email,false);toast('Gmail changed to '+j.email);setTimeout(function(){location.reload()},1500)
+    }).catch(function(e){cx.disabled=false;say(msgOf(e),true);emailChg=handler})};
+  loadGIS(function(err){
+    if(err){say('No internet. Connect and try again.',true);return}
+    if(!gis)initGIS(false);try{google.accounts.id.disableAutoSelect()}catch(e){}
+    emailChg=handler;
+    try{google.accounts.id.renderButton(b,{theme:'filled_blue',size:'large',shape:'pill',text:'signin_with',width:260});say('')}catch(e){say('Could not show the Google button.',true)}})}
 
 /* ---------- floating button + menu ---------- */
 function signOut(){
@@ -1620,6 +1666,7 @@ function renderPanel(){
   if(S.role!=='admin'){
     btn('Lock app now','alt',function(){panelOn=false;renderPanel();LS.setItem('rdlgate.last','0');lockNow()});
     btn('Change PIN','alt',function(){panelOn=false;renderPanel();changePin()})}
+  btn('Change Gmail','alt',function(){openChangeEmail()});
   btn('Save backup now','alt',function(b){run(b,'Saving…',function(){return sendBackup().then(function(){return 'Backup saved to Drive.'})})});
   btn('Sign out','red',function(){signOut()});
   p.appendChild(rep);document.body.appendChild(p)}
@@ -1701,6 +1748,85 @@ function lockInit(){
 
 /* ---------- admin: users and activity log ---------- */
 function depotNames(){var m=jget('rdl.master.v1'),s={};if(m){(m.out||[]).concat(m.cr||[]).forEach(function(r){if(r.dp)s[r.dp]=1})}return Object.keys(s).sort()}
+
+/* ---------- depot / customer assignment editor (used by both user screens) ---------- */
+window.RDLAssign=(function(){
+  var css=document.createElement('style');
+  css.textContent='.asg-ov{position:fixed;inset:0;z-index:100000;background:#f3f7fd;color:#12305f;display:flex;flex-direction:column;font:14px system-ui,-apple-system,Segoe UI,sans-serif}'
+  +'.asg-top{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:calc(12px + env(safe-area-inset-top,0px)) 14px 12px;background:#0a49b5;color:#fff}.asg-top b{font-size:15.5px}.asg-top button{border:0;background:#ffffff26;color:#fff;border-radius:10px;padding:6px 11px;font-size:15px}'
+  +'.asg-body{flex:1;overflow:auto;padding:12px 12px 20px;-webkit-overflow-scrolling:touch}.asg-hint{font-size:12.5px;color:#51648a;margin:4px 2px 10px}'
+  +'.asg-card{background:#fff;border:1px solid #d5e2f5;border-radius:14px;padding:12px;margin-bottom:12px}.asg-card h4{margin:0 0 2px;font-size:15px;color:#0a3a9a}.asg-cnt{font-size:12.5px;color:#51648a;margin-bottom:8px}'
+  +'.asg-modes{display:flex;gap:6px;flex-wrap:wrap}.asg-modes button{flex:1;min-width:92px;border:1px solid #cfe0f6;background:#fff;color:#1b3b78;border-radius:10px;padding:8px 6px;font-size:13px;font-weight:700}.asg-modes button.on{background:linear-gradient(135deg,#0a49b5,#1a8ae8);color:#fff;border-color:transparent}'
+  +'.asg-warn{font-size:12px;color:#b45309;margin-top:6px}.asg-q{width:100%;box-sizing:border-box;margin:10px 0 6px;padding:9px 10px;border:1px solid #cfe0f6;border-radius:10px;font-size:14px}'
+  +'.asg-tools{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px}.asg-tools button{border:0;background:#e8f0fc;color:#0a3a9a;border-radius:9px;padding:7px 10px;font-size:12.5px;font-weight:700}'
+  +'.asg-list{max-height:46vh;overflow:auto;border:1px solid #e1ebf8;border-radius:10px}.asg-row{display:flex;gap:9px;align-items:flex-start;padding:8px 10px;border-bottom:1px solid #eef3fb}.asg-row:last-child{border-bottom:0}.asg-row input{margin-top:3px;width:18px;height:18px;flex:none}'
+  +'.asg-row b{display:block;font-size:13.5px}.asg-row small{display:block;font-size:11.5px;color:#51648a}.asg-row small.o{color:#b45309;font-weight:700}'
+  +'.asg-foot{padding:10px 12px calc(10px + env(safe-area-inset-bottom,0px));background:#fff;border-top:1px solid #d5e2f5}.asg-msg{font-size:12.5px;min-height:16px;margin-bottom:6px;color:#51648a}.asg-msg.bad{color:#c0392b}'
+  +'.asg-save{width:100%;border:0;border-radius:12px;padding:12px;background:linear-gradient(135deg,#0a49b5,#1a8ae8);color:#fff;font-size:15px;font-weight:800}.asg-save:disabled{opacity:.5}'
+  +'.asg-fld{margin:6px 0}.asg-pick{width:100%;border:1px dashed #1a6fd0;background:#f1f7ff;color:#0a3a9a;border-radius:10px;padding:10px;font-size:14px;font-weight:700}.asg-sum{font-size:12.5px;color:#51648a;margin-top:5px}';
+  document.head.appendChild(css);
+  function mk(t,c,x){var e=document.createElement(t);if(c)e.className=c;if(x!=null)e.textContent=x;return e}
+  function master(){var m=jget('rdl.master.v1'),d={};
+    function add(dp,cu,nm){dp=String(dp||'').trim();cu=String(cu==null?'':cu).trim();if(!dp||!cu)return;var o=d[dp]||(d[dp]=new Map());if(!o.has(cu)||(!o.get(cu)&&nm))o.set(cu,nm||'')}
+    if(m){(m.out||[]).forEach(function(r){add(r.dp,r.cu,r.nm)});(m.cr||[]).forEach(function(r){add(r.dp,r.bp,r.nm)})}
+    return d}
+  function describe(a){a=a||{};return Object.keys(a).map(function(d){var r=a[d];return d+' ('+(r==='*'?'whole depot':r.length+' customer'+(r.length===1?'':'s'))+')'}).join(' \u2022 ')}
+  function open(o){
+    var old=document.getElementById('asg-ov');if(old)old.remove();
+    var cm=master(),depots=Object.keys(cm).sort();
+    var ov=mk('div','asg-ov');ov.id='asg-ov';
+    var top=mk('div','asg-top');top.appendChild(mk('b',null,o.title||'Depots & customers'));var x=mk('button',null,'\u2715');x.type='button';x.onclick=function(){ov.remove()};top.appendChild(x);ov.appendChild(top);
+    var body=mk('div','asg-body');ov.appendChild(body);
+    var foot=mk('div','asg-foot'),msg=mk('div','asg-msg'),sv=mk('button','asg-save','Save');sv.type='button';foot.appendChild(msg);foot.appendChild(sv);ov.appendChild(foot);document.body.appendChild(ov);
+    if(!depots.length){body.appendChild(mk('p','asg-hint','No depot data in this app yet. Upload the Outstanding and Credit Limit files (with the Depot Name column) first.'));sv.disabled=true;return}
+    var cur=o.assign||{},st={},oth={};
+    depots.forEach(function(d){var a=cur[d];st[d]=a==='*'?{m:'all',s:new Set()}:Array.isArray(a)?{m:'sel',s:new Set(a.map(String))}:{m:'none',s:new Set()};oth[d]={all:[],by:{}}});
+    body.appendChild(mk('p','asg-hint','Loading\u2026'));
+    var ready=o.users?o.users().catch(function(){return[]}):Promise.resolve([]);
+    ready.then(function(us){
+      (us||[]).forEach(function(u){if(u.role==='admin'||String(u.email).toLowerCase()===String(o.email||'').toLowerCase())return;
+        var nm=u.name||u.email,a=u.assign||{};
+        Object.keys(a).forEach(function(d){if(!oth[d])return;if(a[d]==='*')oth[d].all.push(nm);else a[d].forEach(function(c){(oth[d].by[c]||(oth[d].by[c]=[])).push(nm)})})});
+      body.textContent='';
+      body.appendChild(mk('p','asg-hint','For each depot choose: none, the whole depot, or only selected customers. A customer already given to another user is marked in orange, so you can see who is still left.'));
+      depots.forEach(function(d){var card=mk('div','asg-card');body.appendChild(card);paint(d,card)})});
+    function remaining(d){var r=[];if(oth[d].all.length)return r;cm[d].forEach(function(n,c){if(!oth[d].by[c])r.push(c)});return r}
+    function paint(d,card){
+      card.textContent='';var s=st[d],tot=cm[d].size;
+      card.appendChild(mk('h4',null,d));
+      card.appendChild(mk('div','asg-cnt',s.m==='all'?'Whole depot \u2022 '+tot+' customers':s.m==='sel'?s.s.size+' of '+tot+' customers selected':'Not given \u2022 '+tot+' customers in this depot'));
+      var md=mk('div','asg-modes');[['none','None'],['all','Whole depot'],['sel','Selected customers']].forEach(function(p){var b=mk('button',s.m===p[0]?'on':'',p[1]);b.type='button';b.onclick=function(){s.m=p[0];paint(d,card)};md.appendChild(b)});card.appendChild(md);
+      if(oth[d].all.length)card.appendChild(mk('div','asg-warn','Whole depot is also given to: '+oth[d].all.join(', ')));
+      if(s.m!=='sel')return;
+      var q=mk('input','asg-q');q.type='search';q.placeholder='Search customer name or code';card.appendChild(q);
+      var tl=mk('div','asg-tools');function tb(t,fn){var b=mk('button',null,t);b.type='button';b.onclick=fn;tl.appendChild(b)}
+      var list=mk('div','asg-list'),cnt=mk('div','asg-cnt');
+      function upd(){cnt.textContent=s.s.size+' of '+tot+' selected'}
+      tb('Select all remaining',function(){remaining(d).forEach(function(c){s.s.add(c)});draw()});
+      tb('Select all',function(){cm[d].forEach(function(n,c){s.s.add(c)});draw()});
+      tb('Clear',function(){s.s.clear();draw()});
+      card.appendChild(tl);card.appendChild(cnt);card.appendChild(list);
+      function draw(){list.textContent='';var k=q.value.trim().toLowerCase(),rows=[];
+        cm[d].forEach(function(n,c){if(!k||c.toLowerCase().indexOf(k)>=0||(n||'').toLowerCase().indexOf(k)>=0)rows.push([c,n||('Customer '+c)])});
+        rows.sort(function(a,b){return a[1].localeCompare(b[1])});
+        rows.slice(0,300).forEach(function(r){var c=r[0],row=mk('label','asg-row'),cb=mk('input');cb.type='checkbox';cb.checked=s.s.has(c);
+          cb.onchange=function(){if(cb.checked)s.s.add(c);else s.s.delete(c);upd()};row.appendChild(cb);
+          var t=mk('div');t.appendChild(mk('b',null,r[1]));t.appendChild(mk('small',null,'Code: '+c));
+          var ot=(oth[d].by[c]||[]);if(ot.length)t.appendChild(mk('small','o','Also given to: '+ot.join(', ')));
+          row.appendChild(t);list.appendChild(row)});
+        if(rows.length>300)list.appendChild(mk('div','asg-hint','Showing the first 300 of '+rows.length+'. Use the search to narrow down.'));
+        if(!rows.length)list.appendChild(mk('div','asg-hint','No customer matches.'));upd()}
+      q.oninput=draw;draw()}
+    sv.onclick=function(){
+      var a={};depots.forEach(function(d){var s=st[d];if(s.m==='all')a[d]='*';else if(s.m==='sel'&&s.s.size)a[d]=Array.from(s.s)});
+      if(!Object.keys(a).length){msg.textContent='Choose at least one depot or one customer.';msg.className='asg-msg bad';return}
+      msg.textContent='Saving\u2026';msg.className='asg-msg';sv.disabled=true;
+      Promise.resolve(o.save(a)).then(function(){ov.remove()}).catch(function(e){sv.disabled=false;msg.textContent=String(e&&e.message||e).replace(/^Error:\s*/,'').replace(/^ACCESS_DENIED:\s*/,'');msg.className='asg-msg bad'})}}
+  function field(holder,o){var cur=null,box=mk('div','asg-fld'),sm=mk('div','asg-sum','No depot chosen yet'),b=mk('button','asg-pick','Choose depots & customers');b.type='button';
+    b.onclick=function(){open({title:'Depots & customers',assign:cur||{},email:(o.email&&o.email())||'',users:o.users,save:function(a){cur=a;sm.textContent=describe(a);return Promise.resolve()}})};
+    box.appendChild(b);box.appendChild(sm);holder.appendChild(box);
+    return{get:function(){return cur},clear:function(){cur=null;sm.textContent='No depot chosen yet'}}}
+  return{open:open,field:field,describe:describe}})();
 function fmtT(t){try{var d=new Date(t);return d.toLocaleDateString()+' '+('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2)}catch(e){return t}}
 function openUsers(){
   var old=document.getElementById('rgx-users');if(old)old.remove();
@@ -1709,8 +1835,8 @@ function openUsers(){
   var body=h('div','rgx-ub');o.appendChild(body);document.body.appendChild(o);
   var add=h('div','rgx-ucard');add.appendChild(h('b',null,'Add a user'));
   function fld(ph,id,type){var i=h('input','rgx-fi');i.placeholder=ph;i.id=id;i.type=type||'text';i.autocomplete='off';add.appendChild(i);return i}
-  var fe=fld('Gmail address','rgx-fe','email'),fn=fld('Name','rgx-fn'),fd=fld('Depot (exactly as in the Excel)','rgx-fd');
-  var dl=h('datalist');dl.id='rgx-dl';depotNames().forEach(function(n){var op=h('option');op.value=n;dl.appendChild(op)});fd.setAttribute('list','rgx-dl');add.appendChild(dl);
+  var fe=fld('Gmail address','rgx-fe','email'),fn=fld('Name','rgx-fn');
+  var asgF=RDLAssign.field(add,{users:function(){return api('listUsers').then(function(j){return j.users})},email:function(){return fe.value}});
   var am=h('div','rgx-msg');var ab=h('button','rgx-go','Add user');ab.type='button';add.appendChild(ab);add.appendChild(am);body.appendChild(add);
   var list=h('div');body.appendChild(list);
   var lb=h('button','rgx-go alt','Show activity log');lb.type='button';body.appendChild(lb);var lg=h('div');body.appendChild(lg);
@@ -1721,21 +1847,23 @@ function openUsers(){
         var r=h('div','rgx-ucard'+(u.active?'':' off'));
         r.appendChild(h('div','rgx-un',(u.name||u.email)+(u.role==='admin'?'  (Admin)':'')));
         r.appendChild(h('div','rgx-us',u.email));
-        r.appendChild(h('div','rgx-us',(u.depot||'all depots')+' • '+(u.active?'Active':'Turned off')));
+        {var lbT=u.lastBackup?new Date(u.lastBackup):null,mins=lbT?Math.max(0,Math.round((Date.now()-lbT)/60000)):null,
+          ago=mins===null?'no backup yet':mins<2?'just now':mins<60?mins+' min ago':mins<1440?Math.round(mins/60)+' h ago':Math.round(mins/1440)+' day'+(Math.round(mins/1440)===1?'':'s')+' ago',
+          lbd=h('div','rgx-us','Last backup: '+ago);if(u.active&&(mins===null||mins>1440)){lbd.style.color='#d90000';lbd.style.fontWeight='800'}r.appendChild(lbd)}
+        r.appendChild(h('div','rgx-us',(RDLAssign.describe(u.assign)||u.depot||'all depots')+' • '+(u.active?'Active':'Turned off')));
         if(u.role==='user'&&u.depot&&!u.depotKnown)r.appendChild(h('div','rgx-warn','⚠ No data published under this depot name. Check the spelling.'));
         if(u.role==='user'){
           var bt=h('button','rgx-sm',u.active?'Turn off':'Turn on');bt.type='button';
           bt.onclick=function(){if(u.active&&!confirm('Turn off '+u.email+'? They lose access the next time they open the app.'))return;
             bt.disabled=true;api('saveUser',{email:u.email,active:!u.active}).then(load).catch(function(e){bt.disabled=false;alert(msgOf(e))})};
-          var be=h('button','rgx-sm alt','Change depot');be.type='button';
-          be.onclick=function(){var d=prompt('Depot for '+u.email,u.depot||'');if(d==null||!d.trim())return;
-            api('saveUser',{email:u.email,depot:d.trim()}).then(load).catch(function(e){alert(msgOf(e))})};
+          var be=h('button','rgx-sm alt','Depots & customers');be.type='button';
+          be.onclick=function(){RDLAssign.open({title:(u.name||u.email),assign:u.assign,email:u.email,users:function(){return Promise.resolve(j.users)},save:function(a){return api('saveUser',{email:u.email,assign:a}).then(load)}})};
           r.appendChild(bt);r.appendChild(be)}
         list.appendChild(r)})})
     .catch(function(e){list.textContent='';var m=h('div','rgx-msg bad',msgOf(e));list.appendChild(m)})}
   ab.onclick=function(){
     am.textContent='';ab.disabled=true;
-    api('saveUser',{email:fe.value,name:fn.value,depot:fd.value,active:true}).then(function(j){ab.disabled=false;am.textContent=j.created?'User added.':'User updated.';am.className='rgx-msg';fe.value='';fn.value='';fd.value='';load()})
+    api('saveUser',{email:fe.value,name:fn.value,assign:asgF.get()||undefined,active:true}).then(function(j){ab.disabled=false;am.textContent=j.created?'User added.':'User updated.';am.className='rgx-msg';fe.value='';fn.value='';asgF.clear();load()})
     .catch(function(e){ab.disabled=false;fail(am,e)})};
   lb.onclick=function(){lg.textContent='Loading…';
     api('listLog').then(function(j){lg.textContent='';
@@ -2177,6 +2305,7 @@ function cuDn(){const raw=localStorage.getItem('rdl.master.v1')||'';if(_dn&&_dr=
 const cuIn=cu=>{const s=dSel();return !s||cuMap().get(String(cu))===dKey(s)};
 const ledFl=L=>{if(!L||!dSel())return L;return Object.assign({},L,{rv:(L.rv||[]).filter(x=>cuIn(x.cu)),dz:(L.dz||[]).filter(x=>cuIn(x.cu))})};
 window.RDLDEPOT={admin:dAdmin,sel:dSel,key:dKey,cuIn,fl:ledFl,nameOf:cu=>cuDn().get(String(cu))||'',
+  td:cu=>{const t=document.createElement('td');t.className='c-dp';const s=document.createElement('span');s.className='chip-g cn';s.textContent=cuDn().get(String(cu))||'\u2014';t.appendChild(s);return t},
   names:()=>{const m=store.get('m'),o={};if(m)(m.out||[]).concat(m.cr||[]).forEach(r=>{if(r.dp)o[r.dp]=1});return Object.keys(o).sort()},
   set:v=>{try{v?localStorage.setItem(DSK,v):localStorage.removeItem(DSK)}catch(e){}location.reload()}};
 document.addEventListener('click',e=>{const t=e.target&&e.target.closest&&e.target.closest('#depotLine');if(!t||!dAdmin())return;
@@ -2392,21 +2521,32 @@ function items(){
   return m.out.filter(b=>b.due&&b.due>=t&&b.due<=tm&&bal(b)>0&&(b.due===t?pf.nToday!==false:pf.nTomorrow!==false))
     .sort((x,y)=>x.due<y.due?-1:x.due>y.due?1:(x.nm||'').localeCompare(y.nm||''));
 }
+/* missed-backup alerts (admin only; filled by the sign-in code) */
+const bkAl=()=>{try{return JSON.parse(localStorage.getItem('rdlgate.alerts'))||[]}catch(e){return[]}},bkId=a=>'bk|'+a.id;
+window.addEventListener('rdl:alerts',()=>{try{build()}catch(e){}});
 function build(){
-  const S=ld(),live=new Set(items().map(uid));
+  const S=ld(),live=new Set(items().map(uid).concat(bkAl().map(bkId)));
   Object.keys(S.read).forEach(k=>{if(!live.has(k))delete S.read[k]});   /* forget bills that left the today/tomorrow window */
   sv(S);render(S);
 }
 function render(S){
-  const rows=items(),unread=rows.filter(b=>!S.read[uid(b)]).length,m=window.RDL&&window.RDL.master;
+  const rows=items(),al=bkAl(),unread=rows.filter(b=>!S.read[uid(b)]).length+al.filter(a=>!S.read[bkId(a)]).length,m=window.RDL&&window.RDL.master;
   const bd=document.querySelector('.hdr .badge');
   if(bd){bd.textContent=unread>99?'99+':unread;bd.style.display=unread?'':'none'}
   const L=$('#nList');L.textContent='';
-  if(!rows.length){L.appendChild(el('div','nempty',(()=>{try{if((JSON.parse(localStorage.getItem('rdl.prefs.v1'))||{}).notif===false)return'Notifications are turned off in Settings.'}catch(e){}return m?'No bills are due today or tomorrow.':'Upload the database from Settings to get notifications.'})()));return}
+  if(!rows.length&&!al.length){L.appendChild(el('div','nempty',(()=>{try{if((JSON.parse(localStorage.getItem('rdl.prefs.v1'))||{}).notif===false)return'Notifications are turned off in Settings.'}catch(e){}return m?'No bills are due today or tomorrow.':'Upload the database from Settings to get notifications.'})()));return}
+  al.forEach(a=>{const r=!!S.read[bkId(a)],c=el('div','nit'+(r?'':' unread')),body=el('div','nb');
+    c.appendChild(el('div','nd'));
+    {const d=el('span',null,a.depot||'');d.style.cssText='font-weight:800;font-size:12px;color:#0f766e';if(a.depot)body.appendChild(d)}
+    body.appendChild(el('b',null,a.name||a.email));
+    body.appendChild(el('span',null,'Backup did not arrive • '+dd(a.day)));
+    body.appendChild(el('span','chip r','Backup missing'));
+    c.appendChild(body);c.onclick=()=>{S.read[bkId(a)]=1;sv(S);render(S)};L.appendChild(c)});
   rows.forEach(b=>{
     const s=status(b.due),r=!!S.read[uid(b)],c=el('div','nit'+(r?'':' unread'));
     c.appendChild(el('div','nd'));
     const body=el('div','nb');
+    {const dp=RDLDEPOT.nameOf(b.cu);if(dp){const d=el('span',null,dp);d.style.cssText='font-weight:800;font-size:12px;color:#0f766e';body.appendChild(d)}}
     body.appendChild(el('b',null,b.nm||('Customer '+b.cu)));
     body.appendChild(el('span',null,`Bill ${b.bill} • ${__m(bal(b))}`));
     body.appendChild(el('span','chip '+s.c,`${s.t} • ${dd(b.due)}`));
@@ -2420,10 +2560,11 @@ function openBill(id,back){
   from=back;const s=status(b.due);
   const co=window.RDL.coName(b.co);
   const B=$('#billBody');B.textContent='';
-  const top=el('div','bt');top.appendChild(el('small',null,b.nm||('Customer '+b.cu)));
+  const top=el('div','bt');{const dp=RDLDEPOT.nameOf(b.cu);if(dp){const d=el('small',null,dp);d.style.cssText='font-weight:800;letter-spacing:.2px;opacity:1';top.appendChild(d)}}
+  top.appendChild(el('small',null,b.nm||('Customer '+b.cu)));
   top.appendChild(el('b',null,__m(b.amt)));top.appendChild(el('span','chip '+s.c,s.t));B.appendChild(top);
   top.style.cursor='pointer';top.onclick=()=>window.RDL.openBillInTotal(b,()=>openBill(id,back));
-  [['Customer code',b.cu],['Company',co],['Billing document',b.bill],['Document type',b.doc],
+  [['Depot Name',RDLDEPOT.nameOf(b.cu)],['Customer code',b.cu],['Company',co],['Billing document',b.bill],['Document type',b.doc],
    ['Posting date',dd(b.post)],['Due date',dd(b.due)],['Days limit',b.days!=null?b.days+' Days':'-']].forEach(([k,v])=>{
     const r=el('div','br');r.appendChild(el('span',null,k));r.appendChild(el('b',null,v==null||v===''?'-':String(v)));B.appendChild(r)});
   show('bill');
@@ -2507,6 +2648,7 @@ const $=s=>document.querySelector(s),pad=n=>String(n).padStart(2,'0'),fmt=n=>(+n
 const el=(t,c,x)=>{const e=document.createElement(t);if(c)e.className=c;if(x!=null)e.textContent=x;return e};
 const today=()=>{const d=new Date();return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())};
 const balance=b=>Math.max(0,(+b.amt||0)-(+b.collected||0)-(+b.tds||0));
+{const dst=document.createElement('style');dst.textContent='#cudet .cs-dpt td.c-dp{position:sticky;left:0;z-index:2;background:#fff;white-space:normal;border-left:1px solid #e6eef9;min-width:96px;max-width:96px;width:96px;box-shadow:4px 0 6px -4px #0a3a9a30;vertical-align:middle}#cudet .cs-dpt tbody tr:nth-child(even) td.c-dp{background:#f4f8ff}#cudet .cs-dpt td.c-dp .chip-g{font-size:12px;word-break:break-word}html body #cudet .cs-dpt th:first-child{position:sticky;left:0;z-index:4;min-width:96px!important;max-width:96px!important;width:96px}html body #cudet .cs-dpt td.c-n2{left:96px!important}html body #cudet .cs-dpt thead th:nth-child(2){position:sticky;left:96px;z-index:3}html body #cudet .cs-dpt tr.cs-tot>td.c-dp{background:#0b2a8a!important}.cu-dp{font-size:12px;font-weight:800;color:#0f766e;margin-bottom:1px;letter-spacing:.2px}.cu-dpf{display:flex;gap:6px;overflow-x:auto;margin:6px 0 4px;padding-bottom:2px}.cu-dpf button{flex:none;white-space:nowrap;border:1px solid #cfe0f6;background:#fff;border-radius:999px;padding:5px 11px;font-size:12px;font-weight:700;color:#1b3b78}.cu-dpf button.on{background:linear-gradient(135deg,#0a49b5,#1a8ae8);color:#fff;border-color:transparent}';document.head.appendChild(dst)}
 const letterOf=n=>{const c=(n||'').trim().charAt(0).toUpperCase();return /[A-Z]/.test(c)?c:'#'};
 function customers(){
   const m=window.RDL&&window.RDL.master;if(!m)return null;
@@ -2514,7 +2656,7 @@ function customers(){
   const get=(code,nm)=>{code=String(code);let c=map.get(code);if(!c){c={code,name:'',cos:new Set(),bills:0,out:0,od:0,odBills:0};map.set(code,c)}if(nm&&!c.name)c.name=nm;return c};
   m.cr.forEach(r=>{const c=get(r.bp,r.nm);c.cos.add(String(r.co))});
   m.out.forEach(b=>{const c=get(b.cu,b.nm);c.cos.add(String(b.co));const v=balance(b);if(v<=0)return;c.bills++;c.out+=v;if(b.due&&b.due<t){c.od+=v;c.odBills++}});
-  const list=[...map.values()].map(c=>({...c,name:c.name||('Customer '+c.code)}));
+  const list=[...map.values()].map(c=>({...c,name:c.name||('Customer '+c.code),dp:RDLDEPOT.nameOf(c.code)||''}));
   const key=c=>{const L=letterOf(c.name);return(L==='#'?'~':'')+c.name.toLowerCase()};
   list.sort((a,b)=>key(a)<key(b)?-1:key(a)>key(b)?1:0);
   return list;
@@ -2524,7 +2666,7 @@ const compact=x=>x.toLowerCase().replace(/[^a-z0-9]/g,'');
 const words=x=>x.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
 function strict(c,k){
   if(!k)return true;const nm=c.name.toLowerCase();
-  if(nm.includes(k)||c.code.includes(k))return true;
+  if(nm.includes(k)||c.code.includes(k)||(c.dp||'').toLowerCase().includes(k))return true;
   const ck=compact(k);if(ck&&compact(c.name).includes(ck))return true;
   const t=words(k);return t.length>1&&t.every(w=>nm.includes(w)||c.code.includes(w));
 }
@@ -2570,25 +2712,25 @@ async function startVoice(ui){
   try{listening=true;ui.on(true);ui.live('Listening… say the customer name');rec.start()}catch(e){listening=false;ui.on(false);ui.err('Couldn’t start voice search.')}
 }
 const hue=L=>Math.round((L.charCodeAt(0)*47)%360);
-let selLetter='',keep=false;   /* chosen A-Z letter; kept while you come back from a customer / overdue page */
+let selLetter='',selDp=[],keep=false;   /* chosen A-Z letter; kept while you come back from a customer / overdue page */
 const CBK='<svg class="bk-ar" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 12h-15M10.5 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="4.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 const showPg=id=>{document.querySelectorAll('.pg').forEach(x=>x.classList.remove('on'));document.querySelectorAll('.nav button').forEach(x=>x.classList.remove('on'));$('#'+id).classList.add('on');window.scrollTo(0,0)};
 const backToList=()=>{keep=true;$('.nav button[data-p="customer"]').click()};
 const detPage=(()=>{const p=el('div','pg st');p.id='cudet';$('.app').appendChild(p);return p})();
 function openDetail(c){
   const P=detPage;P.textContent='';const top=el('div','st-top'),bk=el('button');bk.type='button';bk.innerHTML=CBK;bk.setAttribute('aria-label','Back');bk.onclick=backToList;top.appendChild(bk);top.appendChild(el('h2',null,c.name));P.appendChild(top);
-  P.appendChild(el('p','page-note','Code: '+c.code+' • Credit Limit database'));
+  P.appendChild(el('p','page-note','Code: '+c.code+(c.dp?' • '+c.dp:'')+' • Credit Limit database'));
   const m=window.RDL.master,lines=m?m.cr.filter(r=>String(r.bp)===c.code):[];
   if(!lines.length){P.appendChild(el('div','cu-empty','No credit limit data for this customer.'));showPg('cudet');return}
   const on=lines.filter(r=>!r.off),tl=on.reduce((s,r)=>s+(+r.lim||0),0),te=on.reduce((s,r)=>s+(+r.exp||0),0),g=el('div','od-summary three');   /* lines switched off are not in the totals */
   [['Total Credit Limit',__m(tl)],['Total Exposure',__m(te)],['Utilization',(tl?Math.round(te/tl*1000)/10:0)+'%']].forEach(([l,v])=>{const d=el('div');d.appendChild(el('small',null,l));d.appendChild(el('strong',null,v));g.appendChild(d)});P.appendChild(g);
-  const wrap=el('div','od-table-wrap'),tb=el('table','od-table');tb.style.minWidth='820px';
-  const th=el('thead'),hr=el('tr');['Company','Credit Limit','Credit Exposure','Exposure Amount','Utilization','Days Limit','Arrears by Net Due Date'].forEach(h=>hr.appendChild(el('th',null,h)));th.appendChild(hr);tb.appendChild(th);
+  const wrap=el('div','od-table-wrap'),tb=el('table','od-table');tb.style.minWidth='916px';tb.classList.add('cs-dpt');
+  const th=el('thead'),hr=el('tr');['Depot Name','Company','Credit Limit','Credit Exposure','Exposure Amount','Utilization','Days Limit','Arrears by Net Due Date'].forEach(h=>hr.appendChild(el('th',null,h)));th.appendChild(hr);tb.appendChild(th);
   const body=el('tbody');tb.appendChild(body);
   const pad2=n=>String(n).padStart(2,'0'),T0=(()=>{const d=new Date();return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate())})();
   const dif=(a,b)=>Math.round((new Date(a+'T00:00:00')-new Date(b+'T00:00:00'))/864e5);
   const dayStyle=d=>{const k=Math.min(1,Math.max(0,(7-d)/8.4)),h=Math.round(48*(1-k));return `background:linear-gradient(135deg,hsl(${h},100%,82%),hsl(${h},100%,68%));color:hsl(${h},100%,11%);font-weight:800;border:1px solid hsl(${h},95%,50%)`};
-  lines.slice().sort((x,y)=>window.RDL.coCmp(x.co,y.co)).forEach(r=>{const tr=el('tr','row-ok');if(r.off)tr.style.opacity='.45';const n=el('td','c-name'),nc=el('div','chip-g cn',window.RDL.coName(r.co));n.appendChild(nc);tr.appendChild(n);
+  lines.slice().sort((x,y)=>window.RDL.coCmp(x.co,y.co)).forEach(r=>{const tr=el('tr','row-ok');if(r.off)tr.style.opacity='.45';const n=el('td','c-name'),nc=el('div','chip-g cn',window.RDL.coName(r.co));n.appendChild(nc);{const d=el('td','c-dp');d.appendChild(el('span','chip-g cn',c.dp||'\u2014'));tr.appendChild(d);n.classList.add('c-n2')}tr.appendChild(n);
     const cell=(v,cls,chip,st)=>{const td=el('td',cls),sp=el('span','chip-g '+(chip||''),v);if(st)sp.style.cssText=st;td.appendChild(sp);tr.appendChild(td)};
     cell(__m(r.lim),'num','cn2');cell(__m(r.exp),'num','cn2');cell(__m(r.ex),'num','cn2 cb');cell((r.util!=null?r.util:0)+'%','c-arr',r.util>100?'st-late':'cl');
     const dn=parseInt(r.dl);cell(isNaN(dn)?(r.dl||'—'):dn+' Days','c-lim','cl');
@@ -2605,9 +2747,11 @@ function render(){
   head.appendChild(h);const cnt=el('span','cu-count',all?all.length+' customers':'0');head.appendChild(cnt);P.appendChild(head);
   if(!all){P.appendChild(el('div','cu-empty','Upload the database from Settings to see customers.'));return}
   const box=el('div','cu-sbox'),q=el('input','cu-search'),mic=el('button','cu-mic'),clr=el('button','cu-x','×'),hint=el('div','cu-hint');
-  q.placeholder='Search or speak a customer name';mic.type='button';clr.type='button';clr.style.display='none';mic.setAttribute('aria-label','Voice search');clr.setAttribute('aria-label','Clear');
+  q.placeholder='Search or speak a customer name or depot';mic.type='button';clr.type='button';clr.style.display='none';mic.setAttribute('aria-label','Voice search');clr.setAttribute('aria-label','Clear');
   mic.innerHTML='<svg viewBox="0 0 24 24"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2z"/></svg>';
   box.appendChild(q);box.appendChild(clr);box.appendChild(mic);P.appendChild(box);P.appendChild(hint);
+   const dpf=el('div','cu-dpf'),DPN=RDLDEPOT.sel()?[]:RDLDEPOT.names();if(DPN.length>1)P.appendChild(dpf);
+   function drawDp(){dpf.textContent='';const a=el('button',selDp.length?'':'on','All Depots');a.type='button';a.onclick=()=>{selDp=[];drawDp();draw()};dpf.appendChild(a);DPN.forEach(n=>{const on=selDp.includes(n),b=el('button',on?'on':'',n);b.type='button';b.onclick=()=>{selDp=on?selDp.filter(z=>z!==n):selDp.concat(n);drawDp();draw()};dpf.appendChild(b)})}
   let note='',spoken=false;
   const az=el('div','cu-az'),L=el('div','cu-list');P.appendChild(az);P.appendChild(L);
   const present=new Set(all.map(c=>letterOf(c.name))),LET='ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');if(present.has('#'))LET.push('#');
@@ -2618,15 +2762,16 @@ function render(){
     const k=q.value.trim().toLowerCase();let rows=all.filter(c=>strict(c,k)),close=false;
     if(k&&!rows.length){const f=fuzzy(all,k);if(f.length){const set=new Set(f);rows=all.filter(c=>set.has(c));close=true}}
     if(selLetter)rows=rows.filter(c=>letterOf(c.name)===selLetter);
+     if(selDp.length)rows=rows.filter(c=>selDp.some(n=>RDLDEPOT.key(n)===RDLDEPOT.key(c.dp)));
     clr.style.display=q.value?'':'none';
     if(!listening&&!hint.classList.contains('err')){hint.className='cu-hint';hint.textContent=close?'Showing closest matches for “'+q.value.trim()+'”':(spoken&&k?'Heard: “'+q.value.trim()+'”':'')}
-    cnt.textContent=((k||selLetter)?rows.length+' of ':'')+all.length+' customers';L.textContent='';
+    cnt.textContent=((k||selLetter||selDp.length)?rows.length+' of ':'')+all.length+' customers';L.textContent='';
     if(!rows.length){L.appendChild(el('div','cu-empty','No customers match.'));return rows}
     let cur='';
     rows.forEach(c=>{
       const ch=letterOf(c.name);
       const card=el('div','cu-card'),row=el('div','cu-row');card.onclick=()=>openDetail(c);
-      const main=el('div','cu-main');main.appendChild(el('div','cu-name',c.name));
+      const main=el('div','cu-main');if(c.dp)main.appendChild(el('div','cu-dp',c.dp));main.appendChild(el('div','cu-name',c.name));
       main.appendChild(el('div','cu-sub','Code: '+c.code+' • '+c.cos.size+(c.cos.size===1?' company':' companies')));
       const amt=el('div','cu-amt');amt.appendChild(el('small',null,'Outstanding'));amt.appendChild(el('b',null,__m(c.out)));
       row.appendChild(main);row.appendChild(amt);card.appendChild(row);
@@ -2649,11 +2794,11 @@ function render(){
       const card=rows.length?L.querySelector('.cu-card'):null;if(card&&rows.length<=2){card.scrollIntoView({block:'center'});card.classList.add('cu-flash')}}
   };
   mic.onclick=()=>{hint.className='cu-hint';hint.textContent='';startVoice(ui)};
-  drawAz();draw();
+  drawAz();drawDp();draw();
 }
 window.RDL.openCustomer=code=>{const c=customers().find(x=>x.code===String(code));if(c)openDetail(c)};
 const tab=$('.nav button[data-p="customer"]');
-if(tab)tab.addEventListener('click',()=>{if(!keep)selLetter='';keep=false;render();window.scrollTo(0,0)});
+if(tab)tab.addEventListener('click',()=>{if(!keep){selLetter='';selDp=[]}keep=false;render();window.scrollTo(0,0)});
 render();
 })();
 </script>
@@ -2689,7 +2834,8 @@ const norm=x=>String(x||'').toLowerCase().replace(/\s+/g,' ').trim();
 function lines(date,kind){const m=R.master,d=R.dcr;if(!m||!d)return[];const nm=new Map(),cm=new Map(),L=ld(),ps=kind==='o'?'ps':'pc';
   m.cr.forEach(r=>{nm.set(norm(r.nm),r.bp);cm.set(String(r.cn).toLowerCase(),r.co)});
   m.out.forEach(b=>{const k=norm(b.nm);if(k&&!nm.has(k))nm.set(k,b.cu)});
-  const o=[];d.rows.filter(r=>r.d===date).forEach(r=>Object.entries(r[kind]).forEach(([lb,amt])=>{const bp=nm.get(norm(r.n)),co=cm.get(lb.toLowerCase()),cr=bp&&co&&m.cr.find(x=>x.bp==bp&&x.co==co),key=kind+'|'+date+'|'+norm(r.n)+'|'+lb.toLowerCase();
+  const oth=new Set();if(window.RDLDEPOT&&RDLDEPOT.sel()){try{const fm=JSON.parse(localStorage.getItem('rdl.master.v1')||'null')||{},sk=RDLDEPOT.key(RDLDEPOT.sel());(fm.cr||[]).concat(fm.out||[]).forEach(r=>{if(r.dp&&RDLDEPOT.key(r.dp)!==sk)oth.add(norm(r.nm))})}catch(e){}}
+  const o=[];d.rows.filter(r=>r.d===date&&!oth.has(norm(r.n))).forEach(r=>Object.entries(r[kind]).forEach(([lb,amt])=>{const bp=nm.get(norm(r.n)),co=cm.get(lb.toLowerCase()),cr=bp&&co&&m.cr.find(x=>x.bp==bp&&x.co==co),key=kind+'|'+date+'|'+norm(r.n)+'|'+lb.toLowerCase();
     o.push({n:r.n,lb,amt,bp,co,key,rm:!!(L.px&&L.px[key]),done:!!(L.pl[key]||L[ps][date]||(L.px&&L.px[key])),days:cr?parseInt(cr.dl)||null:null,ok:!!(bp&&co),kd:kind})}));return o}
 /* the Daily Collection & Order data is only valid on the day it was uploaded: after midnight nothing is left to post */
 const dcrExpired=()=>{const d=R.dcr;if(!d||!d.at)return false;return ymd(new Date(d.at))<today()};
@@ -2944,10 +3090,10 @@ function manualPage(P,ttl,bk){
     /* 4) Post / Cancel buttons come right below, then the Collection table */
     const tc=el('div','st-card cx-fill');
     tc.appendChild(el('label','od-label','Collection • '+nb+' DZ collection'+(nb===1?'':'s')+' • '+money(gc)+(gt?' • TDS '+money(gt):'')));
-    const wrap=el('div','od-table-wrap'),tb=el('table','od-table');tb.style.minWidth='980px';
-    const th=el('thead'),hr=el('tr');['Customer Name','Company','Against Bill','Payment Type','Cheque / BEFTN No.','Cheque / BEFTN Date','Collected','TDS','Total'].forEach(x=>hr.appendChild(el('th',null,x)));th.appendChild(hr);tb.appendChild(th);
+    const wrap=el('div','od-table-wrap'),tb=el('table','od-table');tb.style.minWidth='1076px';
+    const th=el('thead'),hr=el('tr');['Depot Name','Customer Name','Company','Against Bill','Payment Type','Cheque / BEFTN No.','Cheque / BEFTN Date','Collected','TDS','Total'].forEach(x=>hr.appendChild(el('th',null,x)));th.appendChild(hr);tb.appendChild(th);
     const tbd=el('tbody');tb.appendChild(tbd);
-    groups.forEach(g=>g.ps.forEach(x=>{const r=el('tr','row-ok'),n=el('td','c-name'),nc=el('div','chip-g cn',names.get(String(bp)));nc.appendChild(el('small',null,'Code: '+bp));n.appendChild(nc);r.appendChild(n);
+    groups.forEach(g=>g.ps.forEach(x=>{const r=el('tr','row-ok');r.appendChild(RDLDEPOT.td(bp));const n=el('td','c-name'),nc=el('div','chip-g cn',names.get(String(bp)));nc.appendChild(el('small',null,'Code: '+bp));n.appendChild(nc);r.appendChild(n);
       const cell=(v,cls,chip)=>{const td=el('td',cls),sp=el('span','chip-g '+(chip||''),v);td.appendChild(sp);r.appendChild(td)};
       cell(R.coName(x.b.co),'c-co','cc');cell(String(x.b.bill),'c-dt','cd');cell(g.o.ty.value,'c-lim','cl');cell(g.o.rf.value.trim()||'—','c-lim','cl');cell(g.o.rd.value?dmy(g.o.rd.value):'—','c-dt','cd');
       cell(money(x.c),'num','cn2');cell(money(x.t),'num','cn2');cell(money(x.c+x.t),'num','cn2 cb');tbd.appendChild(r)}));
@@ -3356,10 +3502,10 @@ function review(w,P,L,ttl,bk){const dates=[...sel[w]].sort(),secs=[],t0=today(),
         ['Cash','Cheque','BEFTN'].forEach(k=>{const z=c.filter(e=>String(e.ty||'').toLowerCase()===k.toLowerCase());if(!z.length)return;const ch=el('span',null,k+' '+z.length+' • '+money(z.reduce((x,e)=>x+e.c,0)));ch.style.cssText='font-size:12px;font-weight:700;padding:3px 9px;border-radius:999px;background:#fff;border:1px solid #cfe0f7;color:#12306b';mix.appendChild(ch)});blk.appendChild(mix)}
       head.appendChild(blk)});
     pv.appendChild(head);
-    const mkT=(card,title,heads,minW,rowsF)=>{card.appendChild(el('label','od-label',title));
+    const mkT=(card,title,heads,minW,rowsF)=>{card.appendChild(el('label','od-label',title));heads=['Depot Name'].concat(heads);minW+=96;
       const wrap=el('div','od-table-wrap'),tb=el('table','od-table');tb.style.minWidth=minW+'px';
       const th=el('thead'),hr=el('tr');heads.forEach(x=>hr.appendChild(el('th',null,x)));th.appendChild(hr);tb.appendChild(th);const body=el('tbody');tb.appendChild(body);rowsF(body);wrap.appendChild(tb);card.appendChild(wrap)};
-    const nameCell=(r,e)=>{const n=el('td','c-name'),nc=el('div','chip-g cn',e.l.n);nc.appendChild(el('small',null,'Code: '+e.l.bp));n.appendChild(nc);r.appendChild(n)};
+    const nameCell=(r,e)=>{r.appendChild(RDLDEPOT.td(e.l.bp));const n=el('td','c-name'),nc=el('div','chip-g cn',e.l.n);nc.appendChild(el('small',null,'Code: '+e.l.bp));n.appendChild(nc);r.appendChild(n)};
     const cellF=r=>(v,cls,chip)=>{const td=el('td',cls),sp=el('span','chip-g '+(chip||''),v);td.appendChild(sp);r.appendChild(td)};
     const tbls=el('div');   /* the tables go below the Confirm & Post button */
     secs.forEach(s=>{const a=ms.filter(x=>x.d===s.d),c=mc.filter(x=>x.d===s.d);if(!a.length&&!c.length)return;
@@ -3485,10 +3631,10 @@ function manualSales(P,ttl,bk){
     const act=pv.appendChild(el('div','od-actions')),go=el('button','st-btn','Save to Draft'),cn=el('button','st-btn od-clear','Back to Edit');go.type=cn.type='button';act.appendChild(go);act.appendChild(cn);
     const st2=pv.appendChild(el('div','stt'));pv.insertBefore(act,ic.nextSibling);pv.insertBefore(st2,act.nextSibling);{let rf=st2;wn.forEach(x=>{pv.insertBefore(x,rf.nextSibling);rf=x})}
     const tc=pv.appendChild(el('div','st-card cx-fill'));tc.appendChild(el('label','od-label','Sales • '+E.length+' RV bill'+plural+' • '+money(tot)));
-    const wrap=el('div','od-table-wrap'),tb=el('table','od-table');tb.style.minWidth='640px';
-    const th=el('thead'),hr=el('tr');['Customer Name','Company','Amount','Days Limit','Payment Date'].forEach(x=>hr.appendChild(el('th',null,x)));th.appendChild(hr);tb.appendChild(th);
+    const wrap=el('div','od-table-wrap'),tb=el('table','od-table');tb.style.minWidth='736px';
+    const th=el('thead'),hr=el('tr');['Depot Name','Customer Name','Company','Amount','Days Limit','Payment Date'].forEach(x=>hr.appendChild(el('th',null,x)));th.appendChild(hr);tb.appendChild(th);
     const tbd=el('tbody');
-    E.forEach(e=>{const r=el('tr','row-ok'),n=el('td','c-name'),nc=el('div','chip-g cn',nm);nc.appendChild(el('small',null,'Code: '+bp));n.appendChild(nc);r.appendChild(n);
+    E.forEach(e=>{const r=el('tr','row-ok');r.appendChild(RDLDEPOT.td(bp));const n=el('td','c-name'),nc=el('div','chip-g cn',nm);nc.appendChild(el('small',null,'Code: '+bp));n.appendChild(nc);r.appendChild(n);
       const cell=(v,cls,chip)=>{const td=el('td',cls),sp=el('span','chip-g '+(chip||''),v);td.appendChild(sp);r.appendChild(td)};
       cell(coLab(e.co),'c-co','cc');cell(money(e.amt),'num','cn2 cb');cell(e.days+' Days','c-lim','cl');cell(dd(e.due),'c-dt','cd');tbd.appendChild(r)});
     tb.appendChild(tbd);wrap.appendChild(tb);tc.appendChild(wrap);
@@ -3592,8 +3738,10 @@ async function editManual(x){
     try{sv0(L2)}catch(e){await RDLUI.alert('Could not save','Nothing was changed.');return}
     afterChange(x);return}}
 const ALL={heads:['Customer Name','Company','Billing Document','Bill Type','Posting Date','Due Date / Against Bill','Bill Amount','Collected','TDS','Balance','Total Settled','Days / Payment Type','Status / Cheque No.'],empty:'No sales or collections posted yet. Use “Posting Hub” in Tools.'};
+{const dst=document.createElement('style');dst.textContent=':is(#sales,#collection,#scr) .cs-dpt td.c-dp{position:sticky;left:0;z-index:2;background:#fff;white-space:normal;border-left:1px solid #e6eef9;min-width:96px;max-width:96px;width:96px;box-shadow:4px 0 6px -4px #0a3a9a30;vertical-align:middle}:is(#sales,#collection,#scr) .cs-dpt tbody tr:nth-child(even) td.c-dp{background:#f4f8ff}:is(#sales,#collection,#scr) .cs-dpt td.c-dp .chip-g{font-size:12px;word-break:break-word}html body :is(#sales,#collection,#scr) .cs-dpt th:first-child{position:sticky;left:0;z-index:4;min-width:96px!important;max-width:96px!important;width:96px}html body :is(#sales,#collection,#scr) .cs-dpt td.c-n2{left:96px!important}html body :is(#sales,#collection,#scr) .cs-dpt thead th:nth-child(2){position:sticky;left:96px;z-index:3}html body :is(#sales,#collection,#scr) .cs-dpt tr.cs-tot>td.c-dp{background:#0b2a8a!important}';document.head.appendChild(dst)}
 R.history=function(w0,P){
   const w='a',C={empty:ALL.empty,heads:w0==='s'?['Customer Name','Company','Billing Document','Bill Type','Posting Date','Payment Date','Bill Amount','Collected','TDS','Balance','Days Limit','Status']:w0==='c'?['Customer Name','Company','Billing Document','Bill Type','Posting Date','Against Bill','Bill Amount','Collected','TDS','Total Settled','Payment Type','Cheque / BEFTN No.']:ALL.heads},all=records('a'),host=el('div'),dflt=(w0==='a'&&R.regPre)||(w0==='c'?['DZ']:w0==='s'?['RV']:['RV','DZ']);P.appendChild(host);
+  const DPN=RDLDEPOT.sel()?[]:RDLDEPOT.names(),DPH=DPN.length>1?'<label class="od-label">Depot Name</label><div class="dpo cs-opts"></div>':'';
   const typeHtml='<label class="od-label">Billing Document Type (tick one or both)</label><div class="tp" style="display:flex;gap:18px;margin:4px 0 8px"><label><input type="checkbox" value="RV"> RV (Sales)</label><label><input type="checkbox" value="DZ"> DZ (Collection)</label></div><select class="list-search sy" style="display:none"><option value=""></option></select>';
   const tpOk=r=>[...host.querySelectorAll('.tp input:checked')].some(i=>i.value===r.kd);
   const sel=w==='s'?'<label class="od-label">Status</label><select class="list-search sy"><option value="">All</option><option value="Open">Open</option><option value="Overdue">Overdue</option><option value="Cleared">Cleared</option></select>'
@@ -3601,8 +3749,8 @@ R.history=function(w0,P){
   const CK=c=>'<span class="ck"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="'+c+'" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>';
   const NEWHTML=`<div class="rg-two"><button type="button" class="rg-tg s" data-k="RV">${CK('#0b9a62')}<small>Sales (RV) \u2022 This week</small><b class="wk-s">\u09f3 0</b><i class="wk-sn">0 bills</i></button><button type="button" class="rg-tg c" data-k="DZ">${CK('#1650d8')}<small>Collection (DZ) \u2022 This week</small><b class="wk-c">\u09f3 0</b><i class="wk-cn">0 receipts</i></button></div>
   <div class="rg-hint">Tap a card to tick or untick RV / DZ. Both ticked shows both.</div>
-  <div class="rg-sr"><input class="list-search q" placeholder="Customer, Code or Document"><button type="button" class="rg-fb">Filter \u25be</button></div><div class="od-suggestions sg"></div>
-  <div class="st-card rg-panel"><label class="od-label">Company</label><details class="od-company-box"><summary class="cs">All companies</summary><div class="od-company-options co"></div></details>
+  <div class="rg-sr"><input class="list-search q" placeholder="Depot, Customer, Code or Document"><button type="button" class="rg-fb">Filter \u25be</button></div><div class="od-suggestions sg"></div>
+  <div class="st-card rg-panel">${DPH}<label class="od-label">Company</label><details class="od-company-box"><summary class="cs">All companies</summary><div class="od-company-options co"></div></details>
   <label class="od-label">Posting Date Range</label><div class="to-date-range"><input type="date" class="d1"><span>to</span><input type="date" class="d2"></div>
   <div class="row2"><div class="stf"><label class="od-label">Sales (RV)</label><select class="list-search sy"><option value="">All</option><option value="Open">Open</option><option value="Overdue">Overdue</option><option value="Cleared">Cleared</option></select></div><div class="ptf"><label class="od-label">Payment (DZ)</label><select class="list-search pt"><option value="">All</option><option>Cash</option><option>Cheque</option><option>BEFTN</option></select></div></div>
   <div class="od-actions"><button class="st-btn go1" type="button">Find</button><button class="st-btn od-clear cl" type="button">Reset</button></div></div>
@@ -3610,8 +3758,8 @@ R.history=function(w0,P){
   <div class="rg-chips"></div>
   <div class="od-summary"></div>
   <div class="fbar"></div><div class="od-table-wrap"><table class="od-table"><thead><tr>${C.heads.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody class="tb"></tbody><tfoot class="tf"></tfoot></table></div>`;
-  host.innerHTML=w0==='a'?NEWHTML:`<div class="od-filters"><label class="od-label">Code, Customer Name or Billing Document</label><input class="list-search q"><div class="od-suggestions sg"></div>
-  <label class="od-label">Company</label><details class="od-company-box"><summary class="cs">All companies</summary><div class="od-company-options co"></div></details>
+  host.innerHTML=w0==='a'?NEWHTML:`<div class="od-filters"><label class="od-label">Depot, Code, Customer Name or Billing Document</label><input class="list-search q"><div class="od-suggestions sg"></div>
+  ${DPH}<label class="od-label">Company</label><details class="od-company-box"><summary class="cs">All companies</summary><div class="od-company-options co"></div></details>
   <label class="od-label">Posting Date Range</label><div class="to-date-range"><input type="date" class="d1"><span>to</span><input type="date" class="d2"></div>${typeHtml}
   <div class="od-actions"><button class="st-btn go1" type="button">Find</button><button class="st-btn od-clear cl" type="button">Reset</button></div></div>
   <div class="od-summary ${w==='c'?'four':'s3'}">${w==='c'?'<div><small class="bcl">Customer</small><strong class="bc">0</strong></div><div><small>Actual Collected</small><strong class="am">৳ 0.00/=</strong></div><div><small>Total TDS</small><strong class="tx">৳ 0.00/=</strong></div><div><small>Total Collected</small><strong class="ctot">৳ 0.00/=</strong></div>':'<div><small>Today Total Sales</small><strong class="tsd">৳ 0.00/=</strong></div><div><small class="bcl">Customer</small><strong class="bc">0</strong></div><div><small class="tcl">Company</small><strong class="tco">0</strong></div>'}</div>
@@ -3633,6 +3781,7 @@ R.history=function(w0,P){
   if(w0==='a'){const sm=host.querySelector('.od-summary');sm.className='od-summary rg-sum';sm.innerHTML='<div class="gu"><small class="bcl">Customer</small><strong class="bc">0</strong></div><div class="gy"><small class="tcl">Company</small><strong class="tco">0</strong></div><div class="gs"><small>Found Sales (RV)</small><strong class="tsd">\u09f3 0.00/=</strong></div><div class="gc"><small>Found Collected (DZ)</small><strong class="am">\u09f3 0.00/=</strong></div><div class="gt"><small>Total TDS</small><strong class="tx">\u09f3 0.00/=</strong></div><div class="gk"><small>Total Collected</small><strong class="ctot">\u09f3 0.00/=</strong></div>'}
   R.coSort(new Set(all.map(r=>r.co))).forEach(k=>{const l=el('label'),i=el('input');i.type='checkbox';i.value=k;i.onchange=()=>{host._dirty=1;sumry()};l.appendChild(i);l.appendChild(document.createTextNode(' '+coName(k)));co.appendChild(l)});
   RDLRange.coChips(co.parentNode);
+  {const dp=host.querySelector('.dpo');if(dp)DPN.forEach(n=>{const l=el('label','cs-opt'),i=el('input');i.type='checkbox';i.value=n;i.onchange=()=>{host._dirty=1;run()};l.appendChild(i);l.appendChild(document.createTextNode(' '+n));dp.appendChild(l)})}
   function sumry(){const v=[...co.querySelectorAll('input:checked')].map(i=>i.value);host.querySelector('.cs').textContent=v.length?v.join(', '):'All companies'}
   /* ===== Collection page: this week by default, Customer / Company filters, Total row ===== */
   let cf={};
@@ -3645,9 +3794,9 @@ R.history=function(w0,P){
   const CCOL=[{get:r=>String(r.cu),lab:r=>(r.name||('Customer '+r.cu))+' • '+r.cu},{get:r=>String(r.co),lab:r=>coName(r.co)}];
   const cPass=(r,i)=>{const f=cf[i];return !f||!f.set||f.set.has(CCOL[i].get(r))};
   function fRows(excl){
-    const qq=q.value.trim().toLowerCase(),cs=[...co.querySelectorAll('input:checked')].map(i=>i.value),d1=host.querySelector('.d1').value,d2=host.querySelector('.d2').value,sy=host.querySelector('.sy').value,pt=(host.querySelector('.pt')||{}).value||'';
-    return all.filter(r=>(!qq||r.cu.toLowerCase().includes(qq)||(r.name||'').toLowerCase().includes(qq)||String(r.doc).toLowerCase().includes(qq)||(r.against||'').toLowerCase().includes(qq))
-      &&(!cs.length||cs.includes(r.co))&&((w0==='a'&&isTdy())?(r.kd==='RV'?r.date===sdOf(tdy()):r.date===tdy()):(w0==='a'&&isYst())?(r.kd==='RV'?r.date===ysOf(tdy()):r.date===pwOf(tdy())):((!d1||r.date>=d1)&&(!d2||r.date<=d2)))&&tpOk(r)&&(w0!=='a'||((!sy||r.kd!=='RV'||r.status===sy)&&(!pt||r.kd!=='DZ'||r.ptype===pt)))
+    const qq=q.value.trim().toLowerCase(),cs=[...co.querySelectorAll('input:checked')].map(i=>i.value),d1=host.querySelector('.d1').value,d2=host.querySelector('.d2').value,sy=host.querySelector('.sy').value,pt=(host.querySelector('.pt')||{}).value||'',dps=[...host.querySelectorAll('.dpo input:checked')].map(i=>RDLDEPOT.key(i.value));
+    return all.filter(r=>(!qq||r.cu.toLowerCase().includes(qq)||(r.name||'').toLowerCase().includes(qq)||String(r.doc).toLowerCase().includes(qq)||(r.against||'').toLowerCase().includes(qq)||(RDLDEPOT.nameOf(r.cu)||'').toLowerCase().includes(qq))
+      &&(!cs.length||cs.includes(r.co))&&(!dps.length||dps.includes(RDLDEPOT.key(RDLDEPOT.nameOf(r.cu))))&&((w0==='a'&&isTdy())?(r.kd==='RV'?r.date===sdOf(tdy()):r.date===tdy()):(w0==='a'&&isYst())?(r.kd==='RV'?r.date===ysOf(tdy()):r.date===pwOf(tdy())):((!d1||r.date>=d1)&&(!d2||r.date<=d2)))&&tpOk(r)&&(w0!=='a'||((!sy||r.kd!=='RV'||r.status===sy)&&(!pt||r.kd!=='DZ'||r.ptype===pt)))
       &&CCOL.every((_,i)=>i===excl||cPass(r,i)))
       .sort((a,b)=>(a.name||'').localeCompare(b.name||'')||String(a.cu).localeCompare(String(b.cu))||(a.date<b.date?1:a.date>b.date?-1:String(a.doc)<String(b.doc)?1:-1))}
   function cTap(i,v,txt){cf[i]={set:new Set([v]),txt};run();const a0=host.querySelector('.od-summary');if(a0&&a0.scrollIntoView)a0.scrollIntoView({behavior:'smooth',block:'start'})}
@@ -3679,7 +3828,7 @@ R.history=function(w0,P){
     const ft=el('div','fs-ft'),ap=el('button','st-btn','Apply'),rs=el('button','st-btn od-clear','Reset');ap.type=rs.type='button';ft.appendChild(ap);ft.appendChild(rs);sh.appendChild(ft);
     ap.onclick=()=>{const all0=items.every(x=>sel0.has(x.v));if(all0)delete cf[i];else{const o={set:new Set(sel0)};if(sel0.size===1){const x=items.find(y=>sel0.has(y.v));if(x)o.txt=x.l}cf[i]=o}close();run()};
     rs.onclick=()=>{delete cf[i];close();run()};document.body.appendChild(ov);draw()}
-  host.querySelectorAll('thead th').forEach((th,i)=>{if(i>1)return;const lb=th.textContent;th.textContent='';th.appendChild(el('span',null,lb));
+  [...host.querySelectorAll('thead th')].filter(th=>th.textContent!=='Depot Name').forEach((th,i)=>{if(i>1)return;const lb=th.textContent;th.textContent='';th.appendChild(el('span',null,lb));
     const b=el('button','fb','▾');b.type='button';b.title='Filter '+lb;b.onclick=e=>{e.stopPropagation();openSheet(i)};th.appendChild(b)});
   /* ----- Register look: RV / DZ cards, Filter panel, chips, summary on/off ----- */
   const tpIn=k=>host.querySelector('.tp input[value="'+k+'"]');
@@ -3705,7 +3854,16 @@ R.history=function(w0,P){
   host.querySelectorAll('.rg-tg').forEach(b=>b.onclick=()=>{const c=tpIn(b.dataset.k),o=tpIn(b.dataset.k==='RV'?'DZ':'RV');if(c.checked&&!o.checked)return;const was=isTdy(),wasY=isYst();c.checked=!c.checked;if(was||wasY){const r=(was?tdyR:ystR)(tpIn('RV').checked,tpIn('DZ').checked);host.querySelector('.d1').value=r[0];host.querySelector('.d2').value=r[1]}host._dirty=1;run()});
   {const fb=host.querySelector('.rg-fb'),pn=host.querySelector('.rg-panel');if(fb)fb.onclick=()=>pn.classList.toggle('open')}
   host.querySelectorAll('.sy,.pt').forEach(i=>i.onchange=()=>{host._dirty=1;run()});
-  function run(){
+  /* Depot Name = first column. Every other column index stays as it was; the cell is added after each draw. */
+  function dpFix(){const t=host.querySelector('table.od-table');if(!t)return;
+    if(!t.classList.contains('cs-dpt')){t.classList.add('cs-dpt');t.style.minWidth=((parseInt(t.style.minWidth)||0)+96)+'px';const hr=t.tHead.rows[0];hr.insertBefore(el('th',null,'Depot Name'),hr.firstChild)}
+    const fix=tr=>{if(tr._dpd)return;tr._dpd=1;const c=tr.cells;
+      if(tr.classList.contains('rg-hd')){tr.insertBefore(el('th',null,'Depot Name'),tr.firstChild);return}
+      if(c.length===1&&c[0].colSpan>1){c[0].colSpan++;return}
+      const d=el('td','c-dp');d.appendChild(el('span','chip-g cn',tr._cu!=null?(RDLDEPOT.nameOf(tr._cu)||'\u2014'):''));tr.insertBefore(d,tr.firstChild);const n=tr.cells[1];if(n&&n.classList.contains('c-name'))n.classList.add('c-n2')};
+    [...tb.rows].forEach(fix);const tf=host.querySelector('.tf');if(tf)[...tf.rows].forEach(fix)}
+  function run(){try{run_()}finally{dpFix()}}
+  function run_(){
     UI();
     const qq=q.value.trim().toLowerCase(),cs=[...co.querySelectorAll('input:checked')].map(i=>i.value),d1=host.querySelector('.d1').value,d2=host.querySelector('.d2').value,sy=host.querySelector('.sy').value;
     const rows=fRows(-1);
@@ -3727,7 +3885,7 @@ R.history=function(w0,P){
       /* small faded brackets: Sales (-Total Collection) and Total Collection (+ still to collect / - collected above the sales shown) */
       [['Customer Total :','',''],...(rvOn?[['Sales (RV) : ',money(aS),'']]:[]),...(dzOn?[['Net Collection (DZ) : ',money(aN),''],['TDS : ',money(aT),''],['Total Collection (DZ) : ',money(aC),'']]:[]),...(both?[['Balance : ',money(df),'']]:[])].forEach(([a,b,c],i)=>{const d=el('div',i?'rg-ln':'rg-ln rg-lt',a+b);if(c){d.appendChild(document.createTextNode(' '));d.appendChild(el('small','rg-br',c))}s1.appendChild(d)});t.appendChild(s1);t.colSpan=C.heads.length;r2.appendChild(t);tb.appendChild(r2);aS=aC=aN=aT=0;return}const r2=el('tr','rg-sub'),t=el('td'),s1=el('div','rg-stk','Customer total — '+(w0!=='c'?'Sales '+money(aS):'')+(w0==='a'?'  |  ':'')+(w0!=='s'?'Collection '+money(aC):''));t.appendChild(s1);t.colSpan=C.heads.length;r2.appendChild(t);tb.appendChild(r2);aS=aC=aN=aT=0};
     rows.forEach(x=>{if(pcu===null||x.cu!==pcu){if(pcu!==null)sub();if(w0==='a')band(x,pcu===null)}pcu=x.cu;if(x.kd==='RV')aS+=x.amt;else{aC+=x.total;aN+=(+x.col||0);aT+=(+x.tds||0)}
-      const r=el('tr','row-'+(x.status==='Overdue'?'late':'ok')+(w0==='a'?' rg-bx':'')),n=el('td','c-name'),nc=el('div','chip-g cn',x.name||('Customer '+x.cu));n.appendChild(nc);{n.classList.add('tap');n.title='Tap to show all '+(w==='s'?'bills':'collections')+' of this customer';n.onclick=()=>cTap(0,String(x.cu),x.name||('Customer '+x.cu))}r.appendChild(n);
+      const r=el('tr','row-'+(x.status==='Overdue'?'late':'ok')+(w0==='a'?' rg-bx':'')),n=el('td','c-name'),nc=el('div','chip-g cn',x.name||('Customer '+x.cu));n.appendChild(nc);r._cu=x.cu;{n.classList.add('tap');n.title='Tap to show all '+(w==='s'?'bills':'collections')+' of this customer';n.onclick=()=>cTap(0,String(x.cu),x.name||('Customer '+x.cu))}r.appendChild(n);
       const cell=(cls,v,chip)=>{const t=el('td',cls),c=el('span','chip-g '+(chip||''),v);t.appendChild(c);r.appendChild(t)};
       cell('c-co',coName(x.co),'cc');{const t=r.lastChild;t.classList.add('tap');t.title='Tap to show all '+(w==='s'?'bills':'collections')+' of this company';t.onclick=()=>cTap(1,String(x.co),coName(x.co))}cell('c-dt',x.doc,'cd');cell('c-lim',x.kd==='RV'?'RV':(x.manual?'DZ (Manual)':'DZ'),'cl');cell('c-dt',dd(x.date),'cd');
       if(x.kd==='RV'){cell('c-pay',dd(x.due),'cd');cell('c-amt num',money(x.amt),'cn2');cell('c-col num',money(x.col),'cn2');cell('c-tds num',money(x.tds),'cn2');cell('c-bal num',money(x.bal),'cn2 cb');if(w0==='a')cell('c-bal num',money((+x.col||0)+(+x.tds||0)),'cn2');cell('c-lim',x.days?x.days+' Days':'—','cl');cell('c-arr',x.status,'cdays '+(x.status==='Cleared'?'st-ok':x.status==='Overdue'?'st-late':''))}
@@ -3746,10 +3904,10 @@ R.history=function(w0,P){
     {const wp=tb.closest('.od-table-wrap');if(wp&&w0==='a'){const sw=()=>wp.style.setProperty('--rgw',wp.clientWidth+'px');sw();if(!wp._ro&&window.ResizeObserver){wp._ro=new ResizeObserver(sw);wp._ro.observe(wp)}}}
   }
   q.addEventListener('input',()=>{host._dirty=1;const v=q.value.trim().toLowerCase();sg.textContent='';if(v.length<2)return;
-    const f=new Map();all.forEach(r=>{if(r.cu.toLowerCase().includes(v)||(r.name||'').toLowerCase().includes(v))f.set(r.cu,r.name)});
-    [...f].slice(0,8).forEach(([k,n])=>{const b=el('button','od-sug',(n||'Customer '+k)+' ');b.type='button';b.appendChild(el('small',null,k));b.onclick=()=>{q.value=k;sg.textContent='';run()};sg.appendChild(b)})});
+    const f=new Map();all.forEach(r=>{if(r.cu.toLowerCase().includes(v)||(r.name||'').toLowerCase().includes(v)||(RDLDEPOT.nameOf(r.cu)||'').toLowerCase().includes(v))f.set(r.cu,r.name)});
+    [...f].slice(0,8).forEach(([k,n])=>{const b=el('button','od-sug',(n||'Customer '+k)+' ');b.type='button';b.appendChild(el('small',null,k+(RDLDEPOT.nameOf(k)?' \u2022 '+RDLDEPOT.nameOf(k):'')));b.onclick=()=>{q.value=k;sg.textContent='';run()};sg.appendChild(b)})});
   host.querySelector('.go1').onclick=()=>{host._dirty=1;run()};
-  host.querySelector('.cl').onclick=()=>{cf={};q.value='';sg.textContent='';co.querySelectorAll('input').forEach(i=>i.checked=false);host.querySelectorAll('.tp input').forEach(i=>i.checked=dflt.includes(i.value));sumry();host.querySelectorAll('.d1,.d2,.sy,.pt').forEach(i=>i.value='');if(w0==='a'){defRange();host._dirty=1}else host._dirty=0;run()};
+  host.querySelector('.cl').onclick=()=>{cf={};q.value='';sg.textContent='';co.querySelectorAll('input').forEach(i=>i.checked=false);host.querySelectorAll('.dpo input').forEach(i=>i.checked=false);host.querySelectorAll('.tp input').forEach(i=>i.checked=dflt.includes(i.value));sumry();host.querySelectorAll('.d1,.d2,.sy,.pt').forEach(i=>i.value='');if(w0==='a'){defRange();host._dirty=1}else host._dirty=0;run()};
   if(R.historyPre&&R.historyPre.w===w0){q.value=R.historyPre.q;R.historyPre=null;host._dirty=1}else defRange(true);
   if(w0==='a'){host._dirty=1;R.regPre=null;UI()}
   run();
@@ -4145,8 +4303,8 @@ page('setusers','User Manage & Access Control','setsec',b=>{
   /* add a user */
   const add=card('Add a user','The user is added to the Google Sheet and can sign in with this Gmail. A new user has full access until you set limits.');
   const mk=(ph,type)=>{const i=el('input','ua-in');i.placeholder=ph;i.type=type||'text';i.autocomplete='off';add.appendChild(i);return i};
-  const fe=mk('Gmail address','email'),fn=mk('Name'),fd=mk('Depot (exactly as in the Excel)');
-  const dl=el('datalist');dl.id='uaDl';depots.forEach(n=>{const o=el('option');o.value=n;dl.appendChild(o)});fd.setAttribute('list','uaDl');add.appendChild(dl);
+  const fe=mk('Gmail address','email'),fn=mk('Name');
+  const asgF=RDLAssign.field(add,{users:()=>GT.api('listUsers').then(j=>j.users),email:()=>fe.value});
   const ab=el('button','st-btn','Add user');ab.type='button';add.appendChild(ab);const am=msgBox();add.appendChild(am);b.appendChild(add);
 
   const listCard=card('Users');const list=el('div');listCard.appendChild(list);b.appendChild(listCard);
@@ -4162,7 +4320,7 @@ page('setusers','User Manage & Access Control','setsec',b=>{
       const r=el('div','ua-u'+(u.active?'':' off'));
       r.appendChild(el('div','ua-n',(u.name||u.email)+(u.role==='admin'?'  (Admin)':'')));
       r.appendChild(el('div','ua-s',u.email));
-      r.appendChild(el('div','ua-s',(u.depot||'all depots')+' • '+(u.active?'Active':'Turned off')));
+      r.appendChild(el('div','ua-s',(RDLAssign.describe(u.assign)||u.depot||'all depots')+' • '+(u.active?'Active':'Turned off')));
       if(u.role!=='user'){r.appendChild(el('div','ua-s','Admin — full access, cannot be limited or deleted here'));list.appendChild(r);return}
       const cur=(pm&&pm[u.email.toLowerCase()])||{};
       r.appendChild(el('div','ua-s',pm===null?'':summary(cur)));
@@ -4172,8 +4330,7 @@ page('setusers','User Manage & Access Control','setsec',b=>{
       btn(u.active?'Turn off':'Turn on','',async x=>{
         if(u.active&&!await RDLUI.ask({title:'Turn off '+u.email+'?',msg:'They lose access the next time they open the app. You can turn them on again later.'}))return;
         x.disabled=true;try{await GT.api('saveUser',{email:u.email,active:!u.active});load()}catch(e){x.disabled=false;await RDLUI.alert('Could not change',msg(e))}});
-      btn('Change depot','alt',async()=>{const d=prompt('Depot for '+u.email,u.depot||'');if(d==null||!d.trim())return;
-        try{await GT.api('saveUser',{email:u.email,depot:d.trim()});load()}catch(e){await RDLUI.alert('Could not change',msg(e))}});
+      btn('Depots & customers','alt',()=>RDLAssign.open({title:(u.name||u.email),assign:u.assign,email:u.email,users:()=>Promise.resolve(us),save:a=>GT.api('saveUser',{email:u.email,assign:a}).then(load)}));
       let ed=null;
       btn('Access','alt',()=>{
         if(ed){ed.remove();ed=null;return}
@@ -4189,7 +4346,7 @@ page('setusers','User Manage & Access Control','setsec',b=>{
         x.disabled=true;try{await GT.api('deleteUser',{email:u.email});load()}catch(e){x.disabled=false;await RDLUI.alert('Could not delete',msg(e))}});
       list.appendChild(r)})};
   ab.onclick=async()=>{am.textContent='';ab.disabled=true;
-    try{const j=await GT.api('saveUser',{email:fe.value,name:fn.value,depot:fd.value,active:true});say(am,j.created?'User added.':'User updated.','ok');fe.value='';fn.value='';fd.value='';load()}
+    try{const j=await GT.api('saveUser',{email:fe.value,name:fn.value,assign:asgF.get()||undefined,active:true});say(am,j.created?'User added.':'User updated.','ok');fe.value='';fn.value='';asgF.clear();load()}
     catch(e){say(am,msg(e),'bad')}ab.disabled=false};
 
   /* sign-in / backup log kept by the server */
@@ -4219,7 +4376,7 @@ page('setcorr','Database Correction','setcu',b=>{
   const L=ledger(),bar=el('div','od-actions');
   [['dz','Collection'],['rv','Sales'],['dr','Draft']].forEach(([k,t])=>{const x=el('button','st-btn'+(CV.tab===k?'':' od-clear'),t);x.type='button';x.onclick=()=>{const was=CV.d1===CV.d2&&CV.d1===defDay(CV.tab);CV.tab=k;if(was){CV.d1=CV.d2=defDay(k)}CED.clear();CDL.clear();open('setcorr')};bar.appendChild(x)});
   b.appendChild(bar);
-  const c=card('Find','Code, customer name or bill number — default is today’s postings');const q=el('input','list-search');q.type='search';q.value=CV.sel?CV.sel.name:CV.q;q.placeholder='Code or customer name';q.autocomplete='off';
+  const c=card('Find','Depot, code, customer name or bill number — default is today’s postings');const q=el('input','list-search');q.type='search';q.value=CV.sel?CV.sel.name:CV.q;q.placeholder='Depot, code or customer name';q.autocomplete='off';
   /* ---- customer suggestions: first 2 digits of a BP code, or 2 letters of a name ---- */
   const qw=el('div');qw.style.cssText='position:relative';qw.appendChild(q);c.appendChild(qw);
   const sg=el('div');sg.style.cssText='display:none;position:absolute;left:0;right:0;top:100%;margin-top:4px;z-index:30;background:#fff;border:1px solid #b3cdf0;border-radius:12px;box-shadow:0 12px 24px -10px #0a3a9a55;max-height:260px;overflow:auto';qw.appendChild(sg);
@@ -4243,16 +4400,16 @@ page('setcorr','Database Correction','setcu',b=>{
   [d1,d2].forEach(i=>i.addEventListener('input',()=>{CV.lit=true}));
   const go=el('button','st-btn','Find');go.type='button';go.onclick=()=>{CV.q=(CV.sel&&q.value===CV.sel.name)?CV.sel.code:(CV.sel=null,q.value);CV.d1=d1.value;CV.d2=d2.value;CED.clear();CDL.clear();open('setcorr')};c.appendChild(go);b.appendChild(c);
   const k=norm(CV.q),T=CV.tab;
-  let rows=(T==='dz'?L.dz:T==='rv'?L.rv:(L.dr||[])).map(o=>({t:T,o,id:T==='dr'?o.id:o.bill,date:T==='dz'?o.date:T==='rv'?o.post:(o.dcr||o.ds||''),s:norm((o.nm||'')+' '+o.cu+' '+(o.bill||''))}))
+  let rows=(T==='dz'?L.dz:T==='rv'?L.rv:(L.dr||[])).map(o=>({t:T,o,id:T==='dr'?o.id:o.bill,date:T==='dz'?o.date:T==='rv'?o.post:(o.dcr||o.ds||''),s:norm(RDLDEPOT.nameOf(o.cu)+' '+(o.nm||'')+' '+o.cu+' '+(o.bill||''))}))
     .filter(x=>(!k||x.s.includes(k))&&inRange(T,x.o,CV.d1,CV.d2,CV.lit));
   const g=new Map();rows.forEach(x=>{const a=g.get(String(x.o.cu))||g.set(String(x.o.cu),[]).get(String(x.o.cu));a.push(x)});
   const groups=[...g.values()].sort((a,b2)=>String(a[0].o.nm||'').localeCompare(String(b2[0].o.nm||'')));
   const info=el('p','hint',rows.length+' record'+(rows.length===1?'':'s')+' • '+groups.length+' customer'+(groups.length===1?'':'s'));b.appendChild(info);
   if(!rows.length){b.appendChild(el('div','nempty','Nothing found for this selection.'));return}
   const act=el('div','od-actions'),be=el('button','st-btn','Edit selected (0)'),bd=el('button','st-btn danger','Delete selected (0)');be.type=bd.type='button';act.appendChild(be);act.appendChild(bd);b.appendChild(act);
-  const heads=T==='dz'?['Customer','Company','Edit','Delete','Billing Document','Posting Date','Against Bill','Payment Type','Collected','TDS','Total']
-    :T==='rv'?['Customer','Company','Edit','Delete','Billing Document','Posting Date','Payment Date','Days Limit','Bill Amount']
-    :['Customer','Company','Edit','Delete','Payment Type','Collection & Order Date','Collected','TDS','Total'];
+  const heads=T==='dz'?['Depot Name','Customer','Company','Edit','Delete','Billing Document','Posting Date','Against Bill','Payment Type','Collected','TDS','Total']
+    :T==='rv'?['Depot Name','Customer','Company','Edit','Delete','Billing Document','Posting Date','Payment Date','Days Limit','Bill Amount']
+    :['Depot Name','Customer','Company','Edit','Delete','Payment Type','Collection & Order Date','Collected','TDS','Total'];
   const wrap=el('div','od-table-wrap'),tbl=el('table','od-table'),th=el('thead'),hr=el('tr');heads.forEach(h=>hr.appendChild(el('th',null,h)));th.appendChild(hr);tbl.appendChild(th);
   const tb=el('tbody');tbl.appendChild(tb);wrap.appendChild(tbl);b.appendChild(wrap);
   const cell=(r,t,cls)=>{const x=el('td',cls||null,t);r.appendChild(x);return x};
@@ -4265,7 +4422,8 @@ page('setcorr','Database Correction','setcu',b=>{
     gr.sort((a,b2)=>String(a.o.co).localeCompare(String(b2.o.co))||(a.date<b2.date?1:-1));
     gr.cust={};
     gr.forEach((x,i)=>{const o=x.o,r=el('tr'),key=x.t+'|'+x.id,lock=!!locked(o),noEdit=x.t==='dr';
-      if(i===0){const cu=el('td','c-name');cu.rowSpan=gr.length;cu.style.verticalAlign='middle';
+      if(i===0){{const dp=RDLDEPOT.td(o.cu);dp.rowSpan=gr.length;dp.style.verticalAlign='middle';r.appendChild(dp)}
+        const cu=el('td','c-name');cu.rowSpan=gr.length;cu.style.verticalAlign='middle';
         const nc=el('div','chip-g cn',o.nm||('Customer '+o.cu));nc.appendChild(el('small',null,'Code: '+o.cu));cu.appendChild(nc);
         const mk=(lab,cls)=>{const l=el('label','cg-ck'),i2=el('input');i2.type='checkbox';l.appendChild(i2);l.appendChild(document.createTextNode(lab));l.style.cssText='display:flex;align-items:center;gap:6px;margin-top:6px;font-size:12px';return[l,i2]};
         const[le,ie]=mk('Edit all'),[ld2,id2]=mk('Delete all');
@@ -4314,7 +4472,7 @@ function bpPicker(host,list,onPick){ /* list: [{code,name}] */
       x.onclick=()=>{q.value=c.name+' ('+c.code+')';sg.textContent='';st.sel=c;onPick(c)};sg.appendChild(x)})});
   return st}
 const customers=()=>{const m=R.master,mp=new Map();if(!m)return[];m.cr.forEach(r=>mp.set(String(r.bp),r.nm));m.out.forEach(b=>{if(!mp.has(String(b.cu)))mp.set(String(b.cu),b.nm)});
-  return[...mp].map(([code,name])=>({code,name:name||('Customer '+code)})).sort((a,b)=>a.name.localeCompare(b.name))};
+  return[...mp].map(([code,name])=>({code,name:name||('Customer '+code),dp:RDLDEPOT.nameOf(code)||''})).sort((a,b)=>a.name.localeCompare(b.name))};
 
 /* ---------- Database Update ---------- */
 page('setupd','Database Update','setcu',b=>{
@@ -4334,10 +4492,10 @@ page('bcu','Business & Credit Update','setupd',b=>{
 page('updoff','Credit Line On / Off','bcu',b=>{
   const m0=R.master;if(!m0||!m0.cr.length){b.appendChild(card('No credit data','Upload the Credit limit data first.'));return}
   const c=card('Credit lines with 0% utilization','Turn a line Off to take its limit out of the total credit limit (the line stays in the database). Turn it On to count it again.'),sum=el('p','page-note'),res=el('div');
-  const q=el('input','list-search');q.placeholder='Search customer name or code';c.appendChild(q);
+  const q=el('input','list-search');q.placeholder='Search depot, customer name or code';c.appendChild(q);
   const ab=el('div','od-actions'),aOff=el('button','st-btn','Turn all shown Off'),aOn=el('button','st-btn od-clear','Turn all shown On');aOff.type=aOn.type='button';ab.appendChild(aOff);ab.appendChild(aOn);c.appendChild(ab);c.appendChild(sum);b.appendChild(c);b.appendChild(res);
   const key=r=>[r.bp,r.co,r.seg].join('|'),cand=()=>R.master.cr.filter(r=>(+r.lim||0)>0&&(!(+r.util)||r.off)).sort((x,y)=>String(x.nm).localeCompare(String(y.nm))||R.coCmp(x.co,y.co));
-  const shown=()=>{const k=q.value.trim().toLowerCase();return cand().filter(r=>!k||String(r.nm).toLowerCase().includes(k)||String(r.bp).toLowerCase().includes(k))};
+  const shown=()=>{const k=q.value.trim().toLowerCase();return cand().filter(r=>!k||String(r.nm).toLowerCase().includes(k)||String(r.bp).toLowerCase().includes(k)||String(r.dp||'').toLowerCase().includes(k))};
   function setOff(rows,off){const bm=base();if(!bm)return;const ks=new Set(rows.map(key));let n=0;
     bm.cr.forEach(r=>{if(ks.has(key(r))){if(off){if(!r.off){r.off=1;n++}}else if(r.off){delete r.off;n++}}});
     let set;try{set=new Set(JSON.parse(localStorage.getItem('rdl.croff.v1')||'[]'))}catch(e){set=new Set()}
@@ -4346,10 +4504,10 @@ page('updoff','Credit Line On / Off','bcu',b=>{
   function draw(){res.textContent='';const all=cand(),rows=shown(),offL=all.filter(r=>r.off),offSum=offL.reduce((t,r)=>t+(+r.lim||0),0);
     sum.textContent=fmt(all.length)+' line'+(all.length===1?'':'s')+' with 0% utilization • '+fmt(offL.length)+' Off • limit removed from total: '+__m(offSum);
     if(!rows.length){res.appendChild(card('No lines',all.length?'No line matches your search.':'No credit line has 0% utilization.'));return}
-    const rc=card('Lines • '+fmt(rows.length)),wrap=el('div','od-table-wrap'),tb=el('table','od-table');tb.style.minWidth='720px';
-    const th=el('thead'),hr=el('tr');['Customer','Company','Days Limit','Credit Limit','Status'].forEach(h=>hr.appendChild(el('th',null,h)));th.appendChild(hr);tb.appendChild(th);const body=el('tbody');tb.appendChild(body);
+    const rc=card('Lines • '+fmt(rows.length)),wrap=el('div','od-table-wrap'),tb=el('table','od-table');tb.style.minWidth='816px';
+    const th=el('thead'),hr=el('tr');['Depot Name','Customer','Company','Days Limit','Credit Limit','Status'].forEach(h=>hr.appendChild(el('th',null,h)));th.appendChild(hr);tb.appendChild(th);const body=el('tbody');tb.appendChild(body);
     rows.slice(0,300).forEach(r=>{const tr=el('tr','row-ok'),mk=(t,cl)=>{const td=el('td'),sp=el('span','chip-g '+(cl||''),t);td.appendChild(sp);tr.appendChild(td);return td};
-      const n=mk(r.nm,'cn');n.appendChild(el('small',null,' Code: '+r.bp));mk(R.coName(r.co),'cc');const dn=parseInt(r.dl);mk(isNaN(dn)?(r.dl||'—'):dn+' Days','cl');mk(__m(r.lim),'cn2');
+      mk(RDLDEPOT.nameOf(r.bp)||'\u2014','cn');const n=mk(r.nm,'cn');n.appendChild(el('small',null,' Code: '+r.bp));mk(R.coName(r.co),'cc');const dn=parseInt(r.dl);mk(isNaN(dn)?(r.dl||'—'):dn+' Days','cl');mk(__m(r.lim),'cn2');
       const td=el('td'),bt=el('button','st-btn'+(r.off?' od-clear':''),r.off?'Off':'On');bt.type='button';bt.style.minWidth='70px';
       bt.onclick=()=>{setOff([r],!r.off);draw()};td.appendChild(bt);tr.appendChild(td);body.appendChild(tr)});
     wrap.appendChild(tb);rc.appendChild(wrap);if(rows.length>300)rc.appendChild(el('p','hint','Showing 300 of '+fmt(rows.length)+' — search to narrow.'));res.appendChild(rc)}
@@ -4523,6 +4681,16 @@ page('setbp','Add New Customer','bcu',b=>{
   const c=card('Add New Customer','Fill the credit details the same way as the Credit Limit sheet.'),msg=msgBox();
   const f=(l,ph,type)=>{c.appendChild(el('label','od-label',l));const i=el('input','list-search');i.placeholder=ph||'';if(type)i.type=type;c.appendChild(i);return i};
   const code=f('Code *','e.g. 13000999'),name=f('Customer Name *','Customer name (must match the Collection & Order name)');
+  /* Depot Name: pick an existing depot (or type a new one); written on every credit line so depot filters and user assignment find this customer */
+  c.appendChild(el('label','od-label','Depot Name *'));
+  const dpSel=el('select','list-search'),dpNew=el('input','list-search');
+  {const o0=el('option',null,'Select depot');o0.value='';dpSel.appendChild(o0);
+   RDLDEPOT.names().forEach(n=>{const o=el('option',null,n);o.value=n;dpSel.appendChild(o)});
+   const on=el('option',null,'+ New depot…');on.value='__new';dpSel.appendChild(on);
+   const cur=RDLDEPOT.sel();if(cur){const hit=RDLDEPOT.names().find(n=>RDLDEPOT.key(n)===RDLDEPOT.key(cur));if(hit)dpSel.value=hit}}
+  dpNew.placeholder='New depot name, e.g. Sylhet Depot';dpNew.style.display='none';
+  dpSel.onchange=()=>{dpNew.style.display=dpSel.value==='__new'?'':'none'};
+  c.appendChild(dpSel);c.appendChild(dpNew);
   const linesHost=el('div'),lines=[];c.appendChild(linesHost);
   function addLine(){const box=el('div','st-card');box.style.cssText='margin:10px 0 0;background:#f4f8ff';const n=lines.length+1;box.appendChild(el('h3',null,'Credit line '+n));
     const lf=(l,ph,type)=>{box.appendChild(el('label','od-label',l));const i=el('input','list-search');i.placeholder=ph||'';if(type)i.type=type;box.appendChild(i);return i};
@@ -4535,6 +4703,9 @@ page('setbp','Add New Customer','bcu',b=>{
   add.onclick=addLine;
   save.onclick=async()=>{
     const bp=code.value.trim(),nm=name.value.trim();if(!bp||!nm){say(msg,'✗ Code and Customer Name are required','bad');return}
+    let dpn=dpSel.value==='__new'?dpNew.value.replace(/\s+/g,' ').trim():dpSel.value;
+    if(!dpn){say(msg,'✗ Depot Name is required','bad');return}
+    {const ex=RDLDEPOT.names().find(n=>RDLDEPOT.key(n)===RDLDEPOT.key(dpn));if(ex)dpn=ex}   /* same depot with other case / spaces -> existing spelling */
     const bm=base()||{out:[],cr:[],at:Date.now()};
     if(bm.cr.some(r=>String(r.bp)===bp)||bm.out.some(r=>String(r.cu)===bp)){say(msg,'✗ This Code already exists','bad');return}
     const low=nm.toLowerCase().replace(/\s+/g,' ');if(bm.cr.some(r=>String(r.nm).toLowerCase().replace(/\s+/g,' ')===low)){say(msg,'✗ A customer with this name already exists','bad');return}
@@ -4542,10 +4713,10 @@ page('setbp','Add New Customer','bcu',b=>{
     for(const L of lines){const co=L.sel.value,dl=+L.dl.value,lim=+L.lim.value,ex=+L.exp.value||0;
       if(!co||!(dl>=0)||L.dl.value===''||!(lim>0)){say(msg,'✗ Each credit line needs Company, Days Limit and a Credit Limit above 0','bad');return}
       const key=co+'|'+L.seg.value.trim();if(seen.has(key)){say(msg,'✗ Two credit lines have the same company and segment','bad');return}seen.add(key);
-      rows.push({bp:/^\d+$/.test(bp)?bp:bp,nm,co:+co,cn:(cos.find(x=>x[0]===co)||[0,''])[1],seg:L.seg.value.trim(),dl:dl+' Days',exp:ex,lim,util:Math.round(ex/lim*1000)/10,ex:ex-lim,sn:L.sn.value.trim()})}
-    if(!await RDLUI.ask({title:'Add this customer?',msg:nm+' ('+bp+') with '+rows.length+' credit line'+(rows.length===1?'':'s')+' will be added to the database.',ok:'Add'}))return;
+      rows.push({bp:/^\d+$/.test(bp)?bp:bp,nm,dp:dpn,co:+co,cn:(cos.find(x=>x[0]===co)||[0,''])[1],seg:L.seg.value.trim(),dl:dl+' Days',exp:ex,lim,util:Math.round(ex/lim*1000)/10,ex:ex-lim,sn:L.sn.value.trim()})}
+    if(!await RDLUI.ask({title:'Add this customer?',msg:nm+' ('+bp+') in '+dpn+' with '+rows.length+' credit line'+(rows.length===1?'':'s')+' will be added to the database.',ok:'Add'}))return;
     bm.cr.push(...rows);saveBase(bm);refreshAll();say(msg,'✓ '+nm+' added with '+rows.length+' credit line'+(rows.length===1?'':'s')+'. It now appears in the Customer list and Collection & Order posting.','ok');
-    code.value='';name.value='';linesHost.textContent='';lines.length=0;addLine()};
+    code.value='';name.value='';dpNew.value='';linesHost.textContent='';lines.length=0;addLine()};
 });
 
 window.RDL.admin={open,show};
@@ -4634,17 +4805,18 @@ st.textContent+='#cstm .rq.cs-tabs.cs-seg{display:flex!important;gap:3px;padding
  +'html body #cstm tr.cs-late:not(.cs-tot)>td,html body #cstm tr.cs-late:not(.cs-tot)>td *,html body #cstm.cs-reg .tt-dpi.cs-late,html body #cstm .tt-rv .tt-dpi.cs-late,html body #cstm.cs-reg .tt-dpi.cs-late *,html body #cstm .tt-rv .tt-dpi.cs-late *{color:#c0182f!important}'
  +'html body #cstm tr.cs-soon:not(.cs-tot)>td,html body #cstm tr.cs-soon:not(.cs-tot)>td *,html body #cstm.cs-reg .tt-dpi.cs-soon,html body #cstm .tt-rv .tt-dpi.cs-soon,html body #cstm.cs-reg .tt-dpi.cs-soon *,html body #cstm .tt-rv .tt-dpi.cs-soon *{color:#9a6200!important}'
  +'html body #cstm.cs-reg .tt-dpi.cs-late,html body #cstm .tt-rv .tt-dpi.cs-late{border-color:#f4a9b6!important}html body #cstm.cs-reg .tt-dpi.cs-soon,html body #cstm .tt-rv .tt-dpi.cs-soon{border-color:#f0d08a!important}';
-document.head.appendChild(st);
+st.textContent+='#cstm .cs-dpt td.c-dp{position:sticky;left:0;z-index:2;background:#fff;white-space:normal;border-left:1px solid #e6eef9;min-width:96px;max-width:96px;width:96px;box-shadow:4px 0 6px -4px #0a3a9a30;vertical-align:middle}#cstm .cs-dpt tbody tr:nth-child(even) td.c-dp{background:#f4f8ff}#cstm .cs-dpt td.c-dp .chip-g{font-size:12px;word-break:break-word}html body #cstm .cs-dpt th:first-child{position:sticky;left:0;z-index:4;min-width:96px!important;max-width:96px!important;width:96px}html body #cstm .cs-dpt td.c-n2{left:96px!important}html body #cstm .cs-dpt thead th:nth-child(2){position:sticky;left:96px;z-index:3}html body #cstm .cs-dpt tr.cs-tot>td.c-dp{background:#0b2a8a!important}';
+ document.head.appendChild(st);
 const app=$('.app');
 function show(id){$$('.pg').forEach(x=>x.classList.remove('on'));$$('.nav button').forEach(x=>x.classList.remove('on'));$('#'+id).classList.add('on');window.scrollTo(0,0)}
 const P=(()=>{const p=el('div','pg st');p.id='cstm';app.appendChild(p);const top=el('div','st-top'),b=el('button');b.type='button';b.innerHTML=BK;b.setAttribute('aria-label','Back');b.onclick=()=>$('.nav button[data-p="home"]').click();top.appendChild(b);top.appendChild(el('h2',null,'Customer Statement'));p.appendChild(top);const body=el('div','sbody');p.appendChild(body);return{p,body}})();
 
-const DEF=()=>({sel:new Set(),preset:'all',d1:'',d2:'',rv:true,dz:true,pay:{Cash:true,Cheque:true,BEFTN:true},cos:[]});
+const DEF=()=>({sel:new Set(),preset:'all',d1:'',d2:'',rv:true,dz:true,pay:{Cash:true,Cheque:true,BEFTN:true},cos:[],dps:[]});
 let S=DEF(),REG=false,AUTO=[];   /* REG = the page was opened from the Outstanding Register's Statement button */
 const words=x=>x.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
 function customers(){const m=R.master,mp=new Map();if(!m)return[];m.cr.forEach(r=>mp.set(String(r.bp),r.nm));m.out.forEach(b=>{if(!mp.has(String(b.cu)))mp.set(String(b.cu),b.nm)});
   const L=ledger();[...L.rv,...L.dz].forEach(x=>{if(!mp.has(String(x.cu)))mp.set(String(x.cu),x.nm)});
-  return[...mp].map(([code,name])=>({code,name:name||('Customer '+code)})).sort((a,b)=>a.name.localeCompare(b.name))}
+  return[...mp].map(([code,name])=>({code,name:name||('Customer '+code),dp:RDLDEPOT.nameOf(code)||''})).sort((a,b)=>a.name.localeCompare(b.name))}
 let ALL=[];const nameOf=code=>{const c=ALL.find(x=>x.code===String(code));return c?c.name:'Customer '+code};
 
 /* ---------- period ---------- */
@@ -4976,7 +5148,7 @@ function showResult(res){
   if(cr.length){
     const heads=(multi?['Customer','Company']:['Company']).concat(['Credit Limit','Credit Exposure','Exposure Amount','Utilization','Days Limit','Arrears by Net Due Date','Outstanding','Overdue']);
     const cb=table(res,'Credit Limit',heads,multi?1120:980,{k:'cl',c:'#7c3aed',i:'◔',who:WHO()});let tl=0,te=0,to=0,tv=0;
-    cr.forEach(r=>{const a=o.get(r.bp+'|'+r.co)||{out:0,od:0},tr=el('tr','row-ok');if(r.off)tr.style.opacity='.45';if(!r.off){tl+=+r.lim||0;te+=+r.exp||0}to+=a.out;tv+=a.od;
+    cr.forEach(r=>{const a=o.get(r.bp+'|'+r.co)||{out:0,od:0},tr=el('tr','row-ok');tr._cu=String(r.bp);if(r.off)tr.style.opacity='.45';if(!r.off){tl+=+r.lim||0;te+=+r.exp||0}to+=a.out;tv+=a.od;
       if(multi){nameCell(tr,nameOf(r.bp),'Code: '+r.bp);td(tr,R.coName(r.co),{chip:'cc',cls:'c-co'})}else nameCell(tr,R.coName(r.co));
       td(tr,money(r.lim),{chip:'cn2',cls:'num'});td(tr,money(r.exp),{chip:'cn2',cls:'num'});td(tr,money(r.ex),{chip:'cn2 cb',cls:'num'});
       td(tr,(r.util!=null?r.util:0)+'%',{chip:r.util>100?'st-late':'cl',cls:'c-arr'});const dn=parseInt(r.dl);td(tr,isNaN(dn)?(r.dl||'—'):dn+' Days',{chip:'cl',cls:'c-lim'});
@@ -4993,7 +5165,7 @@ function showResult(res){
     let curF=new Set();const eRows=[];const paint=()=>{eRows.forEach(o=>{o.tr.style.display=((!curF.size||curF.has(o.k))&&inSet(o.d,TF.ae.p)&&inSet(o.doc,TF.ae.d)&&(!TF.ae.m||!TF.ae.m.size||(!!o.m&&TF.ae.m.has(o.m))))?'':'none'});eb.closest('.st-card').querySelectorAll('.tt-btn').forEach(x=>x.classList.toggle('on',curF.has(x.textContent.slice(0,2).toLowerCase())))};const flt=(k,b)=>{curF.has(k)?curF.delete(k):curF.add(k);paint()};
     {const nm=eb.closest('.st-card').querySelector('.tt-name');if(nm){nm.classList.add('tt-all');nm.setAttribute('role','button');nm.tabIndex=0;const all=()=>{curF.clear();paint()};nm.addEventListener('click',all);nm.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();all()}})}}
     const bmp2=new Map((R.registerRecords?R.registerRecords('a'):[]).filter(r=>r.kd==='RV').map(r=>[String(r.cu)+'|'+String(r.doc),r]));
-    list.forEach(x=>{const r=el('tr','row-ok');if(REG&&x.k==='rv'&&x.bal>0){const sc=stCls(x.due);if(sc)r.classList.add(sc)}nameCell(r,String(x.doc),multi?nameOf(x.cu):'');td(r,dd(x.d),{chip:'cd'});td(r,x.k==='rv'?'RV':'DZ',{chip:'cl',cls:'c-lim'});td(r,R.coName(x.co),{chip:'cc',cls:'c-co'});
+    list.forEach(x=>{const r=el('tr','row-ok');r._cu=String(x.cu);if(REG&&x.k==='rv'&&x.bal>0){const sc=stCls(x.due);if(sc)r.classList.add(sc)}nameCell(r,String(x.doc),multi?nameOf(x.cu):'');td(r,dd(x.d),{chip:'cd'});td(r,x.k==='rv'?'RV':'DZ',{chip:'cl',cls:'c-lim'});td(r,R.coName(x.co),{chip:'cc',cls:'c-co'});
       if(x.k==='rv'){td(r,'—',{chip:'cl'});td(r,'—',{chip:'cl'});td(r,'—',{chip:'cl'});td(r,money(x.amt),{chip:'cn2 cb',cls:'num'});td(r,money(x.col),{chip:'cn2',cls:'num'});td(r,money(x.tds),{chip:'cn2',cls:'num'});td(r,money(x.col+x.tds),{chip:'cn2 cb',cls:'num'});td(r,money(x.bal),{chip:'cn2 cb',cls:'num'})}
       else{const bl=bmp2.get(String(x.cu)+'|'+String(x.against));td(r,x.against||'—',{chip:'cd',cls:'c-pay'});td(r,x.type,{chip:'cl',cls:'c-lim'});td(r,x.ref||'—',{chip:'cl',cls:'c-lim',sub:x.rd?dd(x.rd):''});td(r,'—',{chip:'cl'});td(r,money(x.col),{chip:'cn2',cls:'num'});td(r,money(x.tds),{chip:'cn2',cls:'num'});td(r,money(x.col+x.tds),{chip:'cn2 cb',cls:'num'});td(r,bl?money(bl.bal):'—',{chip:'cn2 cb',cls:'num'})}
       if(x.k!=='rv')r.classList.add('dz-row');eRows.push({k:x.k==='rv'?'rv':'dz',tr:r,d:x.d,doc:String(x.doc),m:x.k==='rv'?'':x.type});eb.appendChild(r)});
@@ -5005,24 +5177,33 @@ function showResult(res){
     const on=i=>{cs.forEach((c,j)=>{c.hidden=j!==i;if(c._pair)c._pair.hidden=j!==i});[...bar.children].forEach((b,j)=>{b.classList.toggle('on',j===i);b.setAttribute('aria-pressed',j===i)});openKey=null;SEL.clear();selKind='';detHost.remove();tapRows.forEach(x=>x.classList.remove('cs-on'));cs.forEach(c2=>regX(c2,false))};
     cs.forEach((c,i)=>{const k=[...c.classList].find(z=>/^tt-(ph|rv|cl|ae)$/.test(z)),b=el('button',null,L[k?k.slice(3):'']||'Table');b.type='button';b.onclick=()=>on(i);bar.appendChild(b)});
     res.insertBefore(bar,cs[0]._pair||cs[0]);bar.classList.add('cs-seg');on(0)}}
-  AUTO.splice(0).forEach(w=>w.onclick());colourRows()   /* Details open on every table, after all tables exist */
+  AUTO.splice(0).forEach(w=>w.onclick());colourRows();addDepotCols()   /* Details open on every table, after all tables exist */
   function colourRows(){const nm=new Map();new Set([...m.out.map(b=>String(b.co)),...m.cr.map(r=>String(r.co))]).forEach(c=>nm.set(R.coName(c),c));
     res.querySelectorAll((REG?'.st-card:not(.tt-ae)':'.st-card.tt-rv')+' tbody tr').forEach(tr=>{if(tr.classList.contains('cs-tot')||tr.classList.contains('cs-late')||tr.classList.contains('cs-soon'))return;
       let co=null;[...tr.cells].slice(0,2).forEach(c=>{const t=c.textContent.trim();if(co==null&&nm.has(t))co=nm.get(t)});
       if(co==null)return;const sx=coStat(co);if(sx)tr.classList.add('cs-'+sx)})}
+  /* Depot Name = first column of the four main tables (Collection, Sales, Credit, Entries); the label column stays second and both stay frozen. Rows tagged with a customer show that customer's depot; company rows show the depot(s) of the selected customers; Total rows stay blank. Opened detail tables are not touched. */
+  function addDepotCols(){
+    const dn=c=>RDLDEPOT.nameOf(c)||'\u2014',own=[...new Set([...S.sel].map(c=>RDLDEPOT.nameOf(c)).filter(Boolean))].join(', ')||'\u2014';
+    res.querySelectorAll('.st-card:not(.cs-an).tt-ph,.st-card:not(.cs-an).tt-rv,.st-card:not(.cs-an).tt-cl,.st-card:not(.cs-an).tt-ae').forEach(card=>{
+      const t=card.querySelector('table.od-table');if(!t||t.classList.contains('cs-dpt'))return;
+      t.classList.add('cs-dpt');t.style.minWidth=((parseInt(t.style.minWidth)||0)+96)+'px';
+      const hr=t.tHead&&t.tHead.rows[0];if(hr)hr.insertBefore(el('th',null,'Depot Name'),hr.firstChild);
+      [...t.tBodies].forEach(b=>[...b.rows].forEach(tr=>{const c=el('td','c-dp');c.appendChild(el('span','chip-g cn',tr.classList.contains('cs-tot')?'':(tr._cu!=null?dn(tr._cu):own)));tr.insertBefore(c,tr.firstChild);const n=tr.cells[1];if(n&&n.classList.contains('c-name'))n.classList.add('c-n2')}))})}
 }
 
 /* ---------- filters ---------- */
 function build(){
   const B=P.body;B.textContent='';ALL=customers();
   if(!R.master){B.appendChild(el('div','cu-empty','Upload the database from Settings first.'));return}
+  const dpOk=c=>!S.dps.length||S.dps.some(n=>RDLDEPOT.key(n)===RDLDEPOT.key(c.dp));
   const box=el('div','od-filters rg-panel'),res=el('div');
   const sr=el('div','rg-sr'),q=el('input','list-search'),sg=el('div','od-suggestions'),fb=el('button','rg-fb','Filter \u25be');fb.type='button';
-  q.placeholder='Customer name or Code';q.autocomplete='off';sr.appendChild(q);sr.appendChild(fb);fb.onclick=()=>box.classList.toggle('open');
+  q.placeholder='Customer name, Code or Depot';q.autocomplete='off';sr.appendChild(q);sr.appendChild(fb);fb.onclick=()=>box.classList.toggle('open');
   const only=[...S.sel][0];if(only!=null)q.value=nameOf(only)+' ('+only+')';
   q.addEventListener('input',()=>{S.sel.clear();const v=q.value.trim().toLowerCase();sg.textContent='';if(v.length<2)return;
-    const tk=words(v);ALL.filter(c=>c.name.toLowerCase().includes(v)||c.code.toLowerCase().includes(v)||(tk.length>1&&tk.every(w=>c.name.toLowerCase().includes(w)))).map(c=>[c,(c.code.startsWith(v)||words(c.name).some(w=>w.startsWith(v)))?0:1]).sort((x,y)=>x[1]-y[1]).map(x=>x[0]).slice(0,8).forEach(c=>{
-      const x=el('button','od-sug',c.name+' ');x.type='button';x.appendChild(el('small',null,c.code));
+    const tk=words(v);ALL.filter(c=>dpOk(c)&&(c.name.toLowerCase().includes(v)||c.code.toLowerCase().includes(v)||(c.dp||'').toLowerCase().includes(v)||(tk.length>1&&tk.every(w=>c.name.toLowerCase().includes(w))))).map(c=>[c,(c.code.startsWith(v)||words(c.name).some(w=>w.startsWith(v)))?0:1]).sort((x,y)=>x[1]-y[1]).map(x=>x[0]).slice(0,8).forEach(c=>{
+      const x=el('button','od-sug',c.name+' ');x.type='button';x.appendChild(el('small',null,c.code+(c.dp?' \u2022 '+c.dp:'')));
       x.onclick=()=>{S.sel=new Set([c.code]);q.value=c.name+' ('+c.code+')';sg.textContent='';runFind()};sg.appendChild(x)});
     if(!sg.children.length){const n=el('div','cu-empty','No customer matches.');sg.appendChild(n)}});
   /* period */
@@ -5043,6 +5224,7 @@ function build(){
   {const cm=multi([['Cash','Cash'],['Cheque','Cheque'],['BEFTN','BEFTN']],k=>S.pay[k],k=>{if(S.dz)S.pay[k]=!S.pay[k]});box.appendChild(cm.row);
     syncPay=()=>{cm.row.style.opacity=S.dz?'':'.45';cm.row.style.pointerEvents=S.dz?'':'none'};syncPay()}
   /* company: swipeable multi-select chips, fixed order by company code (no selection = all companies) */
+  {const dn=RDLDEPOT.sel()?[]:RDLDEPOT.names();if(dn.length>1){box.appendChild(el('label','od-label','Depot Name'));const drow=el('div','rq'),dpt=[],dpaint=()=>dpt.forEach(f=>f());dn.forEach(k=>{const b=el('button',null,k);b.type='button';dpt.push(()=>{const on=S.dps.includes(k);b.classList.toggle('on',on);b.setAttribute('aria-pressed',on)});b.onclick=()=>{S.dps=S.dps.includes(k)?S.dps.filter(z=>z!==k):S.dps.concat(k);dpaint()};drow.appendChild(b)});dpaint();box.appendChild(drow)}}
   box.appendChild(el('label','od-label','Company'));
   const m=R.master,crow=el('div','rq'),cpaint=[],codes=R.coSort(new Set(m.cr.map(r=>String(r.co)).concat(m.out.map(b=>String(b.co)))));
   const repaint=()=>cpaint.forEach(f=>f());
@@ -5057,7 +5239,7 @@ function build(){
   const runFind=()=>{
     box.classList.remove('open');
     if(!S.sel.size){const v=q.value.trim().toLowerCase();
-      if(v.length>=2){const h=ALL.filter(c=>c.name.toLowerCase().includes(v)||c.code.toLowerCase().includes(v));
+      if(v.length>=2){const h=ALL.filter(c=>dpOk(c)&&(c.name.toLowerCase().includes(v)||c.code.toLowerCase().includes(v)||(c.dp||'').toLowerCase().includes(v)));
         if(h.length===1){S.sel=new Set([h[0].code]);q.value=h[0].name+' ('+h[0].code+')'}}}
     showResult(res);res.scrollIntoView({behavior:'smooth',block:'start'});
   };
@@ -5452,6 +5634,7 @@ st.textContent=`
 html body #overdue .od-table tbody tr.row-late:not(.cs-tot) td .chip-g.cdays{color:#b5122f!important;font-weight:800!important}
 html body #upcoming .od-table tbody tr.row-soon:not(.cs-tot) td .chip-g.cdays{color:#9a6200!important;font-weight:800!important}
 /* every table in the app: square header / footer corners */
+#overdue .cs-dpt td.c-dp,#upcoming .cs-dpt td.c-dp{position:sticky;left:0;z-index:2;background:#fff;white-space:normal;border-left:1px solid #e6eef9;min-width:96px;max-width:96px;width:96px;box-shadow:4px 0 6px -4px #0a3a9a30;vertical-align:middle}#overdue .cs-dpt tbody tr:nth-child(even) td.c-dp,#upcoming .cs-dpt tbody tr:nth-child(even) td.c-dp{background:#f4f8ff}#overdue .cs-dpt td.c-dp .chip-g,#upcoming .cs-dpt td.c-dp .chip-g{font-size:12px;word-break:break-word}html body :is(#overdue,#upcoming) .cs-dpt th:first-child{position:sticky;left:0;z-index:4;min-width:96px!important;max-width:96px!important;width:96px}html body :is(#overdue,#upcoming) .cs-dpt td.c-name{position:sticky;left:96px;z-index:2}html body :is(#overdue,#upcoming) .cs-dpt thead th:nth-child(2){position:sticky;left:96px;z-index:3}html body :is(#overdue,#upcoming) .cs-dpt tr.cs-tot>td.c-dp{background:#0b2a8a!important}
 html body .od-table-wrap,html body #orp .orp-xi .od-table-wrap{border-radius:0!important}
 html body .od-table,html body .od-table thead,html body .od-table tfoot,html body .od-table th,html body .od-table td,html body .mv-tbl,html body .mv-tbl th{border-radius:0!important}
 html body :is(.st-card.st-fill,.orp-cc,.dd-card):has(.od-table-wrap){border-bottom-left-radius:0!important;border-bottom-right-radius:0!important}
@@ -5474,7 +5657,7 @@ function makePage(id,title,kind){
   const top=el('div','st-top'),b=el('button');b.type='button';b.innerHTML=BK;b.setAttribute('aria-label','Back');b.onclick=()=>$('.nav button[data-p="home"]').click();
   top.appendChild(b);top.appendChild(el('h2',null,title));P.appendChild(top);
   const B=el('div','sbody');P.appendChild(B);
-  let lim=PAGE;const F={cu:new Set(),co:new Set()};
+  let lim=PAGE;const F={cu:new Set(),co:new Set(),dp:new Set()};const dpK=b=>RDLDEPOT.key(RDLDEPOT.nameOf(b.cu)||''),dpOk=b=>!F.dp.size||F.dp.has(dpK(b));
   function openFilter(k,label,base,S){
     const ov=el('div','fp-ov'),sh=el('div','fp-sh');ov.appendChild(sh);sh.appendChild(el('h4',null,label));
     const m=new Map();base.forEach(b=>{const key=String(k==='cu'?b.cu:b.co);if(!m.has(key))m.set(key,k==='cu'?(S.nm.get(key)||b.nm||('Customer '+key)):R.coName(key))});
@@ -5490,10 +5673,10 @@ function makePage(id,title,kind){
     B.textContent='';const S=sets();
     if(!S){B.appendChild(el('div','cu-empty','Upload the database from Settings first.'));return}
     const base=(kind==='over'?S.over:S.up).slice().sort((a,b)=>a.due<b.due?-1:a.due>b.due?1:0);
-    const rows=base.filter(b=>(!F.cu.size||F.cu.has(String(b.cu)))&&(!F.co.size||F.co.has(String(b.co))));
+    const rows=base.filter(b=>dpOk(b)&&(!F.cu.size||F.cu.has(String(b.cu)))&&(!F.co.size||F.co.has(String(b.co))));
     const sum=rows.reduce((q,b)=>q+bal(b),0),nCu=new Set(rows.map(b=>String(b.cu))).size,nCo=new Set(rows.map(b=>String(b.co))).size;
     const g=el('div','od-summary rg-sum cs-sum od-sum3');
-    const totOut=S.tot.filter(b=>(!F.cu.size||F.cu.has(String(b.cu)))&&(!F.co.size||F.co.has(String(b.co)))).reduce((q,b)=>q+bal(b),0),fl=b=>(!F.cu.size||F.cu.has(String(b.cu)))&&(!F.co.size||F.co.has(String(b.co))),sO=S.over.filter(fl).reduce((q,b)=>q+bal(b),0),sU=S.up.filter(fl).reduce((q,b)=>q+bal(b),0),pf=v=>(totOut?Math.round(v/totOut*1000)/10:0)+'% of total',pO=pf(sO),pU=pf(sU);   /* same calculation as the Overdue / Upcoming boxes of the Outstanding Register */
+    const totOut=S.tot.filter(b=>dpOk(b)&&(!F.cu.size||F.cu.has(String(b.cu)))&&(!F.co.size||F.co.has(String(b.co)))).reduce((q,b)=>q+bal(b),0),fl=b=>dpOk(b)&&(!F.cu.size||F.cu.has(String(b.cu)))&&(!F.co.size||F.co.has(String(b.co))),sO=S.over.filter(fl).reduce((q,b)=>q+bal(b),0),sU=S.up.filter(fl).reduce((q,b)=>q+bal(b),0),pf=v=>(totOut?Math.round(v/totOut*1000)/10:0)+'% of total',pO=pf(sO),pU=pf(sU);   /* same calculation as the Overdue / Upcoming boxes of the Outstanding Register */
     const cuNm=[...F.cu].map(k=>S.nm.get(k)||('Customer '+k)).join(', '),coNm=[...F.co].map(k=>R.coName(k)).join(', ');
     [kind==='over'?['Total Overdue',money(sO),'gr',pO]:['Upcoming Overdue',money(sU),'ga',pU+' \u2022 Next '+UP+' days'],['Bills',fmt(rows.length),'gc',''],[(F.cu.size||nCu===1)?'Customer':'Customers',F.cu.size?cuNm:fmt(nCu),'gk','',!!F.cu.size],[(F.co.size||nCo===1)?'Company':'Companies',F.co.size?coNm:fmt(nCo),'gs','',!!F.co.size]].forEach(([l,v,c,e,sel],i)=>{const d=el('div',c+' '+['cm','cl','cmid','cr'][i]);d.appendChild(el('small',null,l));const sg=el('strong',sel?'sel-nm':null,v);if(sel)sg.title=v;d.appendChild(sg);if(e)d.appendChild(el('em',null,e));g.appendChild(d)});
     B.appendChild(g);
@@ -5504,16 +5687,17 @@ function makePage(id,title,kind){
       wb.onclick=()=>{const items=rows.map(b=>({cu:b.cu,nm:S.nm.get(String(b.cu))||b.nm||('Customer '+b.cu),co:b.co,lab:R.coName(b.co),amt:bal(b),days:diff(S.t,b.due)})),
         a=document.createElement('a');a.href='https://wa.me/?text='+encodeURIComponent(R.waText(items,dd(S.t),R.waCfg.load()));a.target='_blank';a.rel='noopener';document.body.appendChild(a);a.click();a.remove()}
     }
-    if(F.cu.size||F.co.size){const sb=el('div','sel-bar');
-      [['cu',F.cu,k=>S.nm.get(k)||('Customer '+k)],['co',F.co,k=>R.coName(k)]].forEach(([key,set,lab])=>set.forEach(k=>{const c=el('button',null,lab(k)+' ✕');c.type='button';c.onclick=()=>{F[key]=new Set();lim=PAGE;draw()};sb.appendChild(c)}));B.appendChild(sb)}
+    if(F.cu.size||F.co.size||F.dp.size){const sb=el('div','sel-bar');
+      [['dp',F.dp,k=>(base.find(b=>RDLDEPOT.key(RDLDEPOT.nameOf(b.cu)||'')===k)&&RDLDEPOT.nameOf(base.find(b=>RDLDEPOT.key(RDLDEPOT.nameOf(b.cu)||'')===k).cu))||k],['cu',F.cu,k=>S.nm.get(k)||('Customer '+k)],['co',F.co,k=>R.coName(k)]].forEach(([key,set,lab])=>set.forEach(k=>{const c=el('button',null,lab(k)+' ✕');c.type='button';c.onclick=()=>{F[key]=new Set();lim=PAGE;draw()};sb.appendChild(c)}));B.appendChild(sb)}
     if(!rows.length){B.appendChild(el('div','cu-empty',base.length?'No bills match the selected filter.':kind==='over'?'No overdue bills.':'No bills overdue within the next '+UP+' days.'));
-      if(base.length){const cb=el('button','st-btn pgmore','Clear Filter');cb.type='button';cb.onclick=()=>{F.cu=new Set();F.co=new Set();draw()};B.appendChild(cb)}return}
+      if(base.length){const cb=el('button','st-btn pgmore','Clear Filter');cb.type='button';cb.onclick=()=>{F.cu=new Set();F.co=new Set();F.dp=new Set();draw()};B.appendChild(cb)}return}
     B.appendChild(el('div','pgcnt',fmt(rows.length)+' bill'+(rows.length===1?'':'s')+' • '+fmt(nCu)+' customer'+(nCu===1?'':'s')));
-    const heads=['Customer Name','Company','Billing Doc','Posting Date','Due Date','Bill Amount','Collected (bill)','TDS','Balance','Days Limit','Days to Due / Overdue','Net Due Symbol'],T=tbl(heads,1280);
+    const heads=['Depot Name','Customer Name','Company','Billing Doc','Posting Date','Due Date','Bill Amount','Collected (bill)','TDS','Balance','Days Limit','Days to Due / Overdue','Net Due Symbol'],T=tbl(heads,1376);T.wrap.querySelector('table').classList.add('cs-dpt');
     const ld=new Map(),LD=b=>{const k=b.cu+'|'+b.co;let v=ld.get(k);if(v===undefined){const l=S.dl.get(String(b.cu)+'|'+String(b.co)),n=l?parseInt(l.dl):NaN;v=isNaN(n)?'—':n+' Days';ld.set(k,v)}return v};
     let i=0;
     for(;i<rows.length&&i<lim;i++){const b=rows[i],od=b.due<S.t,n=diff(S.t,b.due),tr=el('tr',od?'row-late':'row-soon');
-      {const nt=nameTd(tr,S.nm.get(String(b.cu))||b.nm||('Customer '+b.cu),'Code: '+b.cu),cuK=String(b.cu),coK=String(b.co);
+      {const dtd=RDLDEPOT.td(b.cu),dK=dpK(b);dtd.classList.add('tap');dtd.title='Tap to select this depot';dtd.onclick=()=>{F.dp=(F.dp.size===1&&F.dp.has(dK))?new Set():new Set([dK]);lim=PAGE;draw()};tr.appendChild(dtd);
+        const nt=nameTd(tr,S.nm.get(String(b.cu))||b.nm||('Customer '+b.cu),'Code: '+b.cu),cuK=String(b.cu),coK=String(b.co);
         nt.classList.add('tap');nt.title='Tap to select this customer (all its companies)';nt.onclick=()=>{F.cu=(F.cu.size===1&&F.cu.has(cuK))?new Set():new Set([cuK]);lim=PAGE;draw()};
         const ct=cell(tr,R.coName(b.co),'c-co','cc');ct.classList.add('tap');ct.title='Tap to select this company';ct.onclick=()=>{F.co=(F.co.size===1&&F.co.has(coK))?new Set():new Set([coK]);lim=PAGE;draw()}}
       cell(tr,String(b.bill||'—'),'c-lim','cl');cell(tr,dd(b.post),'','cd');cell(tr,dd(b.due),'','cd');
@@ -5521,7 +5705,7 @@ function makePage(id,title,kind){
       if(od)cell(tr,__d(n),'c-arr','cdays');else cell(tr,__d(n),'c-arr','cdays',dayStyle(-n));
       const x=el('td','c-sym'),pl=RDLNDS(od?'late':n>=-7?'soon':'due');x.appendChild(pl);tr.appendChild(x);T.body.appendChild(tr)}
     {const S2=f=>rows.reduce((q,b)=>q+f(b),0),tr=el('tr','row-ok cs-tot'),V=['','','','',money(S2(b=>+b.amt||0)),money(S2(b=>+b.collected||0)),money(S2(b=>+b.tds||0)),money(S2(bal)),'','',''];
-      nameTd(tr,'Total • '+fmt(rows.length)+' bill'+(rows.length===1?'':'s'));V.forEach(v=>cell(tr,v,v?'num':'',v?'cn2':''));T.body.appendChild(tr)}
+      tr.appendChild(el('td','c-dp'));nameTd(tr,'Total • '+fmt(rows.length)+' bill'+(rows.length===1?'':'s'));V.forEach(v=>cell(tr,v,v?'num':'',v?'cn2':''));T.body.appendChild(tr)}
     B.appendChild(T.wrap);
     if(rows.length>i){const mb=el('button','st-btn pgmore','Show more ('+fmt(rows.length-i)+' left)');mb.type='button';mb.onclick=()=>{lim+=PAGE;draw()};B.appendChild(mb)}
   }
@@ -5554,7 +5738,7 @@ const homeNav=()=>$('.nav button[data-p="home"]').click();
 function customers(){const m=R.master,mp=new Map(),L=ledger();
   if(m){m.cr.forEach(r=>mp.set(String(r.bp),r.nm));m.out.forEach(b=>{if(!mp.has(String(b.cu)))mp.set(String(b.cu),b.nm)})}
   [...(L.rv||[]),...(L.dz||[])].forEach(x=>{if(!mp.has(String(x.cu)))mp.set(String(x.cu),x.nm)});
-  return[...mp].map(([code,name])=>({code,name:name||('Customer '+code)})).sort((a,b)=>a.name.localeCompare(b.name))}
+  return[...mp].map(([code,name])=>({code,name:name||('Customer '+code),dp:RDLDEPOT.nameOf(code)||''})).sort((a,b)=>a.name.localeCompare(b.name))}
 const words=x=>lc(x).split(/[^a-z0-9]+/).filter(Boolean);
 
 /* ---------- Customer 360 page ---------- */
@@ -5572,8 +5756,9 @@ function prange(F){const T=ymd(new Date()),t=new Date();
     case 'year':return[T.slice(0,4)+'-01-01',T];case 'all':return['',''];default:{let a=F.d1,b=F.d2;if(a&&b&&a>b)[a,b]=[b,a];return[a,b]}}}
 function tcell(r,t,o){o=o||{};const c=el('td',o.cls||''),s=el('span','chip-g '+(o.chip||''),t);if(o.style)s.style.cssText=o.style;c.appendChild(s);r.appendChild(c)}
 function ncell(r,t,sub){const n=el('td','c-name'),c=el('div','chip-g cn',t);if(sub)c.appendChild(el('small',null,sub));n.appendChild(c);r.appendChild(n)}
-function tbl(host,title,heads,minW,tt){const card=el('div','st-card'+(tt?' st-fill tt-'+tt.k:''));if(tt)card.style.setProperty('--tt',tt.c);const h3=el('h3',tt?'tt-h':null);if(tt&&tt.i)h3.appendChild(el('span','tt-ic',tt.i));h3.appendChild(el('span',tt?'tt-name':null,title));if(tt&&tt.b)h3.appendChild(el('span','tt-b',tt.b));if(tt&&tt.r)h3.appendChild(el('span','tt-r',tt.r));card.appendChild(h3);const w=el('div','od-table-wrap'),tb=el('table','od-table');tb.style.minWidth=minW+'px';
-  const th=el('thead'),hr=el('tr');heads.forEach(h=>hr.appendChild(el('th',null,h)));th.appendChild(hr);tb.appendChild(th);const body=el('tbody');tb.appendChild(body);w.appendChild(tb);card.appendChild(w);host.appendChild(card);return body}
+const dst=document.createElement('style');dst.textContent='#c360 .cs-dpt td.c-dp{position:sticky;left:0;z-index:2;background:#fff;white-space:normal;border-left:1px solid #e6eef9;min-width:96px;max-width:96px;width:96px;box-shadow:4px 0 6px -4px #0a3a9a30;vertical-align:middle}#c360 .cs-dpt tbody tr:nth-child(even) td.c-dp{background:#f4f8ff}#c360 .cs-dpt td.c-dp .chip-g{font-size:12px;word-break:break-word}html body #c360 .cs-dpt th:first-child{position:sticky;left:0;z-index:4;min-width:96px!important;max-width:96px!important;width:96px}html body #c360 .cs-dpt td.c-n2{left:96px!important}html body #c360 .cs-dpt thead th:nth-child(2){position:sticky;left:96px;z-index:3}html body #c360 .cs-dpt tr.cs-tot>td.c-dp{background:#0b2a8a!important}';document.head.appendChild(dst);
+function tbl(host,title,heads,minW,tt){const card=el('div','st-card'+(tt?' st-fill tt-'+tt.k:''));if(tt)card.style.setProperty('--tt',tt.c);const h3=el('h3',tt?'tt-h':null);if(tt&&tt.i)h3.appendChild(el('span','tt-ic',tt.i));h3.appendChild(el('span',tt?'tt-name':null,title));if(tt&&tt.b)h3.appendChild(el('span','tt-b',tt.b));if(tt&&tt.r)h3.appendChild(el('span','tt-r',tt.r));card.appendChild(h3);const w=el('div','od-table-wrap'),tb=el('table','od-table');tb.style.minWidth=(minW+96)+'px';tb.classList.add('cs-dpt');
+  const th=el('thead'),hr=el('tr');['Depot Name'].concat(heads).forEach(h=>hr.appendChild(el('th',null,h)));th.appendChild(hr);tb.appendChild(th);const body=el('tbody');const _ap=body.appendChild.bind(body);body.appendChild=function(tr){if(tr&&tr.tagName==='TR'&&!tr._dp){tr._dp=1;const c=el('td','c-dp');c.appendChild(el('span','chip-g cn',tr.classList.contains('cs-tot')?'':(RDLDEPOT.nameOf(F.code)||'\u2014')));tr.insertBefore(c,tr.firstChild);const n=tr.cells[1];if(n&&n.classList.contains('c-name'))n.classList.add('c-n2')}return _ap(tr)};tb.appendChild(body);w.appendChild(tb);card.appendChild(w);host.appendChild(card);return body}
 const empty=(host,t)=>host.appendChild(el('div','cu-empty',t));
 function strip(host,items){const g=el('div','od-summary rg-sum cs-sum'),n=items.length;
   items.forEach(([l,v,c],i)=>{const d=el('div',c+' '+((n%2&&i===n-1)?'cm':(i%2?'cr':'cl')));d.appendChild(el('small',null,l));d.appendChild(el('strong',null,v));g.appendChild(d)});host.appendChild(g)}
@@ -5586,7 +5771,7 @@ function open360(code){
   F={code:cu.code,name:cu.name,cos:[],preset:'m3',d1:'',d2:''};draw360();showPg('c360')}
 function draw360(){
   const B=PG.body;B.textContent='';const m=R.master,L=ledger(),T=ymd(new Date()),T7=addD(T,6);   /* Upcoming = today + the next 6 days (7 days in all), exactly like the dashboard card */
-  B.appendChild(el('p','page-note','Code: '+F.code));
+  B.appendChild(el('p','page-note','Code: '+F.code+(RDLDEPOT.nameOf(F.code)?' \u2022 '+RDLDEPOT.nameOf(F.code):'')));
   const nm=el('h2',null,F.name);nm.style.cssText='font-size:20px;font-weight:800;margin:2px 0 8px;color:#0a3fa8';B.appendChild(nm);
   if(window.__ptpBox)B.appendChild(window.__ptpBox(F.code,F.name,[...new Set([...(R.master?R.master.out:[]).filter(b=>String(b.cu)===F.code).map(b=>String(b.co)),...(R.master?R.master.cr:[]).filter(r=>String(r.bp)===F.code).map(r=>String(r.co))])],draw360));   /* Promise to Pay section */
   const mineOut=m?m.out.filter(b=>String(b.cu)===F.code):[],mineCr=m?m.cr.filter(r=>String(r.bp)===F.code):[];
@@ -5656,7 +5841,7 @@ function open(){
   if($('.gs-ov'))return;
   const ALL=customers(),ov=el('div','gs-ov'),top=el('div','gs-top');
   const back=el('button','gs-back');back.type='button';back.innerHTML=BK;back.setAttribute('aria-label','Close');
-  const q=el('input','gs-in');q.type='search';q.placeholder='Customer name or code';q.setAttribute('enterkeyhint','search');q.autocomplete='off';
+  const q=el('input','gs-in');q.type='search';q.placeholder='Customer name, code or depot';q.setAttribute('enterkeyhint','search');q.autocomplete='off';
   const clr=el('button','gs-x','×');clr.type='button';clr.style.display='none';
   top.appendChild(back);top.appendChild(q);top.appendChild(clr);ov.appendChild(top);
   const list=el('div','gs-list');ov.appendChild(list);document.body.appendChild(ov);
@@ -5667,11 +5852,11 @@ function open(){
   function run(){
     const raw=q.value.trim(),v=lc(raw),tk=words(v);clr.style.display=raw?'':'none';list.textContent='';first=null;
     if(v.length<2){const n=el('div','gs-empty');n.appendChild(el('b',null,'Search a customer'));n.appendChild(el('div',null,'Type at least 2 digits of the code or 2 letters of the customer name. Tap the customer to see everything about that customer: outstanding, overdue, bills, sales, collections and credit limit, with filters.'));list.appendChild(n);return}
-    const hits=ALL.filter(c=>lc(c.name).includes(v)||lc(c.code).includes(v)||(tk.length>1&&tk.every(w=>lc(c.name).includes(w)))).map(c=>[c,(lc(c.code).startsWith(v)||words(c.name).some(w=>w.startsWith(v)))?0:1]).sort((a,b)=>a[1]-b[1]).map(x=>x[0]);
+    const hits=ALL.filter(c=>lc(c.name).includes(v)||lc(c.code).includes(v)||lc(c.dp||'').includes(v)||(tk.length>1&&tk.every(w=>lc(c.name).includes(w)))).map(c=>[c,(lc(c.code).startsWith(v)||words(c.name).some(w=>w.startsWith(v)))?0:1]).sort((a,b)=>a[1]-b[1]).map(x=>x[0]);
     if(!hits.length){const n=el('div','gs-empty');n.appendChild(el('b',null,'No customer found for “'+raw+'”'));n.appendChild(el('div',null,'Try another part of the name or the code.'));list.appendChild(n);return}
     list.appendChild(el('div','gs-h','Customers • '+hits.length));
     hits.slice(0,30).forEach(c=>{const it=el('div','gs-item'),ic=el('div','gs-ic','C');ic.style.background='linear-gradient(135deg,#0a3fa8,#16b8c4)';
-      const mn=el('div','gs-main'),ti=el('div','gs-t'),sb=el('div','gs-s'),rt=el('div','gs-r');hl(ti,c.name,tk);sb.textContent='Code: '+c.code;rt.appendChild(el('b',null,money(tot.get(c.code)||0)));
+      const mn=el('div','gs-main'),ti=el('div','gs-t'),sb=el('div','gs-s'),rt=el('div','gs-r');hl(ti,c.name,tk);sb.textContent='Code: '+c.code+(c.dp?' \u2022 '+c.dp:'');rt.appendChild(el('b',null,money(tot.get(c.code)||0)));
       mn.appendChild(ti);mn.appendChild(sb);it.appendChild(ic);it.appendChild(mn);it.appendChild(rt);const go=()=>{close();setTimeout(()=>open360(c.code),30)};it.onclick=go;if(!first)first=go;
       const w=el('div','gs-card');w.appendChild(it);list.appendChild(w)});
     if(hits.length>30)list.appendChild(el('p','cs-hint','Showing 30 of '+hits.length+' — type more to narrow.'))}
@@ -5682,7 +5867,7 @@ function open(){
   run();setTimeout(()=>q.focus(),80)}
 
 const bar=$('.search');
-if(bar){const i=bar.querySelector('input');if(i){i.readOnly=true;i.placeholder='Customer name or code'}bar.style.cursor='pointer';bar.addEventListener('click',open)}
+if(bar){const i=bar.querySelector('input');if(i){i.readOnly=true;i.placeholder='Customer name, code or depot'}bar.style.cursor='pointer';bar.addEventListener('click',open)}
 R.openGlobalSearch=open;
 })();
 </script>
@@ -5728,17 +5913,19 @@ function show(id){$$('.pg').forEach(x=>x.classList.remove('on'));$$('.nav button
 function mkPage(id,title,back){const p=el('div','pg st');p.id=id;app.appendChild(p);const top=el('div','st-top'),b=el('button');b.type='button';b.innerHTML='<svg class="bk-ar" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 12h-15M10.5 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="4.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';b.setAttribute('aria-label','Back');b.onclick=back;top.appendChild(b);top.appendChild(el('h2',null,title));p.appendChild(top);const body=el('div','sbody');p.appendChild(body);return body}
 const home=()=>$('.nav button[data-p="home"]').click();
 const PM=mkPage('tdsl','TDS Ledger',()=>{const b=$('.nav button[data-p="more"]');if(b)b.click()}),PF=mkPage('tdsf','Challan',()=>go());
-const V={tab:'e',co:'',st:'open',q:''};
+const V={tab:'e',co:'',st:'open',q:'',dp:''};
+{const dst=document.createElement('style');dst.textContent='#tdsl .cs-dpt td.c-dp{position:sticky;left:0;z-index:2;background:#fff;white-space:normal;border-left:1px solid #e6eef9;min-width:96px;max-width:96px;width:96px;box-shadow:4px 0 6px -4px #0a3a9a30;vertical-align:middle}#tdsl .cs-dpt tbody tr:nth-child(even) td.c-dp{background:#f4f8ff}#tdsl .cs-dpt td.c-dp .chip-g{font-size:12px;word-break:break-word}html body #tdsl .cs-dpt th:first-child{position:sticky;left:0;z-index:4;min-width:96px!important;max-width:96px!important;width:96px}html body #tdsl .cs-dpt td.c-n2{left:96px!important}html body #tdsl .cs-dpt thead th:nth-child(2){position:sticky;left:96px;z-index:3}html body #tdsl .cs-dpt tr.cs-tot>td.c-dp{background:#0b2a8a!important}';document.head.appendChild(dst)}
+const dpOf=c=>RDLDEPOT.nameOf(c)||'';
 function go(){render();show('tdsl')}
 function strip(host,items,cols){const g=el('div','od-summary');g.style.gridTemplateColumns='repeat('+(cols||2)+',1fr)';items.forEach(([l,v,c])=>{const d=el('div');d.appendChild(el('small',null,l));const s=el('strong',null,v);if(c)s.style.color=c;d.appendChild(s);g.appendChild(d)});host.appendChild(g)}
-function table(host,heads,rows,minW,onRow){const w=el('div','od-table-wrap'),t=el('table','od-table');if(minW)t.style.minWidth=minW+'px';
+function table(host,heads,rows,minW,onRow){const w=el('div','od-table-wrap'),t=el('table','od-table cs-dpt');if(minW)t.style.minWidth=(minW+96)+'px';heads=['Depot Name'].concat(heads);
   const th=el('thead'),hr=el('tr');heads.forEach(h=>hr.appendChild(el('th',null,h)));th.appendChild(hr);t.appendChild(th);const tb=el('tbody');
   rows.forEach(r=>{const tr=el('tr',r.late?'row-late':'row-ok');if(onRow&&r.go){tr.style.cursor='pointer';tr.onclick=r.go}
-    r.c.forEach((c,i)=>{const td=el('td',i===0?'c-name':'');if(c instanceof Node)td.appendChild(c);else{const s=el('span','chip-g '+(i===0?'cn':'cn2'),c);td.appendChild(s)}tr.appendChild(td)});tb.appendChild(tr)});
+    [r.dp||'\u2014'].concat(r.c).forEach((c,i)=>{const td=el('td',i===0?'c-dp':i===1?'c-name c-n2':'');if(c instanceof Node)td.appendChild(c);else{const s=el('span','chip-g '+(i<=1?'cn':'cn2'),c);td.appendChild(s)}tr.appendChild(td)});tb.appendChild(tr)});
   t.appendChild(tb);w.appendChild(t);host.appendChild(w)}
 function sel(opts,val,fn){const s=el('select','list-search');s.style.marginBottom='8px';opts.forEach(([v,t])=>{const o=el('option',null,t);o.value=v;if(v===val)o.selected=true;s.appendChild(o)});s.onchange=()=>fn(s.value);return s}
 
-function render(){const S=get(),all=derive(S),B=PM;B.textContent='';
+function render(){const S=get(),all=derive(S).filter(e=>RDLDEPOT.cuIn(e.cu)),B=PM;B.textContent='';
   const open=all.filter(isOpen),wo=all.filter(e=>e.st==='wo');
   strip(B,[['Total TDS deducted',money(sum(all,e=>e.tds))],['Challan received',money(sum(all,e=>e.r)),'#0b7a4a'],['Challan pending',money(sum(open,e=>e.open)),'#c4203d'],['Written-off',money(sum(wo,e=>e.open))]]);
   const ag=n=>money(sum(open.filter(e=>e.age>n),e=>e.open));
@@ -5749,19 +5936,20 @@ function render(){const S=get(),all=derive(S),B=PM;B.textContent='';
   if(V.tab==='r')return byCo(B,open);
   const cos=[...new Set(all.map(e=>e.co))].sort();
   const f=el('div');f.style.marginTop='10px';
+  {const dn=RDLDEPOT.sel()?[]:RDLDEPOT.names();if(dn.length>1)f.appendChild(sel([['','All depots'],...dn.map(n=>[n,n])],V.dp,v=>{V.dp=v;render()}))}
   f.appendChild(sel([['','All companies'],...cos.map(c=>[c,coName(c)])],V.co,v=>{V.co=v;render()}));
   f.appendChild(sel([['open','Open (Pending + Short)'],['all','All'],['rec','Received'],['wo','Written-off']],V.st,v=>{V.st=v;render()}));
-  const q=el('input','list-search');q.type='search';q.placeholder='Search customer, DZ or challan no.';q.value=V.q;
+  const q=el('input','list-search');q.type='search';q.placeholder='Search depot, customer, DZ or challan no.';q.value=V.q;
   q.onchange=()=>{V.q=q.value;render()};f.appendChild(q);B.appendChild(f);
   const k=V.q.trim().toLowerCase(),cnos={};S.ch.forEach(c=>(c.items||[]).forEach(i=>cnos[i.z]=(cnos[i.z]||'')+' '+c.no));
-  let rows=all.filter(e=>(!V.co||e.co===V.co)&&(V.st==='all'||(V.st==='open'?isOpen(e):e.st===V.st))&&(!k||(e.nm+' '+e.cu+' '+e.bill+(cnos[e.id]||'')).toLowerCase().includes(k)));
+  let rows=all.filter(e=>(!V.co||e.co===V.co)&&(!V.dp||RDLDEPOT.key(dpOf(e.cu))===RDLDEPOT.key(V.dp))&&(V.st==='all'||(V.st==='open'?isOpen(e):e.st===V.st))&&(!k||(e.nm+' '+e.cu+' '+dpOf(e.cu)+' '+e.bill+(cnos[e.id]||'')).toLowerCase().includes(k)));
   const g=new Map();rows.forEach(e=>{(g.get(e.cu)||g.set(e.cu,[]).get(e.cu)).push(e)});
   if(!rows.length)B.appendChild(el('div','nempty',all.length?'No entries match the filter.':'No TDS yet. TDS from posted DZ collections appears here automatically.'));
   else{
     /* one table for all customers: same size and design as the Overdue / Upcoming tables */
     const nameChip=l=>{const sp=el('span','chip-g cn');sp.appendChild(document.createTextNode(l[0].nm||'Customer '+l[0].cu));sp.appendChild(el('small',null,'Code: '+l[0].cu));return sp};
     const trs=[];[...g.values()].sort((a,b)=>sum(b,e=>e.open)-sum(a,e=>e.open)).forEach(list=>{list.sort((a,b)=>a.date<b.date?-1:1);
-      list.forEach(e=>trs.push({late:isOpen(e)&&e.age>days(),go:()=>{if(isOpen(e))form(null,[e.id]);else{const ch=S.ch.find(x=>(x.items||[]).some(i=>i.z===e.id)||(x.ids||[]).includes(e.id));if(ch)form(ch.id,ch.ids)}},
+      list.forEach(e=>trs.push({dp:dpOf(e.cu),late:isOpen(e)&&e.age>days(),go:()=>{if(isOpen(e))form(null,[e.id]);else{const ch=S.ch.find(x=>(x.items||[]).some(i=>i.z===e.id)||(x.ids||[]).includes(e.id));if(ch)form(ch.id,ch.ids)}},
         c:[nameChip(list),coName(e.co),e.bill,dd(e.date),(e.ex>0?(()=>{const w=el('div');w.appendChild(document.createTextNode(money(e.tds)));w.appendChild(el('small',null,' incl. Excess '+money(e.ex)));return w})():money(e.tds)),money(e.r),(()=>{const w=el('div');w.appendChild(chip(e.st));if(isOpen(e))w.appendChild(el('small',null,' '+e.age+'d'));if(e.st==='wo'||e.st==='short')w.appendChild(el('small',null,' \u2212'+money(e.open)));return w})()]}))});
     const hc=el('p','hint',g.size+' customer'+(g.size===1?'':'s')+' \u2022 '+rows.length+' entr'+(rows.length===1?'y':'ies')+' \u2022 Pending '+money(sum(rows.filter(isOpen),e=>e.open)));hc.style.margin='8px 4px';B.appendChild(hc);
     table(B,['Customer Name','Company','DZ','Posting Date','TDS','Received','Status'],trs,1040,true)}
@@ -5770,15 +5958,15 @@ function render(){const S=get(),all=derive(S),B=PM;B.textContent='';
 function home2(){tile()}
 function challans(B,S,all){const byId=new Map(all.map(e=>[e.id,e]));
   if(!S.ch.length){B.appendChild(el('div','nempty','No challan recorded yet.'));return}
-  table(B,['Challan No.','Date','Customer','Amount','TDS entries','Short / Written-off'],[...S.ch].sort((a,b)=>a.date<b.date?1:-1).map(c=>{
+  table(B,['Challan No.','Date','Customer','Amount','TDS entries','Short / Written-off'],[...S.ch].filter(c=>!RDLDEPOT.sel()||(c.ids||[]).some(i=>byId.has(i))).sort((a,b)=>a.date<b.date?1:-1).map(c=>{
     const es=(c.ids||[]).map(i=>byId.get(i)).filter(Boolean),nm=[...new Set(es.map(e=>e.nm||e.cu))],sh=sum(es.filter(e=>e.st==='wo'||e.st==='short'),e=>e.open);
-    return{go:()=>form(c.id,c.ids),c:[c.no,dd(c.date),nm.length>2?nm.slice(0,2).join(', ')+' +'+(nm.length-2):nm.join(', ')||'—',money(c.amt),String(es.length),sh>EPS?money(sh):'—']}}),900,true)}
+    return{dp:[...new Set(es.map(e=>dpOf(e.cu)).filter(Boolean))].join(', '),go:()=>form(c.id,c.ids),c:[c.no,dd(c.date),nm.length>2?nm.slice(0,2).join(', ')+' +'+(nm.length-2):nm.join(', ')||'—',money(c.amt),String(es.length),sh>EPS?money(sh):'—']}}),900,true)}
 function byCo(B,open){if(!open.length){B.appendChild(el('div','nempty','No pending challan. Nothing to collect from any company.'));return}
   const g=new Map();open.forEach(e=>(g.get(e.co)||g.set(e.co,[]).get(e.co)).push(e));
   [...g.entries()].sort((a,b)=>sum(b[1],e=>e.open)-sum(a[1],e=>e.open)).forEach(([co,l])=>{
     const c=el('div','st-card');c.appendChild(el('h3',null,coName(co)));c.appendChild(el('p','hint','Pending '+money(sum(l,e=>e.open))+' • '+l.length+' entr'+(l.length===1?'y':'ies')+' • oldest '+Math.max(...l.map(e=>e.age))+' days'));
     const m=new Map();l.forEach(e=>(m.get(e.cu)||m.set(e.cu,[]).get(e.cu)).push(e));
-    table(c,['Customer','Entries','Pending','Oldest'],[...m.values()].sort((a,b)=>sum(b,e=>e.open)-sum(a,e=>e.open)).map(x=>({c:[x[0].nm||x[0].cu,String(x.length),money(sum(x,e=>e.open)),Math.max(...x.map(e=>e.age))+' Days']})),420);B.appendChild(c)})}
+    table(c,['Customer','Entries','Pending','Oldest'],[...m.values()].sort((a,b)=>sum(b,e=>e.open)-sum(a,e=>e.open)).map(x=>({dp:dpOf(x[0].cu),c:[x[0].nm||x[0].cu,String(x.length),money(sum(x,e=>e.open)),Math.max(...x.map(e=>e.age))+' Days']})),420);B.appendChild(c)})}
 
 /* ---- challan form (add / edit) ---- */
 function form(cid,pre){const S=get(),ed=cid?S.ch.find(c=>c.id===cid):null,all=derive(S,cid),B=PF;B.textContent='';
@@ -6012,12 +6200,12 @@ function show(id){$$('.pg').forEach(x=>x.classList.remove('on'));$$('.nav button
 const goMore=()=>{const b=$('.nav button[data-p="more"]');if(b)b.click();refreshMore()};
 
 /* ---------- customer picker: search the database, or just type any name ---------- */
-function custs(){const m=R.master,mp=new Map();if(m){m.cr.forEach(r=>mp.set(String(r.bp),r.nm));m.out.forEach(b=>{if(!mp.has(String(b.cu)))mp.set(String(b.cu),b.nm)})}return[...mp].map(([code,name])=>({code,name:name||('Customer '+code)}))}
+function custs(){const m=R.master,mp=new Map();if(m){m.cr.forEach(r=>mp.set(String(r.bp),r.nm));m.out.forEach(b=>{if(!mp.has(String(b.cu)))mp.set(String(b.cu),b.nm)})}return[...mp].map(([code,name])=>({code,name:name||('Customer '+code),dp:(window.RDLDEPOT&&RDLDEPOT.nameOf(code))||''}))}
 function picker(host,init,optional){const st={cu:init&&init.cu||null,nm:init&&init.nm||''};
-  const q=el('input','list-search');q.placeholder=optional?'Optional — code or name':'Code or customer name (or type any name)';q.autocomplete='off';q.value=st.nm?(st.cu?st.nm+' ('+st.cu+')':st.nm):'';
+  const q=el('input','list-search');q.placeholder=optional?'Optional — code, name or depot':'Code, customer name or depot (or type any name)';q.autocomplete='off';q.value=st.nm?(st.cu?st.nm+' ('+st.cu+')':st.nm):'';
   const sg=el('div','od-suggestions');host.appendChild(q);host.appendChild(sg);
   q.addEventListener('input',()=>{st.cu=null;st.nm=q.value.trim();sg.textContent='';const v=st.nm.toLowerCase();if(v.length<2)return;
-    custs().filter(c=>c.code.toLowerCase().includes(v)||c.name.toLowerCase().includes(v)).slice(0,8).forEach(c=>{const b=el('button','od-sug',c.name+' ');b.type='button';b.appendChild(el('small',null,c.code));
+    custs().filter(c=>c.code.toLowerCase().includes(v)||c.name.toLowerCase().includes(v)||(c.dp||'').toLowerCase().includes(v)).slice(0,8).forEach(c=>{const b=el('button','od-sug',c.name+' ');b.type='button';b.appendChild(el('small',null,c.code+(c.dp?' \u2022 '+c.dp:'')));
       b.onclick=()=>{st.cu=c.code;st.nm=c.name;q.value=c.name+' ('+c.code+')';sg.textContent=''};sg.appendChild(b)})});
   return st}
 const field=(host,label,node)=>{host.appendChild(el('label','od-label',label));host.appendChild(node);return node};
@@ -6028,8 +6216,9 @@ const tInfo=k=>TYPES.find(t=>t[0]===(k==='visit'?'regular':k))||TYPES[6];
 const PMAP={regular:'Courtesy visit',collection:'Collection',tds:'TDS challan',issue:'Complaint / issue',meeting:'Meeting'};
 const SV={type:null};
 const SP=mkPage('sched','Schedule',goMore),SF=mkPage('schedf','New schedule',()=>{show('sched');drawS()});
-const pend=()=>getS().items;
-function drawS(){const B=SP.body;B.textContent='';const S=getS();
+const dpOf=cu=>cu&&window.RDLDEPOT?RDLDEPOT.nameOf(cu):'',dpShow=i=>!i||!i.cu||!window.RDLDEPOT||RDLDEPOT.cuIn(i.cu),dpLine=(card,i)=>{const d=dpOf(i&&i.cu);if(d){const x=el('div','mv-nt',d);x.style.cssText='font-weight:800;color:#0f766e;font-size:12px';card.appendChild(x)}};
+const pend=()=>getS().items.filter(dpShow);
+function drawS(){const B=SP.body;B.textContent='';const S=getS();S.items=S.items.filter(dpShow);
   B.appendChild(el('div','mv-day','Choose a schedule topic'));
   const ty=el('div','mv-types mv-swipe');TYPES.forEach(x=>{const n=S.items.filter(i=>(i.type==='visit'?'regular':i.type)===x[0]).length,b=el('button',SV.type===x[0]?'on':'',x[1]+(n?' ('+n+')':''));b.type='button';b.onclick=()=>{SV.sx=ty.scrollLeft;SV.type=SV.type===x[0]?null:x[0];drawS()};ty.appendChild(b)});B.appendChild(ty);ty.scrollLeft=SV.sx||0;
   const msg=el('div','stt');const add=el('button','st-btn','+ New schedule');add.type='button';
@@ -6039,7 +6228,7 @@ function drawS(){const B=SP.body;B.textContent='';const S=getS();
   const t=today();let last='';L.forEach(it=>{if(it.date!==last){last=it.date;B.appendChild(el('div','mv-day',dow(it.date)+', '+dd(it.date)+(it.date===t?' • Today':'')))}
     const ti=tInfo(it.type),card=el('div','mv-item');card.style.setProperty('--c',ti[2]);
     const top=el('div','mv-top');top.appendChild(el('span','mv-chip',ti[1]));if(it.time)top.appendChild(el('span','mv-time','⏰ '+hm(it.time)));card.appendChild(top);
-    if(it.nm)card.appendChild(el('div','mv-nm',it.nm));if(it.amt)card.appendChild(el('div','mv-nt','Expected '+money(it.amt)));if(it.note)card.appendChild(el('div','mv-nt',it.note));
+    dpLine(card,it);if(it.nm)card.appendChild(el('div','mv-nm',it.nm));if(it.amt)card.appendChild(el('div','mv-nt','Expected '+money(it.amt)));if(it.note)card.appendChild(el('div','mv-nt',it.note));
     const ac=el('div','mv-act'),btn=(t,f,c)=>{const b=el('button',c||'',t);b.type='button';b.onclick=f;ac.appendChild(b)};
     btn('✓ Done',()=>{const S2=getS();S2.items=S2.items.filter(x=>x.id!==it.id);saveS(S2);drawS();refreshMore();setTimeout(schedNotif,30)},'ok');
     if(PMAP[it.type]||it.type==='visit')btn('Log in DCR',()=>openDF({date:it.date,cu:it.cu,nm:it.nm,purpose:PMAP[it.type]||'Courtesy visit',tin:it.time||'',note:it.note||''}));
@@ -6067,7 +6256,7 @@ function openS(){drawS();show('sched')}
 const PUR=['Collection','Order','Meeting','Courtesy visit','Complaint / issue','TDS challan','Other'];
 const DV={date:today(),days:15};
 const DP=mkPage('dcrp','DCR',goMore),DF=mkPage('dcrf','Add visit',()=>{show('dcrp');drawD()});
-const vOf=d=>getV().visits.filter(v=>v.date===d).sort((a,b)=>(a.tin||'99')>(b.tin||'99')?1:-1);
+const vOf=d=>getV().visits.filter(v=>v.date===d&&dpShow(v)).sort((a,b)=>(a.tin||'99')>(b.tin||'99')?1:-1);
 const key=v=>v.cu||String(v.nm||'').toLowerCase();
 function stats(L){return{n:L.length,c:new Set(L.map(key)).size,m:L.reduce((s,v)=>s+(mins(v.tin,v.tout)>0?mins(v.tin,v.tout):0),0)}}
 function drawD(){const B=DP.body;B.textContent='';
@@ -6080,12 +6269,12 @@ function drawD(){const B=DP.body;B.textContent='';
   if(!L.length)B.appendChild(el('div','mv-empty','No visit recorded for this day.'));
   L.forEach(v=>{const card=el('div','mv-item');card.style.setProperty('--c','#1d6fe8');const top=el('div','mv-top');
     top.appendChild(el('span','mv-chip',v.purpose||'Visit'));top.appendChild(el('span','mv-time','⏰ '+(v.tin?hm(v.tin):'—')+(v.tout?' – '+hm(v.tout):'')));const m=mins(v.tin,v.tout);if(m>0)top.appendChild(el('span','mv-time','• '+dur(m)));card.appendChild(top);
-    card.appendChild(el('div','mv-nm',v.nm||'(no name)'));if(v.note)card.appendChild(el('div','mv-nt',v.note));
+    dpLine(card,v);card.appendChild(el('div','mv-nm',v.nm||'(no name)'));if(v.note)card.appendChild(el('div','mv-nt',v.note));
     const ac=el('div','mv-act'),btn=(t,f,c)=>{const b=el('button',c||'',t);b.type='button';b.onclick=f;ac.appendChild(b)};
     btn('Edit',()=>openDF(v,true));btn('Delete',()=>{if(confirm('Delete this visit?')){const V=getV();V.visits=V.visits.filter(x=>x.id!==v.id);saveV(V);drawD();refreshMore()}},'del');card.appendChild(ac);B.appendChild(card)});
   /* day-wise report */
   B.appendChild(el('div','mv-day','Day-wise report'));const rg=el('select','list-search');[[7,'Last 7 days'],[15,'Last 15 days'],[30,'Last 30 days'],[90,'Last 90 days']].forEach(([v,l])=>rg.appendChild(new Option(l,v)));rg.value=DV.days;rg.onchange=()=>{DV.days=+rg.value;drawD()};B.appendChild(rg);
-  const V=getV().visits,t=today(),tb=el('table','mv-tbl'),th=el('tr');['Date','Visits','Customers','Time'].forEach(h=>th.appendChild(el('th',null,h)));tb.appendChild(th);
+  const V=getV().visits.filter(dpShow),t=today(),tb=el('table','mv-tbl'),th=el('tr');['Date','Visits','Customers','Time'].forEach(h=>th.appendChild(el('th',null,h)));tb.appendChild(th);
   let T={n:0,m:0},uc=new Set();
   for(let i=0;i<DV.days;i++){const d=addD(t,-i),l=V.filter(v=>v.date===d),x=stats(l);T.n+=x.n;T.m+=x.m;l.forEach(v=>uc.add(key(v)));
     const r=el('tr','tap'+(d===DV.date?' sel':''));[dow(d)+' '+dd(d).slice(0,6),x.n||'—',x.c||'—',x.m?dur(x.m):'—'].forEach(c=>r.appendChild(el('td',null,String(c))));r.onclick=()=>{DV.date=d;drawD();window.scrollTo(0,0)};tb.appendChild(r)}
@@ -6122,10 +6311,10 @@ function drawN(){const B=NP.body;B.textContent='';const N=getN();
   const add=el('button','st-btn','+ New note');add.type='button';add.onclick=()=>openNF(null);B.appendChild(add);
   const box=el('div');B.appendChild(box);
   const list=()=>{box.textContent='';const v=NV.q.trim().toLowerCase();
-    const L=N.items.filter(i=>!v||[i.t,i.x,i.nm].some(z=>String(z||'').toLowerCase().includes(v))).sort((a,b)=>(b.pin?1:0)-(a.pin?1:0)||(b.up||0)-(a.up||0));
+    const L=N.items.filter(i=>dpShow(i)&&(!v||[i.t,i.x,i.nm,dpOf(i.cu)].some(z=>String(z||'').toLowerCase().includes(v)))).sort((a,b)=>(b.pin?1:0)-(a.pin?1:0)||(b.up||0)-(a.up||0));
     if(!L.length){box.appendChild(el('div','mv-empty',N.items.length?'No note matches your search.':'No notes yet. Tap “+ New note” to keep something important here.'));return}
     L.forEach(it=>{const c=el('div','mv-item');c.style.setProperty('--c',it.c||NCOL[0][0]);
-      const top=el('div','mv-top');if(it.pin)top.appendChild(el('span','mv-chip','📌 Pinned'));if(it.nm)top.appendChild(el('span','mv-time',it.nm));top.appendChild(el('span','mv-time',dd(ymd(new Date(it.up||it.at)))));c.appendChild(top);
+      const top=el('div','mv-top');if(it.pin)top.appendChild(el('span','mv-chip','📌 Pinned'));if(dpOf(it.cu))top.appendChild(el('span','mv-time',dpOf(it.cu)));if(it.nm)top.appendChild(el('span','mv-time',it.nm));top.appendChild(el('span','mv-time',dd(ymd(new Date(it.up||it.at)))));c.appendChild(top);
       if(it.t)c.appendChild(el('div','mv-nm',it.t));if(it.x)c.appendChild(el('div','mv-nt',it.x));
       const act=el('div','mv-act'),mkB=(tx,cls,fn)=>{const b=el('button',cls,tx);b.type='button';b.onclick=fn;act.appendChild(b)};
       mkB('Edit','',()=>openNF(it));
@@ -6151,7 +6340,7 @@ function openNF(it){const B=NF.body;B.textContent='';NF.h.textContent=it?'Edit n
 function openN(){NV.q='';drawN();show('notes')}
 R.openNotes=openN;
 const mp=$('#more');let tS,tD,tT,tN;
-function refreshMore(){if(!tS)return;if(tN){const nn=getN().items.length;tN.textContent=nn?nn+' note'+(nn===1?'':'s')+' • tap to open':'Keep important things — reminders, customer remarks, numbers'}const n=pend().length,s=stats(vOf(today()));
+function refreshMore(){if(!tS)return;if(tN){const nn=getN().items.filter(dpShow).length;tN.textContent=nn?nn+' note'+(nn===1?'':'s')+' • tap to open':'Keep important things — reminders, customer remarks, numbers'}const n=pend().length,s=stats(vOf(today()));
   if(tT){let i0=null;try{i0=R.tds&&R.tds.info&&R.tds.info()}catch(e){}tT.textContent=i0&&i0.n?'Challan pending \u2022 '+i0.n+' entr'+(i0.n===1?'y':'ies')+' \u2022 '+money(i0.amt):'No challan pending \u2022 Deducted TDS, challan received, written-off'}
   tS.textContent=n?n+' upcoming schedule'+(n===1?'':'s'):'Visits, collection, TDS, SAP receive and meetings';
   tD.textContent=s.n?'Today: '+s.n+' visit'+(s.n===1?'':'s')+' • '+s.c+' customer'+(s.c===1?'':'s')+' • '+dur(s.m):'Daily Call Report — customers visited, time spent, purpose'}
