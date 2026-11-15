@@ -1530,16 +1530,22 @@ function onCred(r){
   tok={id:r.credential,exp:jwtExp(r.credential)};try{sessionStorage.setItem('rdlgate.tok',JSON.stringify(tok))}catch(e){}
   waiters.splice(0).forEach(function(w){w.res(tok.id)});
   if(!S)firstLogin();else{if(Date.now()-afterAt>600000)afterLogin();if(panelOn)renderPanel()}}
+function sessGet(){var s=jget('rdlgate.sess');return s&&s.t&&s.exp-120000>Date.now()?s:null}
+function hasAuth(){return !!((tok&&tok.exp-120000>Date.now())||sessGet())}
 function needTok(allowPrompt){return new Promise(function(res,rej){
   if(tok&&tok.exp-120000>Date.now())return res(tok.id);
+  var ss=sessGet();if(ss)return res(ss.t);   /* own long-lasting session: no Google button needed */
   if(!gis||allowPrompt===false)return rej(new Error('Not signed in right now'));
   var w={res:res,rej:rej};waiters.push(w);
   try{google.accounts.id.prompt()}catch(e){}
   setTimeout(function(){var i=waiters.indexOf(w);if(i>=0){waiters.splice(i,1);rej(new Error('Sign-in needed. Open the ☁ menu and tap the blue Sign in button.'))}},12000)})}
-function api(action,body,noPrompt){
+function api(action,body,noPrompt,again){
   return needTok(noPrompt?false:true).then(function(t){
     var o={action:action,token:t};for(var k in body)o[k]=body[k];
-    return fetch(CFG.url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(o)}).then(function(r){return r.json()})})
+    return fetch(CFG.url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(o)}).then(function(r){return r.json()}).then(function(j){
+      if(j&&j.session&&j.session.t){try{LS.setItem('rdlgate.sess',JSON.stringify(j.session))}catch(e){}}
+      if(j&&!j.ok&&/^SESSION_EXPIRED/.test(String(j.error))&&!again){LS.removeItem('rdlgate.sess');return api(action,body,noPrompt,1)}
+      return j})})
   .then(function(j){if(!j||!j.ok)throw new Error(j&&j.error||'Server error');return j})}
 
 /* ---------- login screen ---------- */
@@ -1554,40 +1560,73 @@ function showLogin(){
 function setLogin(t,bad){var m=document.getElementById('rgx-lm');if(m){m.textContent=t;m.className='rgx-msg'+(bad?' bad':'')}}
 function setDepotLabel(){if(S&&S.role==='user'&&S.depot){var p=jget('rdl.prefs.v1')||{};if(p.depot!==S.depot){p.depot=S.depot;LS.setItem('rdl.prefs.v1',JSON.stringify(p))}}}
 function wipeUserData(){Object.keys(LS).filter(function(k){return k.indexOf('rdl.')===0&&k!=='rdl.prefs.v1'&&k!=='rdl.cleanstart.v2'}).forEach(function(k){LS.removeItem(k)});
-  ['rdlgate.dataAt','rdlgate.dcrAt','rdlgate.asg','rdlgate.bk','rdlgate.bkdirty','rdlgate.perms','rdlgate.chg'].forEach(function(k){LS.removeItem(k)})}
+  ['rdlgate.dataAt','rdlgate.dcrAt','rdlgate.ledAt','rdlgate.asg','rdlgate.bk','rdlgate.bkdirty','rdlgate.perms','rdlgate.chg'].forEach(function(k){LS.removeItem(k)})}
+/* ---------- keep the admin's own data when a depot user signs in on the same phone ---------- */
+function stashKeys(){return Object.keys(LS).filter(function(k){return k.indexOf('rdl.')===0&&k!=='rdl.prefs.v1'&&k!=='rdl.cleanstart.v2'}).concat(['rdlgate.bk','rdlgate.bkdirty','rdlgate.chg','rdlgate.dataAt','rdlgate.dcrAt'].filter(function(k){return LS.getItem(k)!==null}))}
+function idbOpen(){return new Promise(function(res,rej){try{var q=indexedDB.open('rdl-stash',1);q.onupgradeneeded=function(){q.result.createObjectStore('s')};q.onsuccess=function(){res(q.result)};q.onerror=function(){rej(q.error||new Error('IndexedDB error'))}}catch(e){rej(e)}})}
+function idbDo(mode,fn){return idbOpen().then(function(d){return new Promise(function(res,rej){var t=d.transaction('s',mode),r=fn(t.objectStore('s'));t.oncomplete=function(){d.close();res(r&&r.result)};t.onerror=t.onabort=function(){d.close();rej(t.error||new Error('IndexedDB error'))}})})}
+function stashAdmin(){
+  if(LS.getItem('rdlgate.owner')!=='admin'||!LS.getItem('rdl.master.v1'))return Promise.resolve();
+  var o={},ks=stashKeys();ks.forEach(function(k){o[k]=LS.getItem(k)});
+  return idbDo('readwrite',function(st){return st.put({at:Date.now(),data:o},'admin')})
+    .then(function(){return idbDo('readonly',function(st){return st.get('admin')})})
+    .then(function(r){if(!r||!r.data||Object.keys(r.data).length!==ks.length)throw new Error('Could not keep the admin data safe on this phone, so nothing was changed.')})
+    .catch(function(){throw new Error('Could not keep the admin data safe on this phone, so nothing was changed.')})}
+function restoreAdmin(){
+  return idbDo('readonly',function(st){return st.get('admin')}).catch(function(){return null}).then(function(r){
+    if(r&&r.data){
+      sysW=1;try{wipeUserData();Object.keys(r.data).forEach(function(k){LS.setItem(k,r.data[k])});LS.setItem('rdlgate.owner','admin')}finally{sysW=0}
+      return idbDo('readwrite',function(st){return st.delete('admin')}).catch(function(){}).then(function(){return true})}
+    /* nothing kept on this phone: bring the admin's newest saved backup back from the cloud */
+    return api('getMyBackup',null,true).then(function(j){
+      if(!j||j.empty||!j.data||!j.data['rdl.master.v1'])return false;
+      sysW=1;try{wipeUserData();Object.keys(j.data).forEach(function(k){if(k.indexOf('rdl.')===0&&k!=='rdl.prefs.v1'&&k!=='rdl.cleanstart.v2')LS.setItem(k,j.data[k])});LS.setItem('rdlgate.owner','admin')}finally{sysW=0}
+      return true}).catch(function(){return false})})}
 function firstLogin(){
   setLogin('Checking access…');
   api('me').then(function(j){
     var u=j.user;S={email:u.email,name:u.name,role:u.role,depot:u.depot,seq:u.seq,root:!!u.root};
-    if(u.role==='user'){setLogin('Downloading your depot data…');wipeUserData();
-      return pullData(true).then(function(){setDepotLabel();jset(SK,S);location.reload()})}
+    if(u.role==='user'){setLogin('Downloading your depot data…');
+      return stashAdmin().then(function(){wipeUserData();return pullData(true)}).then(function(){LS.setItem('rdlgate.owner','user');setDepotLabel();jset(SK,S);location.reload()})}
+    if(u.role==='admin'){setLogin('Loading your data…');
+      return restoreAdmin().then(function(){jset(SK,S);location.reload()})}
     jset(SK,S);location.reload()
   }).catch(function(e){S=null;tok=null;setLogin(msgOf(e),true)})}
 function forcedOut(msg){
-  if(S&&S.role==='user')wipeUserData();clearPin();LS.removeItem(SK);LS.removeItem('rdlgate.perms');
+  if(S&&S.role==='user')wipeUserData();clearPin();LS.removeItem('rdlgate.sess');LS.removeItem(SK);LS.removeItem('rdlgate.perms');
   try{google.accounts.id.disableAutoSelect()}catch(e){}
   alert(msg||'Your access was removed. Please contact the admin.');location.reload()}
 
 /* ---------- user: download the depot package ---------- */
+function mergeAdminLedger(led){
+  var L=jget('rdl.ledger.v1')||{};L.rv=L.rv||[];L.dz=L.dz||[];L.n=L.n||{RV:0,DZ:0};L.ps=L.ps||{};L.pc=L.pc||{};L.pl=L.pl||{};
+  ['rv','dz'].forEach(function(k){
+    var own=L[k].filter(function(x){return !x._adm}),have={};own.forEach(function(x){have[x.bill]=1});
+    var add=(led[k]||[]).filter(function(x){return !have[x.bill]}).map(function(x){var c={};for(var q in x)c[q]=x[q];c._adm=1;return c});
+    L[k]=own.concat(add)});
+  jset('rdl.ledger.v1',L)}
 function pullData(force){
   return api('getData').then(function(p){
     if(p.empty){if(force)throw new Error('No data has been published for "'+S.depot+'" yet. Ask the admin.');return false}
-    var dataAt=+LS.getItem('rdlgate.dataAt')||0,dcrAt=+LS.getItem('rdlgate.dcrAt')||0,part={},asg=p.asg||'';
-    if(asg&&asg!==(LS.getItem('rdlgate.asg')||'')){dataAt=0;dcrAt=0}   /* the admin changed this user's depots / customers: download everything again */
+    var dataAt=+LS.getItem('rdlgate.dataAt')||0,dcrAt=+LS.getItem('rdlgate.dcrAt')||0,ledAt=+LS.getItem('rdlgate.ledAt')||0,part={},asg=p.asg||'';
+    if(asg&&asg!==(LS.getItem('rdlgate.asg')||'')){dataAt=0;dcrAt=0;ledAt=0}   /* the admin changed this user's depots / customers: download everything again */
     if(p.at>dataAt){part.out=p.out;part.cr=p.cr;part.at=p.at;part.cut=p.cut||''}
     if(p.dcr&&p.dcr.at>dcrAt)part.dcr=p.dcr;
-    if(!part.out&&!part.dcr)return false;
+    if(p.led&&p.led.at>ledAt)part.led=p.led;
+    if(!part.out&&!part.dcr&&!part.led)return false;
     if(!window.RDL||!RDL.applyRemote)throw new Error('App is not ready, reload and try again');
-    var okA=false;sysW=1;try{okA=RDL.applyRemote(part)}finally{sysW=0}
+    var okA=false;sysW=1;try{if(part.led)mergeAdminLedger(part.led);okA=RDL.applyRemote(part)}finally{sysW=0}
     if(!okA)throw new Error('Could not save the data on this phone');
     if(part.at)LS.setItem('rdlgate.dataAt',String(part.at));
     if(part.dcr)LS.setItem('rdlgate.dcrAt',String(part.dcr.at));
+    if(part.led)LS.setItem('rdlgate.ledAt',String(part.led.at));
     if(asg)LS.setItem('rdlgate.asg',asg);
     return true})}
 
 /* ---------- backup (user and admin) ---------- */
 function collect(){var o={};for(var i=0;i<LS.length;i++){var k=LS.key(i);if(k.indexOf('rdl.')===0)o[k]=LS.getItem(k)}return o}
 function sendBackup(noPrompt){
+  if(S&&S.role==='admin'&&!LS.getItem('rdl.master.v1'))return Promise.reject(new Error('this phone has no data yet, so no backup was sent (your saved backup is safe)'));
   return api('putBackup',{data:collect(),meta:{dataAt:+LS.getItem('rdlgate.dataAt')||0}},noPrompt).then(function(){
     LS.setItem('rdlgate.bk',String(Date.now()));LS.removeItem('rdlgate.bkdirty');try{_s.call(LS,'rdl.bkp.v1',JSON.stringify({at:Date.now()}));window.dispatchEvent(new Event('rdl:remind'))}catch(e){}status('Backup saved '+hhmm(),'ok');return flushChg(noPrompt)})}
 function backupIfDue(){
@@ -1650,16 +1689,17 @@ P.setItem=function(k,v){
   var r=_s.apply(this,arguments);
   if(ch){try{noteChange(k,old,String(v))}catch(e){}}
   if(this===LS&&typeof k==='string'&&k.indexOf('rdl.')===0&&k!=='rdl.bkp.v1'&&S){_s.call(LS,'rdlgate.bkdirty','1');clearTimeout(timer);timer=setTimeout(function(){
-    if(Date.now()-lastPrompt<600000&&!(tok&&tok.exp-120000>Date.now()))return;lastPrompt=Date.now();sendBackup().catch(function(){})},10000)}
+    if(Date.now()-lastPrompt<600000&&!hasAuth())return;lastPrompt=Date.now();sendBackup().catch(function(){})},10000)}
   return r};
-document.addEventListener('visibilitychange',function(){if(document.visibilityState==='hidden'&&S&&LS.getItem('rdlgate.bkdirty')==='1'&&tok&&tok.exp-120000>Date.now())sendBackup(true).catch(function(){})});
+document.addEventListener('visibilitychange',function(){if(document.visibilityState==='hidden'&&S&&LS.getItem('rdlgate.bkdirty')==='1'&&hasAuth())sendBackup(true).catch(function(){})});
 /* instant backup, retried: a failed backup (no internet, expired sign-in) is tried again every 3 minutes, when the net returns and when the app is opened again */
-function retryBackup(){if(S&&LS.getItem('rdlgate.bkdirty')==='1'&&tok&&tok.exp-120000>Date.now())sendBackup(true).catch(function(){})}
+function retryBackup(){if(S&&LS.getItem('rdlgate.bkdirty')==='1'&&hasAuth())sendBackup(true).catch(function(){})}
 setInterval(retryBackup,180000);window.addEventListener('online',function(){setTimeout(retryBackup,2000)});
 document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible')setTimeout(retryBackup,1500)});
 
 /* ---------- admin: push database to depots ---------- */
-function sigNow(){var m=jget('rdl.master.v1'),d=jget('rdl.dcr.v1');return m?(m.at+'|'+(d?d.at:0)+'|'+(LS.getItem('rdlgate.cut')||'')):''}
+function ledSig(){var L=jget('rdl.ledger.v1');if(!L)return '0';var s='';try{s=JSON.stringify({rv:L.rv||[],dz:L.dz||[]})}catch(e){}return (L.rv||[]).length+'/'+(L.dz||[]).length+'/'+s.length}
+function sigNow(){var m=jget('rdl.master.v1'),d=jget('rdl.dcr.v1');return m?(m.at+'|'+(d?d.at:0)+'|'+(LS.getItem('rdlgate.cut')||'')+'|'+ledSig()):''}
 function buildPkgs(){
   var m=jget('rdl.master.v1');if(!m)return{err:'No database in this app yet. Upload the Outstanding and Credit Limit files first.'};
   var d=jget('rdl.dcr.v1'),by={},un=0,cut=LS.getItem('rdlgate.cut')||'';
@@ -1667,6 +1707,11 @@ function buildPkgs(){
     var b=by[k]||(by[k]={depot:k,at:m.at,cut:cut,out:[],cr:[],_n:{}});b[kind].push(r);b._n[String(r.nm||'').toLowerCase()]=1}
   (m.out||[]).forEach(function(r){add(r,'out')});(m.cr||[]).forEach(function(r){add(r,'cr')});
   var names=Object.keys(by);if(!names.length)return{err:'No Depot found. Add a "Depot" column to both Excel files and upload again.'};
+  /* posted Sales (RV) and Collections (DZ): each goes to the depot its customer belongs to, so depot users see the same balances as the admin */
+  var cmap={},LL=jget('rdl.ledger.v1')||{},lat=Date.now();
+  (m.out||[]).forEach(function(r){if(r.dp)cmap[String(r.cu)]=String(r.dp).trim()});(m.cr||[]).forEach(function(r){if(r.dp)cmap[String(r.bp)]=String(r.dp).trim()});
+  names.forEach(function(k){by[k].led={at:lat,rv:[],dz:[]}});
+  ['rv','dz'].forEach(function(t){(LL[t]||[]).forEach(function(x){var k=cmap[String(x.cu)];if(k&&by[k])by[k].led[t].push(x)})});
   names.forEach(function(k){var b=by[k];
     b.dcr=(d&&d.rows)?{rows:d.rows.filter(function(x){return b._n[String(x.n||'').toLowerCase()]}),lastSheet:d.lastSheet,lastDate:d.lastDate,fileName:d.fileName,at:d.at}:null;delete b._n});
   return{by:by,un:un,names:names}}
@@ -1678,12 +1723,13 @@ function pushData(){
 
 /* ---------- admin: merge users' backups into this app ---------- */
 function isObj(x){return x&&typeof x==='object'&&!Array.isArray(x)}
-function strip(o){if(!isObj(o))return JSON.stringify(o);var c={};for(var k in o)if(k!=='_u')c[k]=o[k];return JSON.stringify(c)}
+function strip(o){if(!isObj(o))return JSON.stringify(o);var c={};for(var k in o)if(k!=='_u'&&k!=='_adm')c[k]=o[k];return JSON.stringify(c)}
 function mergeVal(base,inc,who){
   if(Array.isArray(inc)){
     var b=Array.isArray(base)?base:[],keep=b.filter(function(x){return !(isObj(x)&&x._u===who)}),seen={};
     keep.forEach(function(x){seen[strip(x)]=1});
-    inc.forEach(function(x){var s=strip(x);if(seen[s])return;seen[s]=1;if(isObj(x)){var c={};for(var k in x)c[k]=x[k];c._u=who;keep.push(c)}else keep.push(x)});
+    inc.forEach(function(x){if(isObj(x)&&x._adm)return;   /* rows that came from the admin never travel back to the admin */
+      var s=strip(x);if(seen[s])return;seen[s]=1;if(isObj(x)){var c={};for(var k in x)c[k]=x[k];c._u=who;keep.push(c)}else keep.push(x)});
     return keep}
   if(isObj(inc)){var r=isObj(base)?base:{};for(var k in inc)r[k]=mergeVal(r[k],inc[k],who);return r}
   return base===undefined||base===null?inc:base}
@@ -1721,12 +1767,83 @@ function afterLogin(){
     var u=j.user,ch=u.role!==S.role||u.depot!==S.depot||u.seq!==S.seq;
     S={email:u.email,name:u.name,role:u.role,depot:u.depot,seq:u.seq,root:!!u.root};jset(SK,S);
     setDepotLabel();if(ch){location.reload();return}
+    if(S.role==='admin'){if(!LS.getItem('rdl.master.v1'))return restoreAdmin().then(function(ok){if(ok){location.reload();throw new Error('__reload')}});LS.setItem('rdlgate.owner','admin')}
+    if(S.role==='user')LS.setItem('rdlgate.owner','user');
     if(S.role==='user')return pullData(false).then(function(changed){if(changed){toast('New data received — reloading…');setTimeout(function(){location.reload()},900);throw new Error('__reload')}});
     if(S.role==='admin'&&sigNow()&&LS.getItem('rdlgate.sig')!==sigNow())return pushData().then(function(t){toast('Database published to depots')}).catch(function(e){status(msgOf(e),'warn')})
   }).then(loadPerms).then(function(){return backupIfDue()}).then(function(){return pullAlerts()}).catch(function(e){
     if(e.message==='__reload')return;
     if(/ACCESS_DENIED/.test(e.message))return forcedOut(msgOf(e));
     status('Offline or not synced: '+msgOf(e),'warn')})}
+
+/* ---------- my profile (everyone) / read another person's profile (admin) ---------- */
+function resizePhoto(file){return new Promise(function(res,rej){
+  var img=new Image(),u=URL.createObjectURL(file);
+  img.onload=function(){try{var s=200,c=document.createElement('canvas');c.width=c.height=s;var x=c.getContext('2d'),m=Math.min(img.width,img.height),sx=(img.width-m)/2,sy=(img.height-m)/2;
+    x.fillStyle='#fff';x.fillRect(0,0,s,s);x.drawImage(img,sx,sy,m,m,0,0,s,s);URL.revokeObjectURL(u);
+    var q=.8,d=c.toDataURL('image/jpeg',q);while(d.length>30000&&q>.3){q-=.1;d=c.toDataURL('image/jpeg',q)}
+    d.length>40000?rej(new Error('The picture is too large')):res(d)}catch(e){rej(e)}};
+  img.onerror=function(){URL.revokeObjectURL(u);rej(new Error('Could not read this picture'))};img.src=u})}
+function openProfile(email){
+  var mine=!email||String(email).toLowerCase()===String(S.email).toLowerCase();
+  panelOn=false;try{renderPanel()}catch(e){}
+  var old=document.getElementById('rgx-prof');if(old)old.remove();
+  var ov=h('div');ov.id='rgx-prof';ov.style.cssText='position:fixed;inset:0;z-index:100001;background:rgba(0,0,0,.45);overflow:auto;-webkit-overflow-scrolling:touch;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif';
+  var c=h('div');c.style.cssText='background:#fff;color:#1b2430;border-radius:18px;margin:max(14px,env(safe-area-inset-top)) auto 24px;padding:20px 18px;width:min(94vw,420px);box-sizing:border-box';
+  var T=h('h1',null,mine?'My profile':'Profile');T.style.cssText='font-size:21px;margin:0 0 12px;text-align:center';c.appendChild(T);
+  var msg=h('div',null,'Loading…');msg.style.cssText='text-align:center;color:#5b6675;font-size:14px;margin:8px 0';c.appendChild(msg);
+  var body=h('div');c.appendChild(body);
+  var close=h('button',null,'Close');close.type='button';close.style.cssText='display:block;width:100%;margin-top:12px;padding:11px;border-radius:10px;border:0;background:#e8eef5;color:#1f4e78;font-size:14.5px;cursor:pointer';
+  close.onclick=function(){ov.remove()};c.appendChild(close);ov.appendChild(c);document.body.appendChild(ov);
+  function say(t,bad){msg.textContent=t||'';msg.style.color=bad?'#c62828':'#2e7d32'}
+  api('getProfile',mine?null:{email:email}).then(function(j){
+    var P=j.profile,ph=P.photo,edits={};msg.textContent='';
+    var av=h('div');av.style.cssText='width:96px;height:96px;border-radius:50%;margin:0 auto 8px;background:#e8eef5 center/cover no-repeat;display:flex;align-items:center;justify-content:center;font-size:34px;color:#1f4e78;font-weight:700;overflow:hidden';
+    function paint(){av.textContent='';if(ph){av.style.backgroundImage='url('+ph+')'}else{av.style.backgroundImage='none';av.textContent=(P.username||P.email||'?').trim().charAt(0).toUpperCase()}}
+    paint();body.appendChild(av);
+    var save=h('button',null,'Save changes');save.type='button';save.disabled=true;
+    save.style.cssText='display:block;width:100%;margin-top:14px;padding:12px;border-radius:10px;border:0;background:#1f4e78;color:#fff;font-size:15px;font-weight:600;cursor:pointer;opacity:.5';
+    function dirty(){var n=Object.keys(edits).length>0;save.disabled=!n;save.style.opacity=n?'1':'.5'}
+    if(mine){
+      var pr=h('div');pr.style.cssText='display:flex;gap:8px;justify-content:center;margin-bottom:10px';
+      var fi=document.createElement('input');fi.type='file';fi.accept='image/*';fi.hidden=true;
+      var b1=h('button',null,'Change photo'),b2=h('button',null,'Remove');[b1,b2].forEach(function(b){b.type='button';b.style.cssText='padding:8px 12px;border-radius:9px;border:0;background:#e8eef5;color:#1f4e78;font-size:13.5px;cursor:pointer'});
+      b1.onclick=function(){fi.click()};
+      fi.onchange=function(){var f=fi.files&&fi.files[0];if(!f)return;say('Preparing photo…');
+        resizePhoto(f).then(function(d){ph=d;edits.photo=d;paint();say('');dirty()}).catch(function(e){say(msgOf(e),true)});fi.value=''};
+      b2.onclick=function(){ph='';edits.photo='';paint();dirty()};
+      pr.appendChild(b1);pr.appendChild(b2);pr.appendChild(fi);body.appendChild(pr)}
+    function field(label,key,type,val,editable,note){
+      var w=h('label');w.style.cssText='display:block;margin:10px 0 0;font-size:12.5px;color:#5b6675;text-align:left';w.appendChild(document.createTextNode(label));
+      var i=document.createElement('input');i.type=type||'text';i.value=val||'';i.disabled=!editable;if(key==='username')i.maxLength=40;
+      i.style.cssText='display:block;width:100%;box-sizing:border-box;margin-top:4px;padding:10px;border-radius:9px;border:1px solid #c9d6ee;font:inherit;font-size:15px;color:#1b2430;background:'+(editable?'#fff':'#f1f4f9');
+      if(editable)i.oninput=function(){if(i.value.trim()===(val||''))delete edits[key];else edits[key]=i.value;dirty()};
+      w.appendChild(i);if(note){var n=h('div',null,note);n.style.cssText='font-size:11.5px;color:#7a8594;margin-top:3px';w.appendChild(n)}body.appendChild(w)}
+    field('User name','username','text',P.username,mine);
+    field('Official name','official','text',P.official,mine);
+    field('SAP ID','sap','text',P.sap,mine);
+    field('Mobile number','mobile','tel',P.mobile,mine);
+    field('Joining date','joined','date',P.joined,mine);
+    field('Depot','depot','text',P.depot,false,'Only the admin can change the depot.');
+    field('Gmail (login)','email','text',P.email,false,mine?'To change it, use Change Gmail.':'');
+    if(mine){body.appendChild(save);
+      save.onclick=function(){save.disabled=true;say('Saving…');
+        api('saveProfile',{profile:edits}).then(function(r){var p=r.profile;P=p;edits={};ph=p.photo;paint();
+          if(p.username&&p.username!==S.name){S.name=p.username;jset(SK,S)}
+          say(r.changed?'Saved. The admin can see this change in the history.':'Nothing changed.');dirty();
+          try{toast('Profile saved')}catch(e){}
+        }).catch(function(e){say(msgOf(e),true);dirty()})}}
+    if(S.role==='admin'){
+      var hh=h('h2',null,'Edit history');hh.style.cssText='font-size:16px;margin:20px 0 6px;text-align:left';body.appendChild(hh);
+      var hl=h('div',null,'Loading…');hl.style.cssText='font-size:13px;color:#5b6675';body.appendChild(hl);
+      api('listProfileLog',{email:P.email}).then(function(r){hl.textContent='';
+        if(!r.rows.length){hl.textContent='No changes yet.';return}
+        r.rows.forEach(function(x){var d=h('div');d.style.cssText='padding:7px 0;border-top:1px solid #e3e9f3;text-align:left';
+          var a=h('div',null,new Date(x.at).toLocaleString('en-GB')+'  •  '+x.field);a.style.cssText='font-weight:600;color:#1b2430';
+          var b=h('div',null,(x.old||'(empty)')+'  →  '+(x.new||'(empty)'));b.style.cssText='word-break:break-word';d.appendChild(a);d.appendChild(b);hl.appendChild(d)})
+      }).catch(function(e){hl.textContent=msgOf(e)})}
+  }).catch(function(e){say(msgOf(e),true)})}
+window.RDLPROFILE={open:openProfile};
 
 /* ---------- change my own Gmail (admin and users) ---------- */
 function jwtMail(t){try{return String(JSON.parse(atob(t.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'))).email||'')}catch(e){return ''}}
@@ -1748,7 +1865,7 @@ function openChangeEmail(){
     if(!confirm('Change your Gmail from\n'+S.email+'\nto\n'+ne+'\n?')){say('Cancelled.');emailChg=handler;return}
     say('Changing…');cx.disabled=true;
     api('changeMyEmail',{newToken:cred}).then(function(j){
-      S.email=j.email;jset(SK,S);tok={id:cred,exp:jwtExp(cred)};try{sessionStorage.setItem('rdlgate.tok',JSON.stringify(tok))}catch(e){}
+      LS.removeItem('rdlgate.sess');S.email=j.email;jset(SK,S);tok={id:cred,exp:jwtExp(cred)};try{sessionStorage.setItem('rdlgate.tok',JSON.stringify(tok))}catch(e){}
       say('Done. Your Gmail is now '+j.email,false);toast('Gmail changed to '+j.email);setTimeout(function(){location.reload()},1500)
     }).catch(function(e){cx.disabled=false;say(msgOf(e),true);emailChg=handler})};
   loadGIS(function(err){
@@ -1759,7 +1876,7 @@ function openChangeEmail(){
 
 /* ---------- floating button + menu ---------- */
 function signOut(){
-  var go=function(){if(S.role==='user')wipeUserData();clearPin();LS.removeItem(SK);LS.removeItem('rdlgate.perms');try{google.accounts.id.disableAutoSelect()}catch(e){}location.reload()};
+  var go=function(){if(S.role==='user')wipeUserData();clearPin();LS.removeItem('rdlgate.sess');LS.removeItem(SK);LS.removeItem('rdlgate.perms');try{google.accounts.id.disableAutoSelect()}catch(e){}location.reload()};
   if(S.role==='user'){
     if(!confirm('Sign out? Your work is first saved to the server, then removed from this phone.'))return;
     sendBackup().then(go).catch(function(e){if(confirm('Backup could not be saved ('+msgOf(e)+').\nSigning out now will LOSE unsaved work. Sign out anyway?'))go()})
@@ -1770,7 +1887,7 @@ function renderPanel(){
   p.appendChild(h('h3',null,(S.name||S.email)+' • '+(S.role==='admin'?'Admin':'User')));
   p.appendChild(h('div','sub',S.email+(S.depot?' • '+S.depot:' • all depots')));
   var s=h('div','rgx-st '+st.c,st.t);s.id='rgx-st';p.appendChild(s);
-  if(!(tok&&tok.exp-120000>Date.now())&&gis){var gb=h('div');gb.style.cssText='display:flex;justify-content:center;margin:8px 0 4px';p.appendChild(gb);
+  if(!hasAuth()&&gis){var gb=h('div');gb.style.cssText='display:flex;justify-content:center;margin:8px 0 4px';p.appendChild(gb);
     p.appendChild(h('div','sub','Tap the blue button to sign in again and sync.'));
     try{google.accounts.id.renderButton(gb,{theme:'filled_blue',size:'large',shape:'pill',text:'signin_with',width:240})}catch(e){}}
   var rep=h('div','rep');rep.style.display='none';
@@ -1788,6 +1905,7 @@ function renderPanel(){
   if(S.role!=='admin'){
     btn('Lock app now','alt',function(){panelOn=false;renderPanel();LS.setItem('rdlgate.last','0');lockNow()});
     btn('Change PIN','alt',function(){panelOn=false;renderPanel();changePin()})}
+  btn('My profile','alt',function(){openProfile()});
   btn('Change Gmail','alt',function(){openChangeEmail()});
   btn('Save backup now','alt',function(b){run(b,'Saving…',function(){return sendBackup().then(function(){return 'Backup saved to Drive.'})})});
   btn('Sign out','red',function(){signOut()});
@@ -1999,9 +2117,9 @@ function start(){
   if(!S){showLogin();return}
   lockInit();buildChip();if(window.RDLACC)RDLACC.apply();
   loadGIS(function(err){if(err){status('Offline — working on this phone','warn');return}initGIS(true);
-    if(tok){afterLogin();return}
+    if(hasAuth()){afterLogin();return}
     try{google.accounts.id.prompt()}catch(e){}
-    setTimeout(function(){if(!tok)status('Tap ☁ and press the blue button to sign in','warn')},6000)})}
+    setTimeout(function(){if(!hasAuth())status('Tap ☁ and press the blue button to sign in','warn')},6000)})}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start);else start();
 window.RDLGATE={api:api,lockNow:function(){LS.setItem('rdlgate.last','0');lockNow()},changePin:changePin,depotNames:depotNames,build:buildPkgs,mergeVal:mergeVal,session:function(){return S}};
 })();
@@ -2076,11 +2194,13 @@ window.RDLGATE={api:api,lockNow:function(){LS.setItem('rdlgate.last','0');lockNo
     <div class="st-top"><button id="stBack" aria-label="Back"><svg class="bk-ar" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 12h-15M10.5 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="4.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button><h2>Settings</h2></div>
     <div class="st-card">
       <h3>Database Upload</h3>
-      <p class="hint">Master database. Uploading deletes the old database completely and the app restarts on the new one. Select both files.</p>
+      <p class="hint">Master database. "All depots" deletes the old database completely and restarts the app on the new one. To fix only some data, choose "Only the depots in the file" or "Only the customers in the file": just those are replaced and everything else stays as it is.</p>
       <label class="fp" for="fOut"><span>Outstanding data</span><em id="nOut">Choose .xlsx file</em></label>
       <input id="fOut" type="file" accept=".xlsx" hidden><div class="stt" id="sOut"></div>
       <label class="fp" for="fCr"><span>Credit limit data</span><em id="nCr">Choose .xlsx file</em></label>
       <input id="fCr" type="file" accept=".xlsx" hidden><div class="stt" id="sCr"></div>
+      <label class="fp" for="dbScope" style="display:block"><span>What to replace</span>
+        <select id="dbScope" style="width:100%;margin-top:6px;padding:10px;border-radius:10px;border:1px solid #c9d6ee;font:inherit;background:#fff;color:inherit"><option value="all">All depots (whole database)</option><option value="dep">Only the depots in the file</option><option value="cus">Only the customers in the file</option></select></label>
       <button class="st-btn" id="bDb" disabled>Upload &amp; Reset Database</button>
       <div class="stt" id="sDb"></div><div class="cur" id="curDb"></div>
     </div>
@@ -2410,6 +2530,13 @@ function unifyDepots(seed,lists){
 }
 function depotsOf(...lists){const o={};lists.forEach(l=>(l||[]).forEach(r=>{if(r&&r.dp)o[r.dp]=(o[r.dp]||0)+1}));return o}
 /* ---- local storage (single phone, no server) ---- */
+/* speed: the big database used to be re-read and re-parsed on every access (once per row on the big lists). Now it is cached and refreshed only when something is saved. */
+window.__rdlV=window.__rdlV||0;
+(function(){if(window.__rdlPatched)return;window.__rdlPatched=1;var P=Storage.prototype,si=P.setItem,ri=P.removeItem,cl=P.clear;
+  function hot(k){return k==='rdl.master.v1'||k==='rdl.ledger.v1'||k==='rdl.dsel.v1'}
+  P.setItem=function(k){var r=si.apply(this,arguments);if(this===window.localStorage&&hot(String(k)))window.__rdlV++;return r};
+  P.removeItem=function(k){var r=ri.apply(this,arguments);if(this===window.localStorage&&hot(String(k)))window.__rdlV++;return r};
+  P.clear=function(){var r=cl.apply(this,arguments);window.__rdlV++;return r}})();
 const K={m:'rdl.master.v1',d:'rdl.dcr.v1'};
 const store={get:k=>{try{return JSON.parse(localStorage.getItem(K[k]))}catch(e){return null}},
   set:(k,v)=>localStorage.setItem(K[k],JSON.stringify(v))};
@@ -2418,11 +2545,11 @@ const DSK='rdl.dsel.v1',dKey=x=>String(x||'').trim().toLowerCase().replace(/\s+/
 const dAdmin=()=>{try{const g=window.RDLGATE&&RDLGATE.session&&RDLGATE.session();return !g||g.role==='admin'}catch(e){return true}};
 const dSel=()=>{try{return dAdmin()?(localStorage.getItem(DSK)||''):''}catch(e){return''}};
 function depotView(m){const s=dSel();if(!m||!s)return m;const t=dKey(s),f=r=>dKey(r.dp)===t;return Object.assign({},m,{out:(m.out||[]).filter(f),cr:(m.cr||[]).filter(f)})}
-let _cm=null,_cr='';
-function cuMap(){const raw=localStorage.getItem('rdl.master.v1')||'';if(_cm&&_cr===raw)return _cm;const m=store.get('m'),o=new Map();
+let _cm=null,_cr=-1;
+function cuMap(){const raw=window.__rdlV;if(_cm&&_cr===raw)return _cm;const m=store.get('m'),o=new Map();
   if(m){(m.cr||[]).forEach(r=>{if(r.dp)o.set(String(r.bp),dKey(r.dp))});(m.out||[]).forEach(r=>{if(r.dp)o.set(String(r.cu),dKey(r.dp))})}_cm=o;_cr=raw;return o}
-let _dn=null,_dr='';
-function cuDn(){const raw=localStorage.getItem('rdl.master.v1')||'';if(_dn&&_dr===raw)return _dn;const m=store.get('m'),o=new Map();
+let _dn=null,_dr=-1;
+function cuDn(){const raw=window.__rdlV;if(_dn&&_dr===raw)return _dn;const m=store.get('m'),o=new Map();
   if(m){(m.cr||[]).forEach(r=>{if(r.dp)o.set(String(r.bp),String(r.dp))});(m.out||[]).forEach(r=>{if(r.dp)o.set(String(r.cu),String(r.dp))})}_dn=o;_dr=raw;return o}
 const cuIn=cu=>{const s=dSel();return !s||cuMap().get(String(cu))===dKey(s)};
 const ledFl=L=>{if(!L||!dSel())return L;return Object.assign({},L,{rv:(L.rv||[]).filter(x=>cuIn(x.cu)),dz:(L.dz||[]).filter(x=>cuIn(x.cu))})};
@@ -2441,7 +2568,8 @@ document.addEventListener('click',e=>{const t=e.target&&e.target.closest&&e.targ
   add('All Depots','');RDLDEPOT.names().forEach(n=>add(n,n));
   const c=document.createElement('button');c.type='button';c.textContent='Cancel';c.style.cssText='display:block;width:100%;padding:12px;border:0;background:none;color:#4a6a9f;font:inherit';c.onclick=()=>ov.remove();bx.appendChild(c);
   ov.appendChild(bx);ov.onclick=ev=>{if(ev.target===ov)ov.remove()};document.body.appendChild(ov)},true);
-window.RDL={get master(){return depotView(store.get('m'))},get dcr(){return store.get('d')},fmt,curStatus:()=>curStatus()};
+let _gv=-1,_gm=null;
+window.RDL={get master(){if(_gv===window.__rdlV)return _gm;const v=window.__rdlV,m=depotView(store.get('m'));_gm=m;_gv=v;return m},get dcr(){return store.get('d')},fmt,curStatus:()=>curStatus()};
 /* company display: RPL(1000), RNL(2000) ...; every list of companies runs from 1000 up to 9000 */
 (function(){let cm=null,cmM=null;
   window.RDL.coName=c=>{c=String(c);const m=window.RDL.master;if(!m)return c;if(cmM!==m){cmM=m;cm=new Map();m.cr.forEach(r=>{const k=String(r.co);if(r.cn&&!cm.get(k))cm.set(k,String(r.cn).trim());else if(!cm.has(k))cm.set(k,'')})}
@@ -2505,22 +2633,49 @@ function reconcile(L,newOut,cut){
   L.rv=keepRV;L.dz=keepDZ;
   return{goneRV:goneRV.length,goneDZ,keptRV:keepRV.length,keptDZ:keepDZ.length,repointed,orphan};
 }
+/* same as reconcile(), but only for the customers in S (a Set of customer codes); other customers' posts are left untouched */
+function reconcileScoped(L,newOut,cut,S){
+  if(!S)return reconcile(L,newOut,cut);
+  const ri=new Map(L.rv.map((r,i)=>[r,i])),di=new Map(L.dz.map((z,i)=>[z,i]));
+  const inn={rv:L.rv.filter(r=>S.has(String(r.cu))),dz:L.dz.filter(z=>S.has(String(z.cu)))};
+  const rest={rv:L.rv.filter(r=>!S.has(String(r.cu))),dz:L.dz.filter(z=>!S.has(String(z.cu)))};
+  const r=reconcile(inn,newOut.filter(b=>S.has(String(b.cu))),cut);
+  L.rv=rest.rv.concat(inn.rv).sort((a,b)=>ri.get(a)-ri.get(b));L.dz=rest.dz.concat(inn.dz).sort((a,b)=>di.get(a)-di.get(b));
+  return r;
+}
 async function applyDb(){
   if(!(pend.out||pend.cr))return;
   const old=store.get('m')||{out:[],cr:[]},L=ledgerRaw(),has=!!(L&&(L.rv.length||L.dz.length)),what=pend.out&&pend.cr?'both files':pend.out?'the Outstanding data':'the Credit limit data';
   unifyDepots([old.out,old.cr],[pend.out,pend.cr]);
-  const dTxt=(()=>{const n=Object.keys(depotsOf(pend.out,pend.cr)).sort();return n.length?' Depots in the new file: '+n.join(', ')+'.':''})();
+  /* partial upload: replace only the depots / customers that are in the file, keep everything else */
+  const sc=($('#dbScope')&&$('#dbScope').value)||'all',cuOf=(k,a)=>String(k==='out'?a.cu:a.bp);
+  const keep={},scopeCu={};let sTxt='';
+  if(sc!=='all'){
+    const bad=['out','cr'].filter(k=>pend[k]&&sc==='dep'&&(!pend[k].hasDp||pend[k].nodp)).map(k=>k==='out'?'Outstanding':'Credit limit');
+    if(bad.length){say('#sDb','✗ '+bad.join(' and ')+' file: every row needs a Depot Name to replace only some depots','bad');return}
+    const parts=[];
+    ['out','cr'].forEach(k=>{const r=pend[k];if(!r)return;
+      if(sc==='dep'){const D=new Set(r.map(a=>dpKey(a.dp)));keep[k]=a=>!D.has(dpKey(a.dp));
+        const S=new Set();(old.out||[]).concat(old.cr||[]).forEach(a=>{if(D.has(dpKey(a.dp)))S.add(String(a.cu!==undefined?a.cu:a.bp))});r.forEach(a=>S.add(cuOf(k,a)));scopeCu[k]=S;
+        parts.push((k==='out'?'Outstanding':'Credit limit')+': '+[...new Set(r.map(a=>a.dp))].sort().join(', '))}
+      else{const C=new Set(r.map(a=>cuOf(k,a)));keep[k]=a=>!C.has(cuOf(k,a));scopeCu[k]=C;
+        parts.push((k==='out'?'Outstanding':'Credit limit')+': '+C.size+' customer'+(C.size===1?'':'s')+(C.size<=6?' ('+[...C].join(', ')+')':''))}});
+    const stay=['out','cr'].filter(k=>pend[k]).map(k=>(keep[k]?(old[k]||[]).filter(keep[k]).length:0)).reduce((s,n)=>s+n,0);
+    sTxt='\nONLY THIS IS REPLACED → '+parts.join(' | ')+'.\nEverything else stays as it is ('+fmt(stay)+' existing rows are not touched).';
+  }
+  const dTxt=(()=>{const n=Object.keys(depotsOf(pend.out,pend.cr)).sort();return n.length?' Depots in the new file: '+n.join(', ')+'.':''})()+sTxt;
   let cut=null;
   if(has){
     cut=await RDLUI.ask({title:'Data complete up to which date?',msg:'Bills and collections you posted in the app on or before this date are already inside the new file. They will be retired so nothing is counted twice. Posts after this date stay.'+dTxt,date:isoToday(),max:isoToday(),ok:'Upload'});
     if(cut===null)return;
-  }else if(!await RDLUI.ask({title:'Upload database?',msg:'The new '+what+' will replace the current one.'+dTxt,ok:'Upload'}))return;
+  }else if(!await RDLUI.ask({title:sc==='all'?'Upload database?':'Replace only part of the database?',msg:'The new '+what+(sc==='all'?' will replace the current one.':' will replace only the part named below.')+dTxt,ok:'Upload'}))return;
   let note='';
   try{
-    const nm={out:pend.out||old.out,cr:pend.cr||old.cr,at:Date.now(),rev:0};
+    const mix=k=>!pend[k]?old[k]:(sc==='all'?pend[k]:(old[k]||[]).filter(keep[k]).concat(pend[k]));
+    const nm={out:mix('out'),cr:mix('cr'),at:Date.now(),rev:0};
     if(has){
-      if(pend.out){const r=reconcile(L,nm.out,cut);note=` Retired ${r.goneRV} RV and ${r.goneDZ} DZ posted up to ${dispDate(cut)}; kept ${r.keptRV} RV and ${r.keptDZ} DZ.`+(r.repointed?` ${r.repointed} collection(s) re-attached to the new SAP bills.`:'')+(r.orphan?` ⚠ ${r.orphan} collection(s) could not be matched to a bill and are ignored.`:'');}
-      else{L.rv.forEach(x=>{if(x.post<=cut)x.nx=true});L.dz.forEach(x=>{if(x.date<=cut)x.nx=true});note=` Posts up to ${dispDate(cut)} are treated as already included in the new credit exposure.`}
+      if(pend.out){const r=reconcileScoped(L,nm.out,cut,sc==='all'?null:scopeCu.out);note=` Retired ${r.goneRV} RV and ${r.goneDZ} DZ posted up to ${dispDate(cut)}; kept ${r.keptRV} RV and ${r.keptDZ} DZ.`+(r.repointed?` ${r.repointed} collection(s) re-attached to the new SAP bills.`:'')+(r.orphan?` ⚠ ${r.orphan} collection(s) could not be matched to a bill and are ignored.`:'');}
+      else{const S=sc==='all'?null:scopeCu.cr,inS=x=>!S||S.has(String(x.cu));L.rv.forEach(x=>{if(x.post<=cut&&inS(x))x.nx=true});L.dz.forEach(x=>{if(x.date<=cut&&inS(x))x.nx=true});note=` Posts up to ${dispDate(cut)} are treated as already included in the new credit exposure.`}
       localStorage.setItem('rdl.ledger.v1',JSON.stringify(L));
     }
     try{const off=new Set(JSON.parse(localStorage.getItem('rdl.croff.v1')||'[]'));if(pend.cr&&off.size)nm.cr.forEach(r=>{if(off.has([r.bp,r.co,r.seg].join('|')))r.off=1})}catch(e){}   /* lines switched off earlier stay off after a new upload */
@@ -2601,7 +2756,7 @@ const R=window.RDL;R.DP=window.RDLDEPOT;const LK='rdl.ledger.v1',uid=b=>[b.bill,
 const ld=()=>{try{const x=JSON.parse(localStorage.getItem(LK));if(x&&x.rv)return x}catch(e){}return{rv:[],dz:[],n:{RV:0,DZ:0},ps:{},pc:{},pl:{}}};
 /* merged master: SAP database + posted RV bills, with DZ collections/TDS applied; credit exposure follows */
 const g=Object.getOwnPropertyDescriptor(R,'master').get;let cache=null,ck='';
-Object.defineProperty(R,'master',{configurable:true,get(){const m=g();if(!m)return m;const raw=localStorage.getItem(LK)||'',k=raw+'|'+m.at+'|'+(m.rev||0);if(cache&&ck===k)return cache;
+Object.defineProperty(R,'master',{configurable:true,get(){const m=g();if(!m)return m;const raw=window.__rdlV,k=raw+'|'+m.at+'|'+(m.rev||0);if(cache&&ck===k)return cache;
   const L=ld(),c={},t={},dl={},seen={};
   L.dz.forEach(z=>{if(z.orphan)return;c[z.ag]=(c[z.ag]||0)+z.col;t[z.ag]=(t[z.ag]||0)+z.tds;if(z.nx)return;const q=z.cu+'|'+z.co;dl[q]=(dl[q]||0)-z.col-z.tds});
   L.rv.forEach(b=>{if(b.nx)return;const q=b.cu+'|'+b.co;dl[q]=(dl[q]||0)+b.amt});
@@ -4505,6 +4660,7 @@ page('setusers','User Manage & Access Control','setsec',b=>{
       const r=el('div','ua-u'+(u.active?'':' off'));
       r.appendChild(el('div','ua-n',(u.name||u.email)+(u.root?'  (Main Admin)':isAdm?'  (Admin)':'')+(self?'  — you':'')));
       r.appendChild(el('div','ua-s',u.email));
+      {const pb=el('button','ua-b alt','Profile & edit history');pb.type='button';pb.style.margin='4px 0';pb.onclick=()=>{try{window.RDLPROFILE.open(u.email)}catch(e){RDLUI.alert('Profile','Could not open the profile.')}};r.appendChild(pb)}
       {const t=u.lastBackup?new Date(u.lastBackup):null,mins=t?Math.max(0,Math.round((Date.now()-t)/60000)):null,
         ago=mins===null?'no backup yet':mins<2?'just now':mins<60?mins+' min ago':mins<1440?Math.round(mins/60)+' h ago':Math.round(mins/1440)+' day'+(Math.round(mins/1440)===1?'':'s')+' ago',
         d=el('div','ua-s','Last backup: '+ago);if(u.active&&(mins===null||mins>1440)){d.style.color='#d90000';d.style.fontWeight='800'}r.appendChild(d)}
@@ -5462,7 +5618,7 @@ const dd=s=>{if(!s)return '—';const d=new Date(s+'T00:00:00');return pad(d.get
 const diff=(a,b)=>Math.round((new Date(a+'T00:00:00')-new Date(b+'T00:00:00'))/864e5);
 const addD=(s,n)=>{const d=new Date(s+'T00:00:00');d.setDate(d.getDate()+n);return ymd(d)};
 const bal=b=>Math.max(0,(+b.amt||0)-(+b.collected||0)-(+b.tds||0));
-const UP=7,PAGE=200,VK='rdl.orv.v1';   /* Upcoming window = same 7 days as the dashboard card */
+const UP=7,PAGE=50,VK='rdl.orv.v1';   /* Upcoming window = same 7 days as the dashboard card */
 const ledgerDz=()=>{try{const x=JSON.parse(localStorage.getItem('rdl.ledger.v1'));return x&&x.dz?x.dz.filter(z=>!z.orphan&&RDLDEPOT.cuIn(z.cu)):[]}catch(e){return[]}};
 const dayStyle=d=>{const k=Math.min(1,Math.max(0,(7-d)/8.4)),h=Math.round(48*(1-k));return `background:linear-gradient(135deg,hsl(${h},100%,82%),hsl(${h},100%,68%));color:hsl(${h},100%,11%);font-weight:800;border:1px solid hsl(${h},95%,50%)`};
 const BK='<svg class="bk-ar" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 12h-15M10.5 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="4.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
@@ -5790,7 +5946,7 @@ const tc=$('.total');if(tc){tc.style.cursor='pointer';tc.addEventListener('click
 /* ===== TOTAL OVERDUE page + UPCOMING OVERDUE page: opened by the two dashboard cards. Lists only (no search, no filters). ===== */
 const R=window.RDL,$=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 const pad=n=>String(n).padStart(2,'0'),fmt=n=>(+n||0).toLocaleString('en-IN'),money=n=>__m(n);
-const UP=7,PAGE=200;   /* Upcoming window = same 7 days as the dashboard card */
+const UP=7,PAGE=50;   /* Upcoming window = same 7 days as the dashboard card */
 const ymd=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
 const addD=(s,n)=>{const d=new Date(s+'T00:00:00');d.setDate(d.getDate()+n);return ymd(d)};
 const diff=(a,b)=>Math.round((new Date(a+'T00:00:00')-new Date(b+'T00:00:00'))/864e5);
@@ -8002,6 +8158,7 @@ html body #orp .orp-cc .od-table.od-table.od-table:not(#_a):not(#_b):not(#_c):no
 html body #orp .orp-cc .od-table.dpu-fixed.dpu-fixed.dpu-fixed:not(#_a):not(#_b){table-layout:fixed!important;min-width:0!important;width:var(--w)!important}
 html body .od-table th{box-sizing:border-box}
 html body .od-table.od-table.od-table th:not(#_a):not(#_b):not(#_c){min-width:0!important}
+html body .od-table.od-table.od-table th:not(#_a):not(#_b):not(#_c){white-space:normal!important}
 html body .od-table tr.dpf-h{display:none!important}
 </style>
 <script>
@@ -8039,9 +8196,7 @@ function scan(){var n={};
     if(m==='gen'&&SEL[key])filt(t,SEL[key]);
     var nat=th.querySelector('.fb')&&!th._dpf;if(nat)return;
     var on=curSel(t,m,key).size>0,many;
-    if(m==='od')many=!RDLDEPOT.sel()&&RDLDEPOT.names().length>1;
-    else if(m==='reg')many=true;
-    else many=Object.keys(count(t)).length>1;
+    many=true;
     var b=th.querySelector('.fb');
     if(many||on){
       if(!b){b=document.createElement('button');b.type='button';b.className='fb';b.textContent='\u25be';th.appendChild(b);th.classList.add('df-th');th.title='Tap to select '+NAME;th._dpf=1}
@@ -8062,6 +8217,54 @@ function sched(){clearTimeout(tm);tm=setTimeout(function(){try{scan()}catch(e){}
 function start(){mo=new MutationObserver(sched);mo.observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['class']});sched()}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start);else start();
 window.addEventListener('resize',sched);
+})();
+</script>
+<script id="rdl-perf">
+/* Page speed meter: how long each page takes to open on THIS phone (tap -> screen stops changing).
+   Shown in Settings > Page speed. Own key (not rdl.*), so it is never part of a backup and never wipes anything. */
+(function(){
+  var KEY='rdlperf.v1',SLOW=2000,t0=0;
+  function load(){try{return JSON.parse(localStorage.getItem(KEY))||{}}catch(e){return{}}}
+  function save(o){try{localStorage.setItem(KEY,JSON.stringify(o))}catch(e){}}
+  document.addEventListener('pointerdown',function(){t0=performance.now()},true);
+  function title(pg){var h=pg.querySelector('h2,h1');var t=(h&&h.textContent||'').trim();return t||pg.id}
+  function record(id,t,ms){var o=load(),r=o[id]||{n:0,sum:0,max:0};r.t=t;r.n++;r.sum+=ms;r.max=Math.max(r.max,ms);r.last=ms;o[id]=r;save(o)}
+  function watch(node,id,t,start){
+    var last=performance.now(),mo=new MutationObserver(function(){last=performance.now()});
+    mo.observe(node,{childList:true,subtree:true,attributes:true,characterData:true});
+    (function chk(){setTimeout(function(){var now=performance.now();
+      if(now-last>250||now-start>15000){mo.disconnect();record(id,t,Math.round(Math.max(0,last-start)))}else chk()},120)})()}
+  var act=new MutationObserver(function(ms){ms.forEach(function(m){
+    var el=m.target;if(!el.classList||!el.classList.contains('pg')||!el.classList.contains('on'))return;
+    if(/(^|\s)on(\s|$)/.test(m.oldValue||''))return;
+    if(el.id==='settings')setTimeout(draw,0);
+    if(t0&&performance.now()-t0<1500)watch(el,el.id,title(el),t0)})});
+  function ms(v){return v>=1000?(v/1000).toFixed(1)+' s':Math.round(v)+' ms'}
+  function cell(tr,v,bad){var td=document.createElement('td');td.style.padding='5px 4px';td.textContent=v;if(bad)td.style.cssText+=';color:#c62828;font-weight:700';tr.appendChild(td)}
+  function draw(){
+    var pg=document.getElementById('settings');if(!pg)return;
+    var c=document.getElementById('perfCard');
+    if(!c){c=document.createElement('div');c.className='st-card';c.id='perfCard';pg.appendChild(c)}
+    var o=load(),ks=Object.keys(o).sort(function(a,b){return o[b].last-o[a].last});
+    c.textContent='';
+    var h=document.createElement('h3');h.textContent='Page speed';c.appendChild(h);
+    var p=document.createElement('p');p.className='hint';
+    p.textContent=ks.length?'How long each page took to open on this phone (from your tap until the screen stopped changing). Red = slower than 2 seconds. If something feels slow, send a screenshot of this list.':'Nothing measured yet. Open some pages, then come back here.';
+    c.appendChild(p);
+    if(ks.length){
+      var t=document.createElement('table');t.style.cssText='width:100%;border-collapse:collapse;font-size:13px';
+      var hr=document.createElement('tr');['Page','Last','Avg','Worst'].forEach(function(x){var th=document.createElement('th');th.textContent=x;th.style.cssText='text-align:left;padding:5px 4px';hr.appendChild(th)});t.appendChild(hr);
+      ks.forEach(function(k){var r=o[k],tr=document.createElement('tr');
+        cell(tr,r.t||k,false);cell(tr,ms(r.last),r.last>SLOW);cell(tr,ms(r.sum/r.n),r.sum/r.n>SLOW);cell(tr,ms(r.max),r.max>SLOW);t.appendChild(tr)});
+      c.appendChild(t);
+      var b=document.createElement('button');b.className='st-btn';b.type='button';b.textContent='Clear list';b.onclick=function(){try{localStorage.removeItem(KEY)}catch(e){}draw()};c.appendChild(b)}
+  }
+  function start(){
+    act.observe(document.body,{attributes:true,attributeFilter:['class'],attributeOldValue:true,subtree:true});
+    /* app start: from the moment the app began loading until the first screen stopped changing (the header clock is outside the pages, so it does not count) */
+    var go=function(){var pg=document.querySelector('.pg.on');if(pg)watch(pg,'_start','App start',0)};
+    if(document.readyState==='complete')go();else window.addEventListener('load',go)}
+  if(document.body)start();else document.addEventListener('DOMContentLoaded',start);
 })();
 </script>
 </body>
