@@ -1587,7 +1587,7 @@ function firstLogin(){
   api('me').then(function(j){
     var u=j.user;S={email:u.email,name:u.name,role:u.role,depot:u.depot,seq:u.seq,root:!!u.root};
     if(u.role==='user'){setLogin('Downloading your depot data…');
-      return stashAdmin().then(function(){wipeUserData();return pullData(true)}).then(function(){LS.setItem('rdlgate.owner','user');setDepotLabel();jset(SK,S);location.reload()})}
+      return stashAdmin().then(function(){wipeUserData();return mergeOwn(true,false)}).then(function(){return pullData(true)}).then(function(){LS.setItem('rdlgate.owner','user');setDepotLabel();jset(SK,S);location.reload()})}
     if(u.role==='admin'){setLogin('Loading your data…');
       return restoreAdmin().then(function(){jset(SK,S);location.reload()})}
     jset(SK,S);location.reload()
@@ -1601,14 +1601,52 @@ function forcedOut(msg){
 function mergeAdminLedger(led){
   var L=jget('rdl.ledger.v1')||{};L.rv=L.rv||[];L.dz=L.dz||[];L.n=L.n||{RV:0,DZ:0};L.ps=L.ps||{};L.pc=L.pc||{};L.pl=L.pl||{};
   ['rv','dz'].forEach(function(k){
-    var own=L[k].filter(function(x){return !x._adm}),have={};own.forEach(function(x){have[x.bill]=1});
-    var add=(led[k]||[]).filter(function(x){return !have[x.bill]}).map(function(x){var c={};for(var q in x)c[q]=x[q];c._adm=1;return c});
+    var own=L[k].filter(function(x){return !x._adm}),have={},dl=L.del||{};own.forEach(function(x){have[x.bill]=1});
+    var add=(led[k]||[]).filter(function(x){return !have[x.bill]&&!dl[x.bill]}).map(function(x){var c={};for(var q in x)c[q]=x[q];c._adm=1;return c});
     L[k]=own.concat(add)});
   jset('rdl.ledger.v1',L)}
+/* ---------- keep my own posted data safe across devices ----------
+   A new (or long unused) phone / PC first brings back my newest saved backup and ADDS it to what is on the device,
+   so a device that is missing posts can never send an "emptier" backup over a fuller one. */
+function devId(){var d=LS.getItem('rdlgate.dev');if(!d){d=Math.random().toString(36).slice(2)+Date.now().toString(36);LS.setItem('rdlgate.dev',d)}return d}
+function rowKey(x){return [x.bill,x.co,x.cu].join('|')}
+/* deleted Sales / Collections are remembered in L.del, so a copy kept by the admin or in an older backup cannot bring them back */
+window.RDLDDEL=function(L,ids){L.ddel=L.ddel||{};var now=Date.now();ids.forEach(function(i){if(i)L.ddel[i]=now});
+  var ks=Object.keys(L.ddel);if(ks.length>3000){ks.sort(function(a,b){return L.ddel[a]-L.ddel[b]}).slice(0,ks.length-2500).forEach(function(k){delete L.ddel[k]})}};   /* a draft that was posted or deleted is remembered, so it cannot come back from another device */
+window.RDLDEL=function(L,rows){L.del=L.del||{};var now=Date.now();rows.forEach(function(x){if(x&&x.bill)L.del[x.bill]=now});
+  var ks=Object.keys(L.del);if(ks.length>3000){ks.sort(function(a,b){return L.del[a]-L.del[b]}).slice(0,ks.length-2500).forEach(function(k){delete L.del[k]})}};
+function mergeOwn(strict,onlyIfOther){
+  return api('getOwnBackup',null,true).then(function(j){
+    if(!j||j.empty||!j.data)return false;
+    if(onlyIfOther&&(!j.device||j.device===devId()||(+new Date(j.at)||0)<=(+LS.getItem('rdlgate.bk')||0)))return false;   /* the newest backup came from this very device: nothing to add */
+    var inc;try{inc=JSON.parse(j.data['rdl.ledger.v1']||'null')}catch(e){inc=null}
+    var before=LS.getItem('rdl.ledger.v1');
+    sysW=1;try{
+      if(isObj(inc)){
+        var L=jget('rdl.ledger.v1')||{};L.rv=L.rv||[];L.dz=L.dz||[];L.n=L.n||{RV:0,DZ:0};L.ps=L.ps||{};L.pc=L.pc||{};L.pl=L.pl||{};
+        var live={};['rv','dz'].forEach(function(k){(inc[k]||[]).forEach(function(x){if(isObj(x))live[x.bill]=1})});
+        L.del=L.del||{};if(isObj(inc.del))Object.keys(inc.del).forEach(function(b){if(!live[b]&&!(b in L.del))L.del[b]=inc.del[b]});   /* deleted on the other device */
+        ['rv','dz'].forEach(function(k){var have={};L[k]=L[k].filter(function(x){return x._adm||!L.del[x.bill]||live[x.bill]});L[k].forEach(function(x){if(!x._adm)have[rowKey(x)]=1});
+          (inc[k]||[]).forEach(function(x){if(!isObj(x)||x._adm||L.del[x.bill])return;var q=rowKey(x);if(!have[q]){have[q]=1;L[k].push(x)}})});
+        ['ps','pc','pl','px'].forEach(function(k){if(isObj(inc[k])){L[k]=L[k]||{};Object.keys(inc[k]).forEach(function(q){if(!(q in L[k]))L[k][q]=inc[k][q]})}});
+        L.ddel=L.ddel||{};if(isObj(inc.ddel))Object.keys(inc.ddel).forEach(function(i){if(!(i in L.ddel))L.ddel[i]=inc.ddel[i]});
+        L.dr=(L.dr||[]).filter(function(x){return !(x&&L.ddel[x.id])});var hd={};L.dr.forEach(function(x){if(x)hd[x.id]=1});
+        (inc.dr||[]).forEach(function(x){if(isObj(x)&&x.id&&!hd[x.id]&&!L.ddel[x.id]){hd[x.id]=1;L.dr.push(x)}});   /* drafts made on the other device */
+        L.sd=(L.sd||[]).filter(function(x){return !(x&&L.ddel[x.id])});var hs={};L.sd.forEach(function(x){if(x)hs[x.id]=1});
+        (inc.sd||[]).forEach(function(x){if(isObj(x)&&x.id&&!hs[x.id]&&!L.ddel[x.id]){hs[x.id]=1;L.sd.push(x)}});   /* Sales drafts made on the other device */
+        jset('rdl.ledger.v1',L)}
+      Object.keys(j.data).forEach(function(k){if(k==='rdl.ledger.v1')return;
+        if(LS.getItem(k)===null){LS.setItem(k,j.data[k]);return}
+        var a,b;try{a=JSON.parse(LS.getItem(k));b=JSON.parse(j.data[k])}catch(e){return}
+        if(Array.isArray(a)&&Array.isArray(b)){var seen={};a.forEach(function(x){seen[strip(x)]=1});b.forEach(function(x){if(!seen[strip(x)]){seen[strip(x)]=1;a.push(x)}});LS.setItem(k,JSON.stringify(a))}
+        else if(isObj(a)&&isObj(b)){Object.keys(b).forEach(function(q){if(!(q in a))a[q]=b[q]});LS.setItem(k,JSON.stringify(a))}})
+    }finally{sysW=0}
+    return before!==LS.getItem('rdl.ledger.v1')}).catch(function(e){if(/Unknown action/.test(String(e&&e.message)))return false;   /* server not updated yet: carry on as before */
+    if(strict)throw new Error('Could not bring back your saved data ('+msgOf(e)+'). Check the internet and sign in again.');return false})}
 function pullData(force){
   return api('getData').then(function(p){
     if(p.empty){if(force)throw new Error('No data has been published for "'+S.depot+'" yet. Ask the admin.');return false}
-    var dataAt=+LS.getItem('rdlgate.dataAt')||0,dcrAt=+LS.getItem('rdlgate.dcrAt')||0,ledAt=+LS.getItem('rdlgate.ledAt')||0,part={},asg=p.asg||'';
+    var dataAt=+LS.getItem('rdlgate.dataAt')||0,dcrAt=Math.max(+LS.getItem('rdlgate.dcrAt')||0,(function(){var d=jget('rdl.dcr.v1');return d&&+d.at||0})()),ledAt=+LS.getItem('rdlgate.ledAt')||0,part={},asg=p.asg||'';
     if(asg&&asg!==(LS.getItem('rdlgate.asg')||'')){dataAt=0;dcrAt=0;ledAt=0}   /* the admin changed this user's depots / customers: download everything again */
     if(p.at>dataAt){part.out=p.out;part.cr=p.cr;part.at=p.at;part.cut=p.cut||''}
     if(p.dcr&&p.dcr.at>dcrAt)part.dcr=p.dcr;
@@ -1625,10 +1663,18 @@ function pullData(force){
 
 /* ---------- backup (user and admin) ---------- */
 function collect(){var o={};for(var i=0;i<LS.length;i++){var k=LS.key(i);if(k.indexOf('rdl.')===0)o[k]=LS.getItem(k)}return o}
+function bkAlert(msg){
+  var b=document.getElementById('rgx-bkal');
+  if(!msg){if(b)b.remove();return}
+  if(!b){b=h('div');b.id='rgx-bkal';
+    b.style.cssText='position:fixed;left:8px;right:8px;top:max(8px,env(safe-area-inset-top));z-index:100002;background:#c0392b;color:#fff;border-radius:12px;padding:10px 14px;font:700 13.5px system-ui,-apple-system,Segoe UI,Roboto,sans-serif;text-align:center;box-shadow:0 4px 14px rgba(0,0,0,.35);cursor:pointer';
+    b.onclick=function(){sendBackup().catch(function(){})};document.body.appendChild(b)}
+  b.textContent='\u26A0 '+msg}
 function sendBackup(noPrompt){
+  if(S&&S.role==='user'&&LS.getItem('rdlgate.owner')!=='user')return Promise.reject(new Error('still preparing this device, backup not sent'));   /* never send a half-loaded device as a backup */
   if(S&&S.role==='admin'&&!LS.getItem('rdl.master.v1'))return Promise.reject(new Error('this phone has no data yet, so no backup was sent (your saved backup is safe)'));
-  return api('putBackup',{data:collect(),meta:{dataAt:+LS.getItem('rdlgate.dataAt')||0}},noPrompt).then(function(){
-    LS.setItem('rdlgate.bk',String(Date.now()));LS.removeItem('rdlgate.bkdirty');try{_s.call(LS,'rdl.bkp.v1',JSON.stringify({at:Date.now()}));window.dispatchEvent(new Event('rdl:remind'))}catch(e){}status('Backup saved '+hhmm(),'ok');return flushChg(noPrompt)})}
+  return api('putBackup',{data:collect(),meta:{dataAt:+LS.getItem('rdlgate.dataAt')||0,device:devId()}},noPrompt).then(function(){
+    LS.setItem('rdlgate.bk',String(Date.now()));LS.removeItem('rdlgate.bkdirty');try{_s.call(LS,'rdl.bkp.v1',JSON.stringify({at:Date.now()}));window.dispatchEvent(new Event('rdl:remind'))}catch(e){}status('Backup saved '+hhmm(),'ok');bkAlert(null);return flushChg(noPrompt)}).catch(function(e){if(!/still preparing|no data yet/.test(String(e&&e.message))){bkAlert('Backup NOT saved \u2014 your latest work is not safe yet. Tap here to retry.');status('Backup failed: '+msgOf(e),'bad')}throw e})}
 function backupIfDue(){
   var last=+LS.getItem('rdlgate.bk')||0,lastDay=last?new Date(last):null;
   var dueDay=!lastDay||(lastDay.getFullYear()+'-'+('0'+(lastDay.getMonth()+1)).slice(-2)+'-'+('0'+lastDay.getDate()).slice(-2))!==today();
@@ -1689,7 +1735,7 @@ P.setItem=function(k,v){
   var r=_s.apply(this,arguments);
   if(ch){try{noteChange(k,old,String(v))}catch(e){}}
   if(this===LS&&typeof k==='string'&&k.indexOf('rdl.')===0&&k!=='rdl.bkp.v1'&&S){_s.call(LS,'rdlgate.bkdirty','1');clearTimeout(timer);timer=setTimeout(function(){
-    if(Date.now()-lastPrompt<600000&&!hasAuth())return;lastPrompt=Date.now();sendBackup().catch(function(){})},10000)}
+    if(Date.now()-lastPrompt<600000&&!hasAuth()){bkAlert('Backup NOT saved \u2014 sign-in expired. Tap here to sign in and save.');return}lastPrompt=Date.now();sendBackup().catch(function(){})},3000)}
   return r};
 document.addEventListener('visibilitychange',function(){if(document.visibilityState==='hidden'&&S&&LS.getItem('rdlgate.bkdirty')==='1'&&hasAuth())sendBackup(true).catch(function(){})});
 /* instant backup, retried: a failed backup (no internet, expired sign-in) is tried again every 3 minutes, when the net returns and when the app is opened again */
@@ -1733,15 +1779,32 @@ function mergeVal(base,inc,who){
     return keep}
   if(isObj(inc)){var r=isObj(base)?base:{};for(var k in inc)r[k]=mergeVal(r[k],inc[k],who);return r}
   return base===undefined||base===null?inc:base}
+function mergeUserDcr(email,ud){
+  if(!ud||!Array.isArray(ud.rows)||!ud.rows.length)return;
+  var dm=jget('rdlgate.dcrm')||{},uat=+ud.at||0;if(uat<=(+dm[email]||0))return;
+  var a=jget('rdl.dcr.v1'),aat=a?(+a.at||0):0,newer=uat>aat,key=function(r){return String(r.n||'').toLowerCase()+'|'+r.d},have={},rows=(a&&a.rows)?a.rows.slice():[],added=0;
+  if(newer){var nu={};ud.rows.forEach(function(r){nu[key(r)]=1});rows=rows.filter(function(r){return !nu[key(r)]}).concat(ud.rows);added=ud.rows.length}
+  else{rows.forEach(function(r){have[key(r)]=1});ud.rows.forEach(function(r){if(!have[key(r)]){have[key(r)]=1;rows.push(r);added++}})}   /* an older upload only fills what is missing */
+  dm[email]=uat;jset('rdlgate.dcrm',dm);
+  if(!added)return;
+  var last=rows.reduce(function(m,r){return r.d>m?r.d:m},'');
+  LS.setItem('rdl.dcr.v1',JSON.stringify({rows:rows,lastSheet:newer?(ud.lastSheet||(a&&a.lastSheet)):(a&&a.lastSheet)||ud.lastSheet,lastDate:last,fileName:newer?(ud.fileName||(a&&a.fileName)):(a&&a.fileName)||ud.fileName,at:newer?uat:Date.now()}))}
 function mergeBackups(){
   return api('listBackups').then(function(j){
     var m=jget('rdl.master.v1'),mAt=m?m.at:0,done=[],late=[];
     sysW=1;j.backups.forEach(function(b){
       if(((b.meta&&b.meta.dataAt)||0)<mAt){late.push(b);return}
-      Object.keys(b.data).forEach(function(k){var inc;try{inc=JSON.parse(b.data[k])}catch(e){return}if(inc==null)return;LS.setItem(k,JSON.stringify(mergeVal(jget(k),inc,b.email)))});
+      Object.keys(b.data).forEach(function(k){var inc;try{inc=JSON.parse(b.data[k])}catch(e){return}if(inc==null)return;if(k==='rdl.ledger.v1'&&isObj(inc)){delete inc.del;delete inc.dr;delete inc.sd;delete inc.ddel}   /* users' drafts stay with the user */LS.setItem(k,JSON.stringify(mergeVal(jget(k),inc,b.email)))});
+      if(b.dcr){try{mergeUserDcr(b.email,JSON.parse(b.dcr))}catch(e){}}
+      (function(){var L=jget('rdl.ledger.v1');if(!L)return;['dr','sd'].forEach(function(k){if(Array.isArray(L[k]))L[k]=L[k].filter(function(x){return !(x&&x._u)})});LS.setItem('rdl.ledger.v1',JSON.stringify(L));L=jget('rdl.ledger.v1');if(!L.del)return;['rv','dz'].forEach(function(k){L[k]=(L[k]||[]).filter(function(x){return !(x._u&&L.del[x.bill])})});LS.setItem('rdl.ledger.v1',JSON.stringify(L))})();
       done.push(b)});sysW=0;
-    function line(b){return '• '+(b.name||b.email)+' ('+b.depot+') — backup of '+b.day}
-    return{done:done,late:late,text:(done.length?'Merged:\n'+done.map(line).join('\n'):'Nothing was merged.')+(late.length?'\n\nSkipped — these users have not opened the app since the latest database was published, so their posts are not yet adjusted to it:\n'+late.map(line).join('\n'):'')}})}
+    try{var mm=jget('rdlgate.merged')||{};done.forEach(function(b){mm[b.email]=+new Date(b.at)||0});jset('rdlgate.merged',mm);setTimeout(pullBkStatus,500)}catch(e){}
+    var LG=jget('rdl.ledger.v1')||{},fn=function(n){return Math.round(n).toLocaleString('en-IN')};
+    function saved(b){var d=new Date(b.at);return isNaN(d)?'':', saved '+('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2)}
+    function line(b){return '• '+(b.name||b.email)+' ('+b.depot+') — backup of '+b.day+saved(b)}
+    function tally(b){var rv=(LG.rv||[]).filter(function(x){return x._u===b.email}),dz=(LG.dz||[]).filter(function(x){return x._u===b.email});
+      return '• '+(b.name||b.email)+': Sales '+rv.length+' = '+fn(rv.reduce(function(s,x){return s+(+x.amt||0)},0))+' | Collections '+dz.length+' = '+fn(dz.reduce(function(s,x){return s+(+x.col||0)+(+x.tds||0)},0))}
+    return{done:done,late:late,text:(done.length?'Merged:\n'+done.map(line).join('\n')+'\n\nPosted by each user (Sales and Collection, all dates):\n'+done.map(tally).join('\n')+'\n\nIf a user posted more than this, ask them to press Save backup now, then merge again.':'Nothing was merged.')+(late.length?'\n\nSkipped — these users have not opened the app since the latest database was published, so their posts are not yet adjusted to it:\n'+late.map(line).join('\n'):'')}})}
 
 /* ---------- user access limits (set by the admin in App Security > User Manage & Access Control) ---------- */
 function loadPerms(){
@@ -1760,6 +1823,67 @@ function pullAlerts(){
     LS.setItem('rdlgate.alerts',JSON.stringify(list));window.dispatchEvent(new Event('rdl:alerts'));
     if(fresh.length)toast('Backup missing: '+fresh.length+' user'+(fresh.length===1?'':'s')+' — see the notification bell')
   }).catch(function(){})}
+/* ---------- admin: Backup status card on the home page ---------- */
+var bkOpen=null,bkLast=null;
+function bkAgo(min){if(min<1)return 'just now';if(min<60)return min+' min ago';var hh=Math.floor(min/60);return hh+' hr'+(hh===1?'':'s')+' ago'}
+function bkRender(j){
+  if(j&&j.users)bkLast=j;
+  var el=document.getElementById('bkStat');if(!el||!j||!j.users)return;
+  var users=j.users.slice(),merged=jget('rdlgate.merged')||{},now=Date.parse(j.now)||Date.now(),n={red:0,amber:0,green:0};
+  users.forEach(function(u){var t=u.last?Date.parse(u.last):0,min=t?Math.max(0,Math.round((now-t)/60000)):0;
+    u.st=(!u.last||u.lastDay!==j.today)?'red':(min>120?'amber':'green');n[u.st]++;
+    u.txt=!u.last?'No backup yet':(u.lastDay===j.today?'Today '+u.lastHm+' • '+bkAgo(min):'Last: '+u.lastDay+' '+u.lastHm);
+    u.pend=!!(t&&(+merged[u.email]||0)<t)});
+  var ord={red:0,amber:1,green:2};users.sort(function(a,b){return ord[a.st]-ord[b.st]||String(a.name||a.email).localeCompare(String(b.name||b.email))});
+  var chip=document.getElementById('rgx-chip'),bd=document.getElementById('rgx-bkb');
+  if(chip){var cnt=n.red||n.amber;if(!cnt){if(bd)bd.remove()}else{if(!bd){bd=h('span');bd.id='rgx-bkb';bd.style.cssText='position:absolute;left:-5px;top:-5px;min-width:17px;height:17px;padding:0 4px;box-sizing:border-box;border-radius:9px;color:#fff;font:700 11px/17px system-ui,sans-serif;text-align:center;border:2px solid #fff;pointer-events:none';chip.appendChild(bd)}
+    bd.textContent=String(cnt);bd.style.background=n.red?'#c0392b':'#d68910'}}   /* red number on the cloud icon = users without a backup today */
+  if(!users.length){el.hidden=true;return}
+  if(bkOpen===null)bkOpen=(n.red+n.amber)>0;
+  el.hidden=false;el.textContent='';
+  var col={red:'#c0392b',amber:'#d68910',green:'#1e8449'};
+  var box=h('div');box.style.cssText='margin:10px 0 6px;background:#fff;border:1px solid #d7e3f5;border-radius:16px;padding:10px 12px;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:0 2px 8px rgba(30,70,140,.08)';
+  var hd=h('div');hd.style.cssText='display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;font-weight:700;color:#12305f';
+  var tt=h('span',null,'Backup status');tt.style.flex='1';hd.appendChild(tt);
+  [['red','● '+n.red+' missing'],['amber','● '+n.amber+' late'],['green','● '+n.green+' ok']].forEach(function(c){if(!n[c[0]])return;var s=h('span',null,c[1]);s.style.cssText='font-size:12px;font-weight:700;color:'+col[c[0]];hd.appendChild(s)});
+  var ar=h('span',null,bkOpen?'▴':'▾');ar.style.cssText='color:#6a82b4;font-size:13px';hd.appendChild(ar);
+  hd.onclick=function(){bkOpen=!bkOpen;bkRender(j)};box.appendChild(hd);
+  if(bkOpen){users.forEach(function(u){
+    var r=h('div');r.style.cssText='display:flex;align-items:center;gap:8px;padding:7px 0;border-top:1px solid #eef3fb;font-size:13px';
+    var d=h('span',null,'●');d.style.cssText='color:'+col[u.st]+';font-size:16px;line-height:1';r.appendChild(d);
+    var m=h('div');m.style.cssText='flex:1;min-width:0';
+    var a=h('div',null,(u.name||u.email));a.style.cssText='font-weight:700;color:#1b2430;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';m.appendChild(a);
+    var b=h('div',null,u.depot);b.style.cssText='font-size:11.5px;color:#6a7788;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';m.appendChild(b);r.appendChild(m);
+    var w=h('div');w.style.cssText='text-align:right;font-size:12px;color:'+col[u.st]+';font-weight:600';w.appendChild(h('div',null,u.txt));
+    if(u.pend&&u.last){var p=h('div',null,'new backup • not merged yet');p.style.cssText='font-size:11px;color:#b9770e;font-weight:700';w.appendChild(p)}
+    r.appendChild(w);box.appendChild(r)});
+    var f=h('div',null,'Tap the title to hide. Updated '+hhmm());f.style.cssText='font-size:11px;color:#8a97a8;padding-top:6px';box.appendChild(f)}
+  el.appendChild(box)}
+function pullBkStatus(){
+  if(!S||S.role!=='admin')return Promise.resolve();
+  return api('backupStatus',{},true).then(bkRender).catch(function(){})}
+var amBusy=0,sxBusy=0;
+function onHomePage(){var hm=document.getElementById('home');return !!(hm&&hm.classList.contains('on'))}
+/* admin: new user backups are merged by themselves (only while the Home page is showing and the menu is closed, so no work in progress is touched) */
+function autoMerge(){
+  if(!S||S.role!=='admin'||amBusy||!onHomePage()||panelOn||document.visibilityState!=='visible'||!LS.getItem('rdl.master.v1'))return Promise.resolve();
+  amBusy=1;
+  return api('backupStatus',{},true).then(function(j){bkRender(j);
+    var mg=jget('rdlgate.merged')||{},tr=jget('rdlgate.mtried')||{};
+    var pend=j.users.some(function(u){var t=u.last?Date.parse(u.last):0;return t&&t>Math.max(+mg[u.email]||0,+tr[u.email]||0)});
+    if(!pend)return;
+    return mergeBackups().then(function(r){var t2=jget('rdlgate.mtried')||{};r.done.concat(r.late).forEach(function(b){t2[b.email]=+new Date(b.at)||0});jset('rdlgate.mtried',t2);
+      if(r.done.length){toast('New data from users merged');setTimeout(function(){if(onHomePage()&&!panelOn)location.reload()},1500)}})
+  }).catch(function(){}).then(function(){amBusy=0})}
+/* any person: work saved from my OTHER device is added to this one when I come back to it */
+function syncOther(){
+  if(!S||sxBusy||!hasAuth())return Promise.resolve();
+  sxBusy=1;
+  return mergeOwn(false,true).then(function(ch){if(ch){toast('Data from your other device was added');setTimeout(function(){if(onHomePage()&&!panelOn)location.reload()},1500)}}).catch(function(){}).then(function(){sxBusy=0})}
+setInterval(function(){pullBkStatus().then(autoMerge)},300000);
+document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible')setTimeout(function(){syncOther().then(autoMerge)},2500)});
+try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist()}catch(e){}   /* asks the browser not to clear this app's saved data by itself */
+document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible')setTimeout(pullBkStatus,1200)});
 /* ---------- after sign-in (every app start) ---------- */
 function afterLogin(){
   afterAt=Date.now();status('Checking…');
@@ -1769,9 +1893,9 @@ function afterLogin(){
     setDepotLabel();if(ch){location.reload();return}
     if(S.role==='admin'){if(!LS.getItem('rdl.master.v1'))return restoreAdmin().then(function(ok){if(ok){location.reload();throw new Error('__reload')}});LS.setItem('rdlgate.owner','admin')}
     if(S.role==='user')LS.setItem('rdlgate.owner','user');
-    if(S.role==='user')return pullData(false).then(function(changed){if(changed){toast('New data received — reloading…');setTimeout(function(){location.reload()},900);throw new Error('__reload')}});
-    if(S.role==='admin'&&sigNow()&&LS.getItem('rdlgate.sig')!==sigNow())return pushData().then(function(t){toast('Database published to depots')}).catch(function(e){status(msgOf(e),'warn')})
-  }).then(loadPerms).then(function(){return backupIfDue()}).then(function(){return pullAlerts()}).catch(function(e){
+    if(S.role==='user')return mergeOwn(false,true).then(function(){return pullData(false)}).then(function(changed){if(changed){toast('New data received — reloading…');setTimeout(function(){location.reload()},900);throw new Error('__reload')}});
+    if(S.role==='admin')return mergeOwn(false,true).then(function(){if(sigNow()&&LS.getItem('rdlgate.sig')!==sigNow())return pushData().then(function(t){toast('Database published to depots')}).catch(function(e){status(msgOf(e),'warn')})})
+  }).then(loadPerms).then(function(){return backupIfDue()}).then(function(){return pullAlerts()}).then(function(){return pullBkStatus()}).then(function(){return autoMerge()}).catch(function(e){
     if(e.message==='__reload')return;
     if(/ACCESS_DENIED/.test(e.message))return forcedOut(msgOf(e));
     status('Offline or not synced: '+msgOf(e),'warn')})}
@@ -1876,7 +2000,7 @@ function openChangeEmail(){
 
 /* ---------- floating button + menu ---------- */
 function signOut(){
-  var go=function(){if(S.role==='user')wipeUserData();clearPin();LS.removeItem('rdlgate.sess');LS.removeItem(SK);LS.removeItem('rdlgate.perms');try{google.accounts.id.disableAutoSelect()}catch(e){}location.reload()};
+  var go=function(){if(S.role==='user')wipeUserData();/* the PIN stays on this phone after Sign out, so the next sign-in just asks for it */LS.removeItem('rdlgate.sess');LS.removeItem(SK);LS.removeItem('rdlgate.perms');try{google.accounts.id.disableAutoSelect()}catch(e){}location.reload()};
   if(S.role==='user'){
     if(!confirm('Sign out? Your work is first saved to the server, then removed from this phone.'))return;
     sendBackup().then(go).catch(function(e){if(confirm('Backup could not be saved ('+msgOf(e)+').\nSigning out now will LOSE unsaved work. Sign out anyway?'))go()})
@@ -1890,6 +2014,7 @@ function renderPanel(){
   if(!hasAuth()&&gis){var gb=h('div');gb.style.cssText='display:flex;justify-content:center;margin:8px 0 4px';p.appendChild(gb);
     p.appendChild(h('div','sub','Tap the blue button to sign in again and sync.'));
     try{google.accounts.id.renderButton(gb,{theme:'filled_blue',size:'large',shape:'pill',text:'signin_with',width:240})}catch(e){}}
+  if(S.role==='admin'){var bk=h('div');bk.id='bkStat';bk.hidden=true;p.appendChild(bk);if(bkLast)bkRender(bkLast);pullBkStatus()}   /* Backup status card: shown inside this cloud menu, refreshed every time it opens */
   var rep=h('div','rep');rep.style.display='none';
   function btn(t,cls,fn){var b=h('button','rgx-b '+(cls||''),t);b.type='button';b.onclick=function(){fn(b)};p.appendChild(b)}
   function run(b,label,fn){var o=b.textContent;b.disabled=true;b.textContent=label;
@@ -1919,6 +2044,12 @@ function buildChip(){
   c.onclick=function(){panelOn=!panelOn;renderPanel()};
   c.onkeydown=function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();c.onclick()}};
   hd.appendChild(c)}
+/* tap anywhere outside the cloud menu: it closes (that tap only closes the menu, it does not press what is underneath) */
+document.addEventListener('click',function(e){
+  if(!panelOn)return;
+  var p=document.getElementById('rgx-panel'),c=document.getElementById('rgx-chip'),t=e.target;
+  if(!p||p.contains(t)||(c&&c.contains(t)))return;
+  e.preventDefault();e.stopPropagation();panelOn=false;renderPanel()},true);
 
 /* users: hide the admin-only database tiles in Settings */
 function hideAdminTiles(){var q=0;
@@ -2536,7 +2667,9 @@ window.__rdlV=window.__rdlV||0;
   function hot(k){return k==='rdl.master.v1'||k==='rdl.ledger.v1'||k==='rdl.dsel.v1'}
   P.setItem=function(k){var r=si.apply(this,arguments);if(this===window.localStorage&&hot(String(k)))window.__rdlV++;return r};
   P.removeItem=function(k){var r=ri.apply(this,arguments);if(this===window.localStorage&&hot(String(k)))window.__rdlV++;return r};
-  P.clear=function(){var r=cl.apply(this,arguments);window.__rdlV++;return r}})();
+  P.clear=function(){var r=cl.apply(this,arguments);window.__rdlV++;return r};
+  /* a second window or tab of the app saved something: forget the cached copy here too, so both always show the same numbers */
+  window.addEventListener('storage',function(e){if(e.storageArea===window.localStorage&&(e.key===null||hot(String(e.key))))window.__rdlV++})})();
 const K={m:'rdl.master.v1',d:'rdl.dcr.v1'};
 const store={get:k=>{try{return JSON.parse(localStorage.getItem(K[k]))}catch(e){return null}},
   set:(k,v)=>localStorage.setItem(K[k],JSON.stringify(v))};
@@ -3091,7 +3224,8 @@ const el=(t,c,x)=>{const e=document.createElement(t);if(c)e.className=c;if(x!=nu
 const LK='rdl.ledger.v1',uid=b=>[b.bill,b.co,b.cu].join('|'),bal=b=>Math.max(0,(+b.amt||0)-(+b.collected||0)-(+b.tds||0));
 const ld=()=>{try{const x=JSON.parse(localStorage.getItem(LK));if(x&&x.rv){x.pl=x.pl||{};return x}}catch(e){}return{rv:[],dz:[],n:{RV:0,DZ:0},ps:{},pc:{},pl:{}}};
 const sv=L=>localStorage.setItem(LK,JSON.stringify(L));
-const nextNo=(L,k)=>{const used=new Set((k==='RV'?L.rv:L.dz).map(x=>parseInt(String(x.bill).split('-')[1],10)));let n=(window.RDL_NOBASE||0)+1;while(used.has(n))n++;return n};
+const nextNo=(L,k)=>{const used=new Set((k==='RV'?L.rv:L.dz).map(x=>parseInt(String(x.bill).split('-')[1],10)));Object.keys(L.del||{}).forEach(b=>{if(b.indexOf(k+'-')===0)used.add(parseInt(String(b).split('-')[1],10))});   /* a deleted number is never used again, so a deleted post can never be mixed up with a new one */
+  let n=(window.RDL_NOBASE||0)+1;while(used.has(n))n++;return n};
 const wk=ref=>{const d=new Date(ref+'T00:00:00'),s=addD(ref,-((d.getDay()+1)%7));return[s,addD(s,6)]};
 const refDay=()=>{const d=R.dcr;return d?d.lastDate:today()};
 /* Sales day = the day before the entry day; on Saturday it is Thursday (Friday is the holiday). Sales entered on Saturday therefore belong to the PREVIOUS week. */
@@ -3519,11 +3653,11 @@ function buildDrafts(kind){const P=$('#drf');P.textContent='';const L=ld(),all0=
         const doPost=(used)=>{const v=read();if(!v)return false;const bad=x=>{stt.className='stt bad';stt.textContent=x;return false};
           if(!bill)return bad('This bill is no longer open (the database changed). Delete this draft.');if(!pd.value)return bad('Choose a posting date');if(pd.value>t)return bad('Posting date cannot be after today');if(bill.post&&pd.value<bill.post)return bad('Posting date cannot be before the bill date ('+dm(bill.post)+')');
           if(v.c+v.tx+((used&&used.get(d.ag))||0)>bal0+EPS)return bad('More than the open balance ('+money(bal0)+')');
-          const L2=ld();if(!L2.dr)return;const x=upd(L2,v);L2.dr=L2.dr.filter(e=>e.id!==d.id);const n=nextNo(L2,'DZ');blk._res={k:'DZ',cu:x.cu,doc:'DZ-'+String(n).padStart(6,'0'),d:pd.value};
+          const L2=ld();if(!L2.dr)return;const x=upd(L2,v);window.RDLDDEL&&RDLDDEL(L2,[d.id]);L2.dr=L2.dr.filter(e=>e.id!==d.id);const n=nextNo(L2,'DZ');blk._res={k:'DZ',cu:x.cu,doc:'DZ-'+String(n).padStart(6,'0'),d:pd.value};
           L2.dz.push({bill:'DZ-'+String(n).padStart(6,'0'),doc:'DZ',pt:Date.now(),ag:x.ag,cu:x.cu,co:x.co,nm:x.nm,col:x.col,tds:x.tds,...(x.xt?{xt:x.xt}:{}),type:x.type,ref:x.ref,...(x.rd?{rd:x.rd}:{}),date:pd.value,...(x.dcr?{dcr:x.dcr}:{}),...(x.bd?{bd:x.bd}:{}),...(x.manual?{manual:1}:{})});
           try{sv(L2)}catch(e){return bad('Could not save on this device')}if(used)used.set(d.ag,((used.get(d.ag))||0)+v.c+v.tx);return true};
         blk._post=doPost;blk._amt=()=>(+col.value||0)+(+tds.value||0);mkB('Post','st-btn').onclick=()=>{if(doPost()){cards();document.dispatchEvent(new Event('visibilitychange'));buildDrafts(kind)}};
-        mkB('Delete','st-btn od-clear').onclick=async()=>{const ok=window.RDLUI&&RDLUI.ask?await RDLUI.ask({title:'Delete this draft?',msg:(d.nm||d.cu)+' • '+money(d.col+d.tds)+'. The bill stays open.',ok:'Delete'}):confirm('Delete this draft?');if(!ok)return;const L2=ld();L2.dr=(L2.dr||[]).filter(e=>e.id!==d.id);try{sv(L2)}catch(e){return}buildDrafts(kind)};
+        mkB('Delete','st-btn od-clear').onclick=async()=>{const ok=window.RDLUI&&RDLUI.ask?await RDLUI.ask({title:'Delete this draft?',msg:(d.nm||d.cu)+' • '+money(d.col+d.tds)+'. The bill stays open.',ok:'Delete'}):confirm('Delete this draft?');if(!ok)return;const L2=ld();window.RDLDDEL&&RDLDDEL(L2,[d.id]);L2.dr=(L2.dr||[]).filter(e=>e.id!==d.id);try{sv(L2)}catch(e){return}buildDrafts(kind)};
         bd.appendChild(act);bd.appendChild(stt)});
       row.appendChild(ft);gx.appendChild(row);cks.push({ck:cck,blks,row,totUp})});
     gx.appendChild(bulkBar(gx,gck,cks,()=>buildDrafts(kind)));card0.appendChild(gx)})}
@@ -3556,11 +3690,11 @@ function salesDrafts(P){
         const pb=mkB('Post','st-btn');
         const doPost=()=>{const v=read();if(!v)return false;const L2=ld(),x=upd(L2,v);if(!x)return false;
           if(!dupOk&&L2.rv.some(z=>String(z.cu)===String(x.cu)&&String(z.co)===String(x.co)&&z.post===v.f&&+z.amt===v.a)){dupOk=true;pb.textContent='Post anyway';stt.className='stt warn';stt.textContent='\u26a0 A bill with the same customer, company, date and amount is already posted. Press Post anyway only if this is a different bill.';return false}
-          L2.sd=L2.sd.filter(e=>e.id!==d.id);const n=nextNo(L2,'RV');blk._res={k:'RV',cu:x.cu,doc:'RV-'+String(n).padStart(6,'0'),d:x.post};   /* used by Post selected to open the register on this bill */
+          window.RDLDDEL&&RDLDDEL(L2,[d.id]);L2.sd=L2.sd.filter(e=>e.id!==d.id);const n=nextNo(L2,'RV');blk._res={k:'RV',cu:x.cu,doc:'RV-'+String(n).padStart(6,'0'),d:x.post};   /* used by Post selected to open the register on this bill */
           L2.rv.push({bill:'RV-'+String(n).padStart(6,'0'),doc:'RV',pt:Date.now(),co:x.co,cu:x.cu,nm:x.nm,amt:x.amt,post:x.post,due:addD(x.post,x.days),days:x.days,manual:1});
           try{sv(L2)}catch(e){return bad('Could not save on this device')}return true};
         blk._post=()=>doPost();blk._amt=()=>+am.value||0;pb.onclick=()=>{if(doPost()){cards();document.dispatchEvent(new Event('visibilitychange'));buildDrafts('Sales')}};
-        mkB('Delete','st-btn od-clear').onclick=async()=>{const ok=window.RDLUI&&RDLUI.ask?await RDLUI.ask({title:'Delete this draft?',msg:(d.nm||d.cu)+' \u2022 '+money(d.amt)+'.',ok:'Delete'}):confirm('Delete this draft?');if(!ok)return;const L2=ld();L2.sd=(L2.sd||[]).filter(e=>e.id!==d.id);try{sv(L2)}catch(e){return}buildDrafts('Sales')};
+        mkB('Delete','st-btn od-clear').onclick=async()=>{const ok=window.RDLUI&&RDLUI.ask?await RDLUI.ask({title:'Delete this draft?',msg:(d.nm||d.cu)+' \u2022 '+money(d.amt)+'.',ok:'Delete'}):confirm('Delete this draft?');if(!ok)return;const L2=ld();window.RDLDDEL&&RDLDDEL(L2,[d.id]);L2.sd=(L2.sd||[]).filter(e=>e.id!==d.id);try{sv(L2)}catch(e){return}buildDrafts('Sales')};
         bd.appendChild(act);bd.appendChild(stt)});
       row.appendChild(ft);gx.appendChild(row);cks.push({ck:cck,blks,row,totUp})});
     gx.appendChild(bulkBar(gx,gck,cks,()=>buildDrafts('Sales')))})}
@@ -3984,7 +4118,7 @@ async function delManual(x){
   if(!z){await RDLUI.alert('Cannot delete','This collection is no longer editable.');return}
   const ok=await RDLUI.ask({title:'Delete '+z.bill+'?',msg:(z.nm||'Customer '+z.cu)+' • '+coName(z.co)+'\nBill '+String(z.ag).split('|')[0]+'\nCollected '+money(z.col)+(z.tds?' + TDS '+money(z.tds):'')+'\n\nThe collection is removed and the bill balance is restored.',ok:'Delete',danger:true});
   if(!ok)return;
-  const L2=ld();L2.dz=L2.dz.filter(e=>e.bill!==z.bill);
+  const L2=ld();window.RDLDEL&&RDLDEL(L2,L2.dz.filter(e=>e.bill===z.bill));L2.dz=L2.dz.filter(e=>e.bill!==z.bill);
   try{sv0(L2)}catch(e){await RDLUI.alert('Could not save','Nothing was deleted.');return}
   afterChange(x)}
 async function editManual(x){
@@ -4564,6 +4698,8 @@ async function deleteMany(items){
   const ok=await RDLUI.ask({title:'Delete selected?',msg:parts.join('\n')+'\n\n'+names.slice(0,8).join('\n')+(names.length>8?'\n…and '+(names.length-8)+' more':'')+'\n\nBill balances are restored. Lines that came from Collection & Order go back to Posting.'+(skip.length?'\n('+skip.length+' locked record'+(skip.length===1?'':'s')+' skipped)':''),ok:'Delete',danger:true});
   if(!ok)return false;
   const n=dzM.size+drM.size+rvM.size,r=commit('Delete '+n+' record'+(n===1?'':'s'),parts.join(' • '),L2=>{
+    window.RDLDEL&&RDLDEL(L2,L2.dz.filter(z=>dzM.has(z.bill)).concat(L2.rv.filter(x=>rvM.has(x.bill))));
+    window.RDLDDEL&&RDLDDEL(L2,(L2.dr||[]).filter(d=>drM.has(d.id)).map(d=>d.id));
     L2.dz=L2.dz.filter(z=>!dzM.has(z.bill));L2.dr=(L2.dr||[]).filter(d=>!drM.has(d.id));L2.rv=L2.rv.filter(x=>!rvM.has(x.bill));
     frees.forEach(([kd,dcr,nm])=>freeLine(L2,kd,dcr,nm));rvM.forEach(x=>{if(x.dcr)freeLine(L2,'o',x.dcr,x.nm,x.co)})});
   if(r!==true){await RDLUI.alert('Could not save','Nothing was deleted.');return false}
@@ -5018,6 +5154,7 @@ async function eraseDcr(msg){
   const rows=d.rows.filter(r=>r.d===D).length;
   const ok=await RDLUI.ask({title:'Erase Collection & Order of '+dd(D)+'?',msg:rows+' Collection & Order entries, '+rvD.length+' RV bill'+(rvD.length===1?'':'s')+' ('+__m(rvD.reduce((s,x)=>s+x.amt,0))+') and '+dzD.length+' DZ collection'+(dzD.length===1?'':'s')+' ('+__m(dzD.reduce((s,x)=>s+x.col,0))+') will be deleted. You can upload the Collection & Order for this date again.',ok:'Erase',danger:true});
   if(!ok)return;
+  window.RDLDEL&&RDLDEL(L,L.rv.filter(r=>r.dcr===D).concat(L.dz.filter(z=>z.dcr===D)));
   L.rv=L.rv.filter(r=>r.dcr!==D);L.dz=L.dz.filter(z=>z.dcr!==D);Object.keys(L.pl).forEach(k=>{if(k.split('|')[1]===D)delete L.pl[k]});delete L.ps[D];delete L.pc[D];
   d.rows=d.rows.filter(r=>r.d!==D);d.lastDate=d.rows.reduce((m,r)=>r.d>m?r.d:m,'');
   jset(LK,L);jset(DK,d);refreshAll();
