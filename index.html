@@ -1426,28 +1426,48 @@ try{document.documentElement.classList.add('rdl-restoring');setTimeout(function(
 'use strict';
 var MODS=[
  {k:'dcr',t:'Daily Collection & Order Upload',d:'Upload the daily Collection & Order file',def:2,ro:1},
- {k:'entry',t:'Hand entry of Sales (RV) and Collection (DZ)',d:'Sales and Collection tabs: quick entry, drafts, posting',def:2},
+ {k:'entry',t:'Hand entry of Sales (RV) and Collection (DZ)',d:'Sales and Collection tabs: quick entry, drafts, posting',def:2,
+  sub:[{k:'entry.sales',t:'Sales tab',d:'Sales (RV) entry, drafts and posting'},{k:'entry.coll',t:'Collection tab',d:'Collection (DZ) entry, drafts and posting'}]},
  {k:'wa',t:'WhatsApp Message',d:'Wording of the overdue message',def:2},
  {k:'notif',t:'Notification Settings',d:'Due-bill notifications',def:2},
- {k:'theme',t:'Theme, Font & Header Text',d:'How the app looks',def:2},
- {k:'backup',t:'Database Backup',d:'Backup file and restore',def:2},
+ {k:'theme',t:'Theme, Font & Header Text',d:'How the app looks',def:2,
+  sub:[{k:'theme.hdr',t:'Header Text',d:'App title and depot name'},{k:'theme.look',t:'Theme, Font & Font size',d:'Colours and letter style'}]},
+ {k:'backup',t:'Database Backup',d:'Backup file and restore',def:2,
+  sub:[{k:'backup.dl',t:'Download / share backup file',d:'Save the whole app data as a file'},{k:'backup.rs',t:'Restore from a backup file',d:'Replace the app data with a backup file'},
+       {k:'backup.scope',t:'Depot-wise / Customer-wise backup and restore',d:'Download or restore only one depot or one customer',adminOnly:1}]},
  {k:'actlog',t:'Activity Log',d:'What was changed on this phone, and undo',def:2,ro:1},
- {k:'dbup',t:'Database Upload',d:'Outstanding and Credit limit files',def:0,ro:1},
- {k:'corr',t:'Database Correction & Update',d:'Edit / delete posted entries, Outstanding and Credit Line update, Credit Line On/Off',def:0,ro:1},
+ {k:'dbup',t:'Database Upload',d:'Outstanding and Credit limit files (Admin only)',def:0,ro:1,adminOnly:1,
+  sub:[{k:'dbup.out',t:'Outstanding data file',d:'SAP outstanding bills'},{k:'dbup.cr',t:'Credit limit data file',d:'Credit lines'}]},
+ {k:'corr',t:'Database Correction & Update',d:'Edit / delete posted entries, Outstanding and Credit Line update, Credit Line On/Off',def:0,ro:1,
+  sub:[{k:'corr.edit',t:'Edit posted entries',d:'Database Correction: edit selected'},{k:'corr.del',t:'Delete posted entries',d:'Database Correction: delete selected'},
+       {k:'corr.out',t:'Outstanding Update',d:'Edit bills of one customer'},{k:'corr.cr',t:'Credit Line Update',d:'Credit & days limit, new business'},{k:'corr.off',t:'Credit Line On / Off',d:'Switch unused credit lines off'}]},
  {k:'newcust',t:'Add New Customer',d:'Create a customer in the database',def:0},
- {k:'erase',t:'Database Erase',d:'Delete Outstanding, Credit limit, Collection & Order or all data',def:0},
- {k:'users',t:'User Manage & Access Control',d:'Create, turn off, delete users and admins, set limits, see what users changed',def:2,ro:1,adminOnly:1}
+ {k:'shift',t:'Move Customer to another Depot',d:'Move one customer with all its data (Admin only)',def:0,adminOnly:1},
+ {k:'erase',t:'Database Erase',d:'Delete Outstanding, Credit limit, Collection & Order or all data',def:0,
+  sub:[{k:'erase.out',t:'Erase Outstanding data',d:'All SAP bills'},{k:'erase.cr',t:'Erase Credit limit data',d:'All credit lines'},{k:'erase.dcr',t:'Erase Collection & Order of one date',d:'One upload date'},{k:'erase.all',t:'Erase ALL data',d:'Everything'}]},
+ {k:'users',t:'User Manage & Access Control',d:'Create, turn off, delete users and admins, set limits, see what users changed',def:2,ro:1,adminOnly:1,
+  sub:[{k:'users.create',t:'Create a user or admin',d:''},{k:'users.edit',t:'Change name, depots, turn on / off',d:''},{k:'users.delete',t:'Delete a user or admin',d:''},
+       {k:'users.perms',t:'Change access limits',d:''},{k:'users.log',t:'See the sign-in log and what users changed',d:''}]}
 ];
 function J(k){try{return JSON.parse(localStorage.getItem(k))||{}}catch(e){return {}}}
 function find(k){for(var i=0;i<MODS.length;i++)if(MODS[i].k===k)return MODS[i];return null}
+function parentOf(k){var i=String(k).indexOf('.');return i<0?null:k.slice(0,i)}
+function findSub(k){var m=find(parentOf(k));if(!m||!m.sub)return null;for(var i=0;i<m.sub.length;i++)if(m.sub[i].k===k)return m.sub[i];return null}
 var A={MODS:MODS};
 A.modsFor=function(role){return MODS.filter(function(m){return role==='admin'||!m.adminOnly})};
 /* level of module k for an account of this role holding these saved limits */
-A.lvl=function(p,role,k){var m=find(k);if(!m)return 2;if(m.adminOnly&&role!=='admin')return 0;
+A.lvl=function(p,role,k){
+  var pk=parentOf(k);
+  if(pk){   /* one option inside a group: its own Full / No setting, or else the same as the group */
+    var sm=findSub(k),pm=find(pk);if(!sm||!pm)return 2;
+    if((pm.adminOnly||sm.adminOnly)&&role!=='admin')return 0;
+    var sv=p&&p[k];if(sv===0||sv===2)return sv;
+    return A.lvl(p,role,pk)}
+  var m=find(k);if(!m)return 2;if(m.adminOnly&&role!=='admin')return 0;
   var v=p&&p[k];if(v===0||v===1||v===2)return(v===1&&!m.ro)?0:v;
   return role==='admin'?2:m.def};
 A.level=function(k){var s=J('rdlgate.session');if(s.root)return 2;return A.lvl(J('rdlgate.perms'),s.role==='admin'?'admin':'user',k)};
-A.can=function(k){return A.level(k)>0};
+A.can=function(k){if(A.level(k)>0)return true;var m=find(k);if(m&&m.sub)for(var i=0;i<m.sub.length;i++)if(A.level(m.sub[i].k)>0)return true;return false};   /* a group is open when the group or any one of its options is open */
 A.any=function(ks){for(var i=0;i<ks.length;i++)if(A.can(ks[i]))return true;return false};
 A.apply=function(){try{if(window.RDL_ACC_REFRESH)window.RDL_ACC_REFRESH()}catch(e){}};
 /* View-only: the page stays readable, but every button that would change something is switched off */
@@ -1512,7 +1532,7 @@ var css='#rgx-login{position:fixed;inset:0;z-index:99999;background:#f4f7fb;disp
 +'#rgx-panel h3{margin:0 0 2px;font-size:16px}#rgx-panel .sub{font-size:12.5px;color:#5b6675;margin-bottom:10px;word-break:break-all}'
 +'.rgx-st{font-size:13px;margin:8px 0;color:#34495e}.rgx-st.ok{color:#1e8449}.rgx-st.warn{color:#b9770e}.rgx-st.bad{color:#c0392b}'
 +'#rgx-panel button.rgx-b{display:block;width:100%;margin:7px 0;padding:11px;border-radius:10px;border:0;background:#1f4e78;color:#fff;font-size:14.5px;cursor:pointer}'
-+'#rgx-panel button.rgx-b.alt{background:#e8eef5;color:#1f4e78}#rgx-panel button.rgx-b.red{background:#fde8e6;color:#c0392b}'
++'#rgx-panel .rgx-hint{font-size:12px;line-height:1.45;color:#5d6b7c;margin:-2px 4px 8px}#rgx-panel button.rgx-b.alt{background:#e8eef5;color:#1f4e78}#rgx-panel button.rgx-b.red{background:#fde8e6;color:#c0392b}'
 +'#rgx-panel .rep{font-size:12.5px;white-space:pre-wrap;background:#f4f7fb;border-radius:8px;padding:8px;margin-top:6px}'
 +'.rgx-toast{position:fixed;left:50%;transform:translateX(-50%);bottom:130px;z-index:99998;background:#222;color:#fff;padding:10px 16px;border-radius:20px;font-size:14px;max-width:90vw;text-align:center}';
 css+='#rgx-lock{position:fixed;inset:0;z-index:100000;background:#f4f7fb;display:flex;align-items:center;justify-content:center;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}\n.rgx-pin{width:100%;box-sizing:border-box;font-size:24px;letter-spacing:8px;text-align:center;padding:10px;border:1.5px solid #c8d3e0;border-radius:12px;margin:6px 0}\n.rgx-go{display:block;width:100%;margin:10px 0 2px;padding:12px;border:0;border-radius:12px;background:#1f4e78;color:#fff;font-size:15px;cursor:pointer}.rgx-go.alt{background:#e8eef5;color:#1f4e78}.rgx-go:disabled{opacity:.6}\n.rgx-link{display:block;width:100%;margin-top:8px;background:none;border:0;color:#1f4e78;font-size:14px;cursor:pointer}\n#rgx-users{position:fixed;inset:0;z-index:99990;background:#f4f7fb;display:flex;flex-direction:column;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#1b2430}\n.rgx-uh{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;background:#1f4e78;color:#fff;font-size:17px}.rgx-uh button{background:none;border:0;color:#fff;font-size:20px}\n.rgx-ub{flex:1;overflow:auto;padding:12px}\n.rgx-ucard{background:#fff;border-radius:12px;padding:12px;margin-bottom:10px;box-shadow:0 1px 4px rgba(0,0,0,.1)}.rgx-ucard.off{opacity:.55}\n.rgx-fi{display:block;width:100%;box-sizing:border-box;padding:10px;margin:6px 0;border:1.5px solid #c8d3e0;border-radius:10px;font-size:15px}\n.rgx-un{font-weight:600}.rgx-us{font-size:13px;color:#5b6675;word-break:break-all}.rgx-warn{font-size:12.5px;color:#b9770e;margin-top:4px}\n.rgx-sm{margin:8px 8px 0 0;padding:7px 12px;border:0;border-radius:8px;background:#1f4e78;color:#fff;font-size:13px}.rgx-sm.alt{background:#e8eef5;color:#1f4e78}\n.rgx-lr{font-size:12.5px;padding:6px 0;border-bottom:1px solid #e3e8ef;word-break:break-word}.rgx-lr.bad{color:#c0392b}\n';
@@ -1593,7 +1613,7 @@ function firstLogin(){
     jset(SK,S);location.reload()
   }).catch(function(e){S=null;tok=null;setLogin(msgOf(e),true)})}
 function forcedOut(msg){
-  if(S&&S.role==='user')wipeUserData();clearPin();LS.removeItem('rdlgate.sess');LS.removeItem(SK);LS.removeItem('rdlgate.perms');
+  if(S&&S.role==='user')wipeUserData();LS.removeItem('rdlgate.sess');LS.removeItem(SK);LS.removeItem('rdlgate.perms');   /* the PIN is kept: a forced sign-out never asks for a new PIN */
   try{google.accounts.id.disableAutoSelect()}catch(e){}
   alert(msg||'Your access was removed. Please contact the admin.');location.reload()}
 
@@ -1608,6 +1628,7 @@ function mergeAdminLedger(led){
 /* ---------- keep my own posted data safe across devices ----------
    A new (or long unused) phone / PC first brings back my newest saved backup and ADDS it to what is on the device,
    so a device that is missing posts can never send an "emptier" backup over a fuller one. */
+function devLabel(){try{var u=navigator.userAgent||'',m=u.match(/Android[^;)]*;\s*([^;)]+?)(?:\sBuild|[;)])/),os=/iPhone/.test(u)?'iPhone':/iPad/.test(u)?'iPad':/Android/.test(u)?'Android':/Windows/.test(u)?'Windows':/Mac OS/.test(u)?'Mac':'Other',br=/Edg\//.test(u)?'Edge':/OPR\//.test(u)?'Opera':/Chrome\//.test(u)?'Chrome':/Safari\//.test(u)?'Safari':/Firefox\//.test(u)?'Firefox':'';return (m?m[1].trim():os)+(br?' • '+br:'')}catch(e){return ''}}
 function devId(){var d=LS.getItem('rdlgate.dev');if(!d){d=Math.random().toString(36).slice(2)+Date.now().toString(36);LS.setItem('rdlgate.dev',d)}return d}
 function rowKey(x){return [x.bill,x.co,x.cu].join('|')}
 /* deleted Sales / Collections are remembered in L.del, so a copy kept by the admin or in an older backup cannot bring them back */
@@ -1663,18 +1684,21 @@ function pullData(force){
 
 /* ---------- backup (user and admin) ---------- */
 function collect(){var o={};for(var i=0;i<LS.length;i++){var k=LS.key(i);if(k.indexOf('rdl.')===0)o[k]=LS.getItem(k)}return o}
+var bkFails=0;
 function bkAlert(msg){
   var b=document.getElementById('rgx-bkal');
   if(!msg){if(b)b.remove();return}
   if(!b){b=h('div');b.id='rgx-bkal';
     b.style.cssText='position:fixed;left:8px;right:8px;top:max(8px,env(safe-area-inset-top));z-index:100002;background:#c0392b;color:#fff;border-radius:12px;padding:10px 14px;font:700 13.5px system-ui,-apple-system,Segoe UI,Roboto,sans-serif;text-align:center;box-shadow:0 4px 14px rgba(0,0,0,.35);cursor:pointer';
-    b.onclick=function(){sendBackup().catch(function(){})};document.body.appendChild(b)}
+    b.onclick=function(){b.textContent='\u23F3 Saving backup\u2026';bkFails=2;sendBackup().catch(function(){})};document.body.appendChild(b)}
   b.textContent='\u26A0 '+msg}
 function sendBackup(noPrompt){
   if(S&&S.role==='user'&&LS.getItem('rdlgate.owner')!=='user')return Promise.reject(new Error('still preparing this device, backup not sent'));   /* never send a half-loaded device as a backup */
   if(S&&S.role==='admin'&&!LS.getItem('rdl.master.v1'))return Promise.reject(new Error('this phone has no data yet, so no backup was sent (your saved backup is safe)'));
-  return api('putBackup',{data:collect(),meta:{dataAt:+LS.getItem('rdlgate.dataAt')||0,device:devId()}},noPrompt).then(function(){
-    LS.setItem('rdlgate.bk',String(Date.now()));LS.removeItem('rdlgate.bkdirty');try{_s.call(LS,'rdl.bkp.v1',JSON.stringify({at:Date.now()}));window.dispatchEvent(new Event('rdl:remind'))}catch(e){}status('Backup saved '+hhmm(),'ok');bkAlert(null);return flushChg(noPrompt)}).catch(function(e){if(!/still preparing|no data yet/.test(String(e&&e.message))){bkAlert('Backup NOT saved \u2014 your latest work is not safe yet. Tap here to retry.');status('Backup failed: '+msgOf(e),'bad')}throw e})}
+  return api('putBackup',{data:collect(),meta:{dataAt:+LS.getItem('rdlgate.dataAt')||0,device:devId(),ua:devLabel()}},noPrompt).then(function(){
+    LS.setItem('rdlgate.bk',String(Date.now()));LS.removeItem('rdlgate.bkdirty');try{_s.call(LS,'rdl.bkp.v1',JSON.stringify({at:Date.now()}));window.dispatchEvent(new Event('rdl:remind'))}catch(e){}status('ব্যাকআপ সেভ হয়েছে '+hhmm(),'ok');bkAlert(null);bkFails=0;return flushChg(noPrompt)}).catch(function(e){if(!/still preparing|no data yet/.test(String(e&&e.message))){bkFails++;status('Backup failed: '+msgOf(e),'bad');
+    if(bkFails<3){setTimeout(function(){sendBackup(true).catch(function(){})},8000*bkFails)}   /* a short network hiccup: try again quietly, 8 and 16 seconds later */
+    else bkAlert('Backup NOT saved \u2014 your latest work is not safe yet. Tap here to retry.')}throw e})}
 function backupIfDue(){
   var last=+LS.getItem('rdlgate.bk')||0,lastDay=last?new Date(last):null;
   var dueDay=!lastDay||(lastDay.getFullYear()+'-'+('0'+(lastDay.getMonth()+1)).slice(-2)+'-'+('0'+lastDay.getDate()).slice(-2))!==today();
@@ -1793,18 +1817,19 @@ function mergeBackups(){
   return api('listBackups').then(function(j){
     var m=jget('rdl.master.v1'),mAt=m?m.at:0,done=[],late=[];
     sysW=1;j.backups.forEach(function(b){
-      if(((b.meta&&b.meta.dataAt)||0)<mAt){late.push(b);return}
-      Object.keys(b.data).forEach(function(k){var inc;try{inc=JSON.parse(b.data[k])}catch(e){return}if(inc==null)return;if(k==='rdl.ledger.v1'&&isObj(inc)){delete inc.del;delete inc.dr;delete inc.sd;delete inc.ddel}   /* users' drafts stay with the user */LS.setItem(k,JSON.stringify(mergeVal(jget(k),inc,b.email)))});
+      var isLate=((b.meta&&b.meta.dataAt)||0)<mAt,cutD=LS.getItem('rdlgate.cut')||'';
+      if(isLate&&!cutD){late.push(b);return}   /* the user's phone is on an older database and no cut date is known: nothing can be adjusted safely */
+      Object.keys(b.data).forEach(function(k){var inc;try{inc=JSON.parse(b.data[k])}catch(e){return}if(inc==null)return;if(k==='rdl.ledger.v1'&&isObj(inc)){delete inc.del;delete inc.dr;delete inc.sd;delete inc.ddel;if(isLate){['rv','dz'].forEach(function(t){if(Array.isArray(inc[t]))inc[t]=inc[t].filter(function(x){return x&&!x._adm&&String(t==='rv'?x.post:x.date)>cutD})})}}   /* older database on the user's phone: only posts AFTER the cut date of the latest upload are still valid; earlier ones are already inside the new database */   /* users' drafts stay with the user */LS.setItem(k,JSON.stringify(mergeVal(jget(k),inc,b.email)))});
       if(b.dcr){try{mergeUserDcr(b.email,JSON.parse(b.dcr))}catch(e){}}
       (function(){var L=jget('rdl.ledger.v1');if(!L)return;['dr','sd'].forEach(function(k){if(Array.isArray(L[k]))L[k]=L[k].filter(function(x){return !(x&&x._u)})});LS.setItem('rdl.ledger.v1',JSON.stringify(L));L=jget('rdl.ledger.v1');if(!L.del)return;['rv','dz'].forEach(function(k){L[k]=(L[k]||[]).filter(function(x){return !(x._u&&L.del[x.bill])})});LS.setItem('rdl.ledger.v1',JSON.stringify(L))})();
-      done.push(b)});sysW=0;
+      if(isLate)b._part=cutD;done.push(b)});sysW=0;
     try{var mm=jget('rdlgate.merged')||{};done.forEach(function(b){mm[b.email]=+new Date(b.at)||0});jset('rdlgate.merged',mm);setTimeout(pullBkStatus,500)}catch(e){}
     var LG=jget('rdl.ledger.v1')||{},fn=function(n){return Math.round(n).toLocaleString('en-IN')};
     function saved(b){var d=new Date(b.at);return isNaN(d)?'':', saved '+('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2)}
-    function line(b){return '• '+(b.name||b.email)+' ('+b.depot+') — backup of '+b.day+saved(b)}
+    function line(b){return '• '+(b.name||b.email)+' ('+b.depot+') — backup of '+b.day+saved(b)+(b._part?' — user has an older database, so only posts after '+b._part+' were merged':'')+(b.meta&&b.meta.dataAt?' [user database: '+new Date(b.meta.dataAt).toLocaleString('en-GB')+']':'')}
     function tally(b){var rv=(LG.rv||[]).filter(function(x){return x._u===b.email}),dz=(LG.dz||[]).filter(function(x){return x._u===b.email});
       return '• '+(b.name||b.email)+': Sales '+rv.length+' = '+fn(rv.reduce(function(s,x){return s+(+x.amt||0)},0))+' | Collections '+dz.length+' = '+fn(dz.reduce(function(s,x){return s+(+x.col||0)+(+x.tds||0)},0))}
-    return{done:done,late:late,text:(done.length?'Merged:\n'+done.map(line).join('\n')+'\n\nPosted by each user (Sales and Collection, all dates):\n'+done.map(tally).join('\n')+'\n\nIf a user posted more than this, ask them to press Save backup now, then merge again.':'Nothing was merged.')+(late.length?'\n\nSkipped — these users have not opened the app since the latest database was published, so their posts are not yet adjusted to it:\n'+late.map(line).join('\n'):'')}})}
+    return{done:done,late:late,text:(done.length?'Merged:\n'+done.map(line).join('\n')+'\n\nPosted by each user (Sales and Collection, all dates):\n'+done.map(tally).join('\n')+'\n\nIf a user posted more than this, ask them to press Save backup now, then merge again.':'Nothing was merged.')+(late.length?'\n\nSkipped — these users have an older database than yours ('+(m&&m.at?new Date(m.at).toLocaleString('en-GB'):'')+'). Press "Publish database", ask them to open the app (so it downloads the new data) and press Save backup now, then merge again:\n'+late.map(line).join('\n'):'')}})}
 
 /* ---------- user access limits (set by the admin in App Security > User Manage & Access Control) ---------- */
 function loadPerms(){
@@ -1825,14 +1850,22 @@ function pullAlerts(){
   }).catch(function(){})}
 /* ---------- admin: Backup status card on the home page ---------- */
 var bkOpen=null,bkLast=null;
-function bkAgo(min){if(min<1)return 'just now';if(min<60)return min+' min ago';var hh=Math.floor(min/60);return hh+' hr'+(hh===1?'':'s')+' ago'}
+function bkAgo(min){if(min<1)return 'এইমাত্র';if(min<60)return min+' মিনিট আগে';var hh=Math.floor(min/60);return hh+' ঘণ্টা আগে'}
+function bkSummary(){
+  if(!S||S.role!=='admin')return null;
+  if(!bkLast){try{pullBkStatus()}catch(e){}return{loading:true}}
+  var j=bkLast,now=Date.parse(j.now)||Date.now(),n={red:0,amber:0,green:0},list=[];
+  j.users.forEach(function(u){var t=u.last?Date.parse(u.last):0,min=t?Math.max(0,Math.round((now-t)/60000)):0;
+    var st=(!u.last||u.lastDay!==j.today)?'red':(min>120?'amber':'green');n[st]++;
+    if(st!=='green')list.push({name:u.name||u.email,st:st,txt:!u.last?'এখনো ব্যাকআপ নেই':(u.lastDay===j.today?'আজ '+u.lastHm+' • '+bkAgo(min):'শেষ: '+u.lastDay+' '+u.lastHm)})});
+  return{n:n,list:list,total:j.users.length}}
 function bkRender(j){
   if(j&&j.users)bkLast=j;
   var el=document.getElementById('bkStat');if(!el||!j||!j.users)return;
   var users=j.users.slice(),merged=jget('rdlgate.merged')||{},now=Date.parse(j.now)||Date.now(),n={red:0,amber:0,green:0};
   users.forEach(function(u){var t=u.last?Date.parse(u.last):0,min=t?Math.max(0,Math.round((now-t)/60000)):0;
     u.st=(!u.last||u.lastDay!==j.today)?'red':(min>120?'amber':'green');n[u.st]++;
-    u.txt=!u.last?'No backup yet':(u.lastDay===j.today?'Today '+u.lastHm+' • '+bkAgo(min):'Last: '+u.lastDay+' '+u.lastHm);
+    u.txt=!u.last?'এখনো ব্যাকআপ নেই':(u.lastDay===j.today?'আজ '+u.lastHm+' • '+bkAgo(min):'শেষ ব্যাকআপ: '+u.lastDay+' '+u.lastHm);
     u.pend=!!(t&&(+merged[u.email]||0)<t)});
   var ord={red:0,amber:1,green:2};users.sort(function(a,b){return ord[a.st]-ord[b.st]||String(a.name||a.email).localeCompare(String(b.name||b.email))});
   var chip=document.getElementById('rgx-chip'),bd=document.getElementById('rgx-bkb');
@@ -1844,8 +1877,8 @@ function bkRender(j){
   var col={red:'#c0392b',amber:'#d68910',green:'#1e8449'};
   var box=h('div');box.style.cssText='margin:10px 0 6px;background:#fff;border:1px solid #d7e3f5;border-radius:16px;padding:10px 12px;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;box-shadow:0 2px 8px rgba(30,70,140,.08)';
   var hd=h('div');hd.style.cssText='display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;font-weight:700;color:#12305f';
-  var tt=h('span',null,'Backup status');tt.style.flex='1';hd.appendChild(tt);
-  [['red','● '+n.red+' missing'],['amber','● '+n.amber+' late'],['green','● '+n.green+' ok']].forEach(function(c){if(!n[c[0]])return;var s=h('span',null,c[1]);s.style.cssText='font-size:12px;font-weight:700;color:'+col[c[0]];hd.appendChild(s)});
+  var tt=h('span',null,'ইউজারদের ব্যাকআপ অবস্থা');tt.style.flex='1';hd.appendChild(tt);
+  [['red','● '+n.red+' জনের আজ ব্যাকআপ নেই'],['amber','● '+n.amber+' জন দেরিতে'],['green','● '+n.green+' জন ঠিক আছে']].forEach(function(c){if(!n[c[0]])return;var s=h('span',null,c[1]);s.style.cssText='font-size:12px;font-weight:700;color:'+col[c[0]];hd.appendChild(s)});
   var ar=h('span',null,bkOpen?'▴':'▾');ar.style.cssText='color:#6a82b4;font-size:13px';hd.appendChild(ar);
   hd.onclick=function(){bkOpen=!bkOpen;bkRender(j)};box.appendChild(hd);
   if(bkOpen){users.forEach(function(u){
@@ -1855,9 +1888,9 @@ function bkRender(j){
     var a=h('div',null,(u.name||u.email));a.style.cssText='font-weight:700;color:#1b2430;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';m.appendChild(a);
     var b=h('div',null,u.depot);b.style.cssText='font-size:11.5px;color:#6a7788;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';m.appendChild(b);r.appendChild(m);
     var w=h('div');w.style.cssText='text-align:right;font-size:12px;color:'+col[u.st]+';font-weight:600';w.appendChild(h('div',null,u.txt));
-    if(u.pend&&u.last){var p=h('div',null,'new backup • not merged yet');p.style.cssText='font-size:11px;color:#b9770e;font-weight:700';w.appendChild(p)}
+    if(u.pend&&u.last){var p=h('div',null,'নতুন ব্যাকআপ আছে • এখনো আপনার অ্যাপে আনা হয়নি');p.style.cssText='font-size:11px;color:#b9770e;font-weight:700';w.appendChild(p)}
     r.appendChild(w);box.appendChild(r)});
-    var f=h('div',null,'Tap the title to hide. Updated '+hhmm());f.style.cssText='font-size:11px;color:#8a97a8;padding-top:6px';box.appendChild(f)}
+    var f=h('div',null,'লুকাতে শিরোনামে চাপুন • হালনাগাদ '+hhmm());f.style.cssText='font-size:11px;color:#8a97a8;padding-top:6px';box.appendChild(f)}
   el.appendChild(box)}
 function pullBkStatus(){
   if(!S||S.role!=='admin')return Promise.resolve();
@@ -1897,7 +1930,7 @@ function afterLogin(){
     if(S.role==='admin')return mergeOwn(false,true).then(function(){if(sigNow()&&LS.getItem('rdlgate.sig')!==sigNow())return pushData().then(function(t){toast('Database published to depots')}).catch(function(e){status(msgOf(e),'warn')})})
   }).then(loadPerms).then(function(){return backupIfDue()}).then(function(){return pullAlerts()}).then(function(){return pullBkStatus()}).then(function(){return autoMerge()}).catch(function(e){
     if(e.message==='__reload')return;
-    if(/ACCESS_DENIED/.test(e.message))return forcedOut(msgOf(e));
+    if(/ACCESS_DENIED/.test(e.message)&&/is not allowed/.test(e.message))return forcedOut(msgOf(e));   /* ONLY when the admin really removed this person; a Google check that merely failed or expired never signs anyone out or wipes data */
     status('Offline or not synced: '+msgOf(e),'warn')})}
 
 /* ---------- my profile (everyone) / read another person's profile (admin) ---------- */
@@ -2016,30 +2049,36 @@ function renderPanel(){
     try{google.accounts.id.renderButton(gb,{theme:'filled_blue',size:'large',shape:'pill',text:'signin_with',width:240})}catch(e){}}
   if(S.role==='admin'){var bk=h('div');bk.id='bkStat';bk.hidden=true;p.appendChild(bk);if(bkLast)bkRender(bkLast);pullBkStatus()}   /* Backup status card: shown inside this cloud menu, refreshed every time it opens */
   var rep=h('div','rep');rep.style.display='none';
-  function btn(t,cls,fn){var b=h('button','rgx-b '+(cls||''),t);b.type='button';b.onclick=function(){fn(b)};p.appendChild(b)}
+  function btn(t,cls,fn,hint){var b=h('button','rgx-b '+(cls||''),t);b.type='button';b.onclick=function(){fn(b)};p.appendChild(b);if(hint){var hn=h('div','rgx-hint',hint);p.appendChild(hn)}}
   function run(b,label,fn){var o=b.textContent;b.disabled=true;b.textContent=label;
     fn().then(function(t){if(t){rep.textContent=t;rep.style.display='block'}}).catch(function(e){status(msgOf(e),'bad');rep.textContent=msgOf(e);rep.style.display='block'}).then(function(){b.disabled=false;b.textContent=o})}
   if(S.role==='admin'){
-    btn('Publish database to depots','',function(b){run(b,'Publishing…',function(){return pushData()})});
-    btn('Merge users\' backups into this app','alt',function(b){run(b,'Merging…',function(){return mergeBackups().then(function(r){
-      if(r.done.length){setTimeout(function(){if(confirm(r.text+'\n\nReload the app now to see the merged data?'))location.reload()},50)}return r.text})})});
+    btn('📤 নতুন ডাটাবেস ডিপোতে পাঠান','',function(b){run(b,'পাঠানো হচ্ছে…',function(){return pushData()})},'শুধু তখন চাপুন, যখন আপনি নতুন Database Upload করেছেন। ডিপোর ইউজাররা তখন নতুন তথ্য পাবে। প্রতিদিন চাপার দরকার নেই।');
+    btn('📥 ইউজারদের কাজ আমার অ্যাপে আনুন','alt',function(b){run(b,'আনা হচ্ছে…',function(){return mergeBackups().then(function(r){
+      if(r.done.length){setTimeout(function(){if(confirm(r.text+'\n\nনতুন তথ্য দেখতে এখনই অ্যাপ রিলোড করবেন?'))location.reload()},50)}return r.text})})},'ইউজাররা যা পোস্ট করেছে তা আপনার অ্যাপে যোগ হয়। এটা সাধারণত নিজে থেকেই হয়। উপরের কার্ডে "এখনো আপনার অ্যাপে আনা হয়নি" দেখালে এটা চাপুন।');
   }else{
-    btn('Get latest data now','',function(b){run(b,'Checking…',function(){return pullData(false).then(function(c){if(c){setTimeout(function(){location.reload()},800);return 'New data received. Reloading…'}return 'You already have the latest data.'})})});
+    btn('🔄 সর্বশেষ তথ্য নিন','',function(b){run(b,'দেখা হচ্ছে…',function(){return pullData(false).then(function(c){if(c){setTimeout(function(){location.reload()},800);return 'নতুন তথ্য এসেছে। রিলোড হচ্ছে…'}return 'আপনার কাছে সর্বশেষ তথ্যই আছে।'})})},'অ্যাডমিন নতুন ডাটাবেস পাঠালে এটা চেপে নিন।');
   }
   /* admin: Users, Lock app now and Change PIN live in Settings > App Security; normal users keep them here */
-  if(S.role!=='admin'){
-    btn('Lock app now','alt',function(){panelOn=false;renderPanel();LS.setItem('rdlgate.last','0');lockNow()});
-    btn('Change PIN','alt',function(){panelOn=false;renderPanel();changePin()})}
-  btn('My profile','alt',function(){openProfile()});
-  btn('Change Gmail','alt',function(){openChangeEmail()});
-  btn('Save backup now','alt',function(b){run(b,'Saving…',function(){return sendBackup().then(function(){return 'Backup saved to Drive.'})})});
-  btn('Sign out','red',function(){signOut()});
+  btn('🔒 অ্যাপ লক করুন','alt',function(){panelOn=false;renderPanel();LS.setItem('rdlgate.last','0');lockNow()},'রোজ সাইন আউট না করে লক করুন। পরের বার শুধু আপনার পিন দিয়ে ঢুকবেন, জিমেইলে চাপতে হবে না।');
+  btn('🔑 পিন বদলান','alt',function(){panelOn=false;renderPanel();changePin()})
+  /* shortcuts (admin): open the page straight from this menu */
+  function go(pg){panelOn=false;renderPanel();try{window.RDL.admin.open(pg)}catch(e){status('Could not open the page','bad')}}
+  if(S.role==='admin'){
+    btn('🗂️ ডিপো / কাস্টমার ব্যাকআপ','alt',function(){go('setbackup')},'শুধু একটি ডিপো বা একটি কাস্টমারের ব্যাকআপ নামান বা ফেরত আনুন।');
+    btn('👥 ইউজার ও পারমিশন','alt',function(){go('setusers')});
+    btn('📋 অ্যাক্টিভিটি লগ','alt',function(){go('setlog')})}
+  btn('🕘 আমার ব্যাকআপের অবস্থা','alt',function(){var t=+LS.getItem('rdlgate.bk')||0;rep.textContent=t?('শেষ ব্যাকআপ সেভ: '+new Date(t).toLocaleString('en-GB')+(LS.getItem('rdlgate.bkdirty')==='1'?'\nএরপর নতুন কাজ হয়েছে — এখনই ব্যাকআপ সেভ করুন।':'\nসবকিছু সেভ আছে।')):'এই ফোন থেকে এখনো ব্যাকআপ সেভ হয়নি।';rep.style.display='block'});
+  btn('👤 আমার তথ্য','alt',function(){openProfile()});
+  btn('✉️ জিমেইল বদলান','alt',function(){openChangeEmail()});
+  btn('💾 এখনই ব্যাকআপ সেভ করুন','alt',function(b){run(b,'সেভ হচ্ছে…',function(){return sendBackup().then(function(){return 'ব্যাকআপ Drive-এ সেভ হয়েছে।'})})},'কাজ করলে ৩ সেকেন্ডের মধ্যে নিজে থেকেই সেভ হয়। লাল বার এলে, বা কাজ শেষে নিশ্চিত হতে চাইলে এটা চাপুন।');
+  btn('🚪 সাইন আউট','red',function(){signOut()},'শুধু অন্য জিমেইলে ঢুকতে বা ফোন বদলাতে সাইন আউট করুন। অন্য সময় ওপরের "লক করুন" ব্যবহার করুন।');
   p.appendChild(rep);document.body.appendChild(p)}
 function buildChip(){
   if(document.getElementById('rgx-chip'))return;
   var hd=document.querySelector('.hdr');if(!hd)return;
-  var c=h('div','ib');c.id='rgx-chip';c.setAttribute('role','button');c.tabIndex=0;c.setAttribute('aria-label','Cloud');
-  c.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-cloud"/></svg>';
+  var c=h('div','ib');c.id='rgx-chip';c.setAttribute('role','button');c.tabIndex=0;c.setAttribute('aria-label','Profile');
+  c.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-profile"/></svg>';
   var d=h('span','rgx-dot '+st.c);d.id='rgx-dot';d.style.cssText='right:-3px;top:-3px';c.appendChild(d);
   c.onclick=function(){panelOn=!panelOn;renderPanel()};
   c.onkeydown=function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();c.onclick()}};
@@ -2048,7 +2087,7 @@ function buildChip(){
 document.addEventListener('click',function(e){
   if(!panelOn)return;
   var p=document.getElementById('rgx-panel'),c=document.getElementById('rgx-chip'),t=e.target;
-  if(!p||p.contains(t)||(c&&c.contains(t)))return;
+  if(!p||p.contains(t)||(c&&c.contains(t))||(t.closest&&t.closest('#rgx-bkal')))return;
   e.preventDefault();e.stopPropagation();panelOn=false;renderPanel()},true);
 
 /* users: hide the admin-only database tiles in Settings */
@@ -2252,7 +2291,7 @@ function start(){
     try{google.accounts.id.prompt()}catch(e){}
     setTimeout(function(){if(!hasAuth())status('Tap ☁ and press the blue button to sign in','warn')},6000)})}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start);else start();
-window.RDLGATE={api:api,lockNow:function(){LS.setItem('rdlgate.last','0');lockNow()},changePin:changePin,depotNames:depotNames,build:buildPkgs,mergeVal:mergeVal,session:function(){return S}};
+window.RDLGATE={bkSummary:bkSummary,sendBackup:sendBackup,api:api,lockNow:function(){LS.setItem('rdlgate.last','0');lockNow()},changePin:changePin,depotNames:depotNames,build:buildPkgs,mergeVal:mergeVal,session:function(){return S}};
 })();
 </script>
 
@@ -2265,6 +2304,7 @@ window.RDLGATE={api:api,lockNow:function(){LS.setItem('rdlgate.last','0');lockNo
 <symbol id="i-stmt" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></symbol>
 <symbol id="i-recp" viewBox="0 0 24 24"><path d="M18 2H6a2 2 0 0 0-2 2v18l3-2 2 2 3-2 3 2 2-2 3 2V4a2 2 0 0 0-2-2z"/><text x="12" y="14.6" text-anchor="middle" font-size="10" font-weight="800" fill="#1d5fe0" font-family="sans-serif">৳</text></symbol>
 <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M19.35 10.04A7.49 7.49 0 0 0 12 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 0 0 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></symbol>
+<symbol id="i-profile" viewBox="0 0 24 24"><path d="M12 12a4.6 4.6 0 1 0 0-9.2A4.6 4.6 0 0 0 12 12zm0 2.4c-3.5 0-9.4 1.8-9.4 5.3V21h18.8v-1.3c0-3.5-5.9-5.3-9.4-5.3z"/></symbol>
 <symbol id="i-upl" viewBox="0 0 24 24"><path d="M5 20h14v-2H5v2zm0-10h4v6h6v-6h4l-7-7-7 7z"/></symbol>
 <symbol id="i-home" viewBox="0 0 24 24"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></symbol>
 <symbol id="i-users" viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></symbol>
@@ -2580,6 +2620,44 @@ function findHeader(R,need,max){
 const keys=R=>Object.keys(R).map(Number).sort((a,b)=>a-b);
 const num=v=>typeof v==='number'?v:0, str=v=>v==null?'':String(v).trim();
 
+/* ===== Customer code -> Depot ===== 
+   The depot of a customer is known from the customer code, so the Outstanding and Credit limit files need no "Depot Name" column.
+   Order of knowledge: (1) what the Admin set or moved by hand (rdl.cdmap.v1), (2) the list loaded with the app (CD_SEED, 1,391 codes),
+   (3) customers created with "Add New Customer" (rdl.cdnew.v1, comes from every user's backup), (4) the current database.
+   The 22 codes that exist in two depots (CD_SEED.dup) belong to no depot until the Admin sets one: they are left out of an upload and listed. */
+const CD_SEED={"d":["Dhaka West Depot","Cumilla Depot","Maizdee Depot","Bogura Depot","Khulna Depot","Brahmanbaria Depot","Rangpur Depot","Dhaka North Depot","Keranihat Depot","Cox's Bazar Depot","Dhaka South Depot","Barishal Depot","Sylhet Depot","Savar Depot","Patuakhali Depot","Feni Depot","Faridpur Depot","Jashore Depot","Rajshahi Depot","Kushtia Depot","CTG. West Depot","Chandpur Depot","Narayanganj Depot","Madaripur Depot","Dhaka East Depot","Sunamganj Depot","Mymensingh Depot","Gazipur Depot","Narsingdi Depot","Moulvibazar Depot","Kurigram Depot","Sathkhira Depot","Jamalpur Depot","Habiganj Depot","Pabna Depot","CTG. East Depot","Kishoreganj Depot","Tangail Depot","Dinajpur Depot","Naogaon Depot","Dhaka Bio Depot","Bhola Depot"],"m":{"11000334":0,"11000448":1,"11000503":2,"11000579":3,"11001475":0,"11001516":1,"11001825":4,"11001988":5,"11001992":6,"11002673":1,"11003026":1,"11003034":7,"11003114":8,"11003330":9,"11003351":1,"11003570":10,"11004071":11,"11004406":0,"11004489":7,"11005111":12,"11006065":13,"11006078":3,"11006226":8,"11006232":14,"11006339":11,"11006359":1,"11006401":11,"11006572":15,"11006688":3,"11006959":16,"11007895":3,"11008120":1,"11008145":17,"11008151":11,"11008172":11,"11008318":18,"11008528":19,"11008765":0,"11008952":20,"11009085":18,"11009797":3,"11010188":21,"11010574":6,"11010643":21,"11010650":12,"11010779":3,"11010807":3,"11011262":17,"11011270":22,"11011678":22,"11011754":23,"11011978":9,"11012221":20,"11012267":21,"11012324":0,"11012355":20,"11012497":24,"11012948":20,"11012974":5,"11013008":25,"11013019":0,"11013044":7,"11013050":26,"11013146":11,"11013167":1,"11013441":24,"11013603":27,"11013658":1,"11013900":1,"11013966":7,"11014308":4,"11014324":10,"11014338":16,"11014347":18,"11014727":9,"11015199":17,"11015438":12,"11015489":26,"11015620":28,"11015815":1,"11015926":20,"11016712":1,"11016722":15,"11016887":29,"11016890":9,"11016940":27,"11016991":18,"11017071":15,"11017470":24,"11017761":22,"11017790":21,"11018109":18,"11018285":18,"11018377":16,"11018483":21,"11018498":10,"11018581":12,"11019070":21,"11019085":15,"11019323":20,"11019821":21,"11020048":28,"11020109":21,"11020643":3,"11020689":30,"11020975":4,"11021128":4,"11021208":17,"11021334":21,"11021336":21,"11021438":10,"11021620":12,"11021675":18,"11021708":31,"11022269":5,"11022500":3,"11022988":27,"11023203":28,"11023523":0,"11023935":4,"11024349":11,"11024625":0,"11024855":4,"11025423":7,"11025891":22,"11026053":27,"11026266":27,"11026909":0,"11026913":2,"11027008":3,"11027159":18,"11027403":20,"11027504":1,"11027961":9,"11028287":17,"11028428":7,"11028525":32,"11028826":3,"11028860":18,"11028881":26,"11029139":32,"11029342":27,"11029610":4,"11029674":27,"11029806":7,"11030565":33,"11030585":0,"11030837":29,"11031190":19,"11031273":7,"11032353":28,"11032770":34,"11033239":18,"11033510":12,"11033668":24,"11033680":7,"11033870":18,"11033974":23,"11034076":34,"11034488":35,"11034489":1,"11034622":20,"11035178":12,"11035559":12,"11035564":9,"11036150":1,"11036507":18,"11036577":3,"11036589":27,"11036736":36,"11037316":24,"11037477":28,"11038003":37,"11038472":7,"11038714":12,"11038834":38,"11038884":10,"11039207":0,"11039420":13,"11039841":30,"11040176":18,"11040324":12,"11040410":0,"11040707":20,"11040779":27,"11040941":35,"11041014":12,"11041063":10,"11041282":27,"11041306":18,"11041622":10,"11041952":18,"11042091":0,"11042478":21,"11042715":10,"11043340":3,"11043434":7,"11043435":7,"11043806":23,"11043893":27,"11044074":20,"11044144":6,"11044164":21,"11044214":21,"11044243":3,"11044677":16,"11045182":27,"11045815":33,"11045859":12,"11046058":31,"11046089":21,"11046097":1,"11046153":20,"11046241":23,"11046552":13,"11046677":1,"11046857":32,"11046944":12,"11046952":0,"11047012":28,"11047021":21,"11047092":1,"11047269":1,"11047339":27,"11047346":27,"11047942":23,"11047965":27,"11048100":11,"11048978":38,"11049489":1,"11049571":10,"11050011":27,"11050014":12,"11051087":0,"11051237":33,"11051521":10,"11052329":2,"11052592":0,"11052947":0,"11053644":1,"11053651":21,"11053677":29,"11053806":21,"11053826":1,"11053983":21,"11054182":11,"11054984":27,"11055206":27,"11055300":10,"11055562":28,"11055870":0,"11056166":10,"11056289":7,"11056363":10,"11056445":10,"11056496":1,"11057148":18,"11057828":12,"11058104":38,"11058384":15,"11058630":18,"11058806":32,"11058812":17,"11059091":12,"11059528":10,"11059582":27,"11059770":11,"11060064":27,"11060188":1,"11060352":21,"11061434":12,"11061512":29,"11061559":27,"11061738":26,"11061814":10,"11062001":2,"11062187":26,"11062189":27,"11062295":27,"11062626":6,"11062640":35,"11062666":35,"11062677":7,"11062887":27,"11063156":21,"11063161":21,"11063452":16,"11063506":21,"11063563":12,"11063608":10,"11063770":12,"11063862":39,"11064104":14,"11064135":10,"11064445":27,"11064911":18,"11065287":13,"11065521":10,"11065725":2,"11066101":7,"11066343":13,"11066656":27,"11066819":0,"11066835":35,"11067181":24,"11067445":12,"11067504":32,"11067873":21,"11068071":2,"11068500":28,"11068630":0,"11068668":27,"11068677":27,"11068814":0,"11068822":10,"11068838":21,"11069167":27,"11069551":7,"11069666":12,"11070324":2,"11070908":21,"11071167":20,"11071437":10,"11071672":33,"11071929":21,"11072051":4,"11072079":38,"11072213":16,"11072372":24,"11072876":32,"11073030":9,"11073084":7,"11073451":22,"11073696":28,"11073710":21,"11073799":35,"11074562":1,"11075335":13,"11075455":27,"11075465":1,"11075475":26,"11075496":0,"11075500":24,"11075522":0,"11075526":24,"11075532":24,"11075533":10,"11075539":10,"11075548":18,"11075553":20,"11075554":10,"11075555":12,"11075562":0,"11075567":0,"11075570":24,"11075583":23,"11075589":0,"11075590":10,"11075599":10,"11075612":0,"11075613":0,"11075614":18,"11075616":10,"11075617":10,"11075733":10,"11075743":10,"11075744":0,"11075750":0,"11075796":20,"11075907":2,"11075954":1,"11076012":18,"11076042":1,"11076420":16,"11076435":20,"11076600":4,"11076639":22,"11076805":12,"11076847":10,"11076861":0,"11076973":20,"11076974":20,"11076975":20,"11076976":20,"11076977":20,"11076978":20,"11076979":20,"11076980":20,"11076981":20,"11076983":20,"11076984":20,"11076985":20,"11076986":20,"11076987":20,"11076988":20,"11076989":20,"11077022":22,"11077032":24,"11077086":0,"11077087":0,"11077088":0,"11077089":0,"11077090":24,"11077091":24,"11077092":24,"11077093":0,"11077094":0,"11077095":0,"11077096":0,"11077097":0,"11077098":0,"11077099":0,"11077100":0,"11077101":0,"11077102":0,"11077104":22,"11077105":18,"11077106":18,"11077107":18,"11077108":18,"11077109":18,"11077110":12,"11077111":12,"11077112":10,"11077113":10,"11077114":0,"11077115":0,"11077116":0,"11077117":10,"11077118":10,"11077119":0,"11077120":0,"11077121":10,"11077122":0,"11077123":10,"11077124":10,"11077190":0,"11077191":10,"11077192":10,"11077285":11,"11077397":1,"11077399":22,"11077536":6,"11077542":18,"11077581":29,"11077598":0,"11077609":22,"11077680":33,"11077726":27,"11077836":13,"11078009":0,"11078015":20,"11078056":12,"11078071":15,"11078127":6,"11078128":6,"11078316":1,"11078322":7,"11078323":7,"11078324":7,"11078359":20,"11078360":20,"11078361":20,"11078362":20,"11078363":20,"11078364":20,"11078365":20,"11078388":7,"11078392":10,"11078420":0,"11078421":24,"11078477":22,"11078546":20,"11078589":13,"11078633":22,"11078671":12,"11079441":0,"11079447":1,"11079523":18,"11079687":13,"11079884":35,"11080201":23,"11080309":35,"11080388":0,"11080516":8,"11081027":24,"11081237":6,"11081776":40,"11081944":20,"11081969":6,"11081987":10,"11082002":0,"11082048":12,"11082132":20,"11082133":20,"11082180":0,"11082181":0,"11082182":10,"11082220":20,"11082352":38,"11082459":26,"11082545":26,"11082602":24,"11082709":0,"11082810":2,"11083209":13,"11083248":22,"11083443":35,"11083693":25,"11083739":1,"11083959":33,"11083983":10,"11083987":38,"11084461":22,"11084657":15,"11084677":0,"11084793":11,"11084797":4,"11084798":4,"11085429":17,"11085501":10,"11086374":34,"11086618":40,"11086652":20,"11086680":15,"11087247":10,"11087454":6,"11088042":10,"11088681":12,"11089232":1,"11089315":0,"11090178":32,"11090373":18,"11091741":2,"11092345":23,"11092736":38,"11093478":17,"11093824":15,"11093995":33,"11094869":0,"11095165":2,"11095331":0,"11095702":35,"11095723":8,"11096124":10,"11096676":29,"11097451":28,"11097681":27,"11097809":1,"11098076":33,"11098216":12,"11098350":10,"11098404":27,"11098439":12,"11098804":26,"11099601":7,"11099840":4,"11099935":28,"11099967":1,"11100174":4,"11101586":3,"11101659":4,"11101695":10,"11102263":6,"11102531":0,"11103132":22,"11103352":17,"11103518":10,"11104418":5,"11104832":18,"11104986":12,"11105808":10,"11106520":20,"11106696":12,"11106977":6,"11107333":13,"11107980":22,"11108422":41,"11108954":0,"11109917":0,"11109918":0,"11110533":31,"11111299":0,"11111486":0,"11111525":28,"11111749":14,"11112280":12,"11112342":0,"11112603":10,"11112775":13,"11112791":20,"11113074":2,"11113268":8,"11113373":11,"11113424":34,"11113459":9,"11113725":0,"11114064":2,"11114333":17,"11114561":2,"11114857":0,"11115063":29,"11115251":12,"11115303":1,"11115377":34,"11115471":7,"11115480":24,"11115532":24,"11115900":11,"11116029":39,"11116941":26,"11117891":18,"11118955":8,"11119368":0,"11119530":34,"11120057":8,"11120134":0,"11120464":18,"11120578":0,"11121260":0,"11121344":37,"11121929":1,"11121961":9,"11122084":22,"11122957":29,"11123643":11,"11124476":20,"11124522":15,"11124608":10,"11124622":7,"11124793":3,"11125127":2,"11125221":0,"11126666":20,"11126721":3,"11126787":10,"11127204":0,"11127303":7,"11127425":6,"11127647":0,"11127996":11,"11128022":0,"11128108":10,"11128430":24,"11128530":21,"11128646":10,"11128781":20,"11128967":27,"11129201":20,"11129661":7,"11130002":18,"11130054":38,"11130390":10,"11130868":29,"11131070":12,"11131360":35,"11131679":10,"11131973":7,"11132004":10,"11132500":35,"11132795":22,"11133080":15,"11133302":11,"11133689":0,"11133917":10,"11134434":20,"11134599":26,"11134881":16,"11135176":10,"11136414":24,"11138206":20,"11138553":10,"11138741":0,"11138742":0,"11139106":20,"11139817":10,"11142332":10,"11142513":0,"11142991":12,"11143523":20,"11143802":3,"11144105":4,"11144682":7,"11145535":20,"11146352":12,"11146378":26,"11146968":10,"11146969":10,"11146970":10,"11146971":10,"11148986":28,"11149005":10,"11149124":0,"11150104":4,"11150382":0,"11150884":0,"11151131":20,"11151197":20,"11151200":17,"11151205":28,"11151206":15,"11151267":20,"11151485":20,"11152027":24,"11156197":23,"11156517":20,"11156518":20,"11157081":33,"11157733":31,"11158107":1,"13000001":0,"13000003":1,"13000004":0,"13000005":10,"13000006":1,"13000007":0,"13000008":1,"13000009":28,"13000011":0,"13000012":37,"13000013":3,"13000014":1,"13000015":3,"13000018":10,"13000019":1,"13000020":20,"13000021":11,"13000022":0,"13000023":29,"13000025":20,"13000027":8,"13000028":20,"13000029":38,"13000030":6,"13000032":20,"13000033":4,"13000035":1,"13000037":7,"13000038":0,"13000039":31,"13000040":7,"13000041":20,"13000043":0,"13000044":20,"13000045":0,"13000046":2,"13000047":12,"13000049":4,"13000050":22,"13000051":6,"13000052":2,"13000053":10,"13000054":4,"13000055":20,"13000056":2,"13000057":20,"13000058":20,"13000061":20,"13000062":20,"13000063":20,"13000065":0,"13000066":15,"13000067":0,"13000068":5,"13000069":2,"13000070":1,"13000072":8,"13000073":24,"13000075":22,"13000076":11,"13000077":18,"13000078":20,"13000079":1,"13000081":17,"13000082":0,"13000083":22,"13000084":18,"13000086":34,"13000089":20,"13000090":0,"13000091":0,"13000092":0,"13000093":0,"13000094":2,"13000095":14,"13000096":10,"13000098":5,"13000100":11,"13000103":20,"13000104":4,"13000105":22,"13000106":21,"13000107":6,"13000109":20,"13000110":4,"13000111":20,"13000112":24,"13000113":38,"13000115":11,"13000116":0,"13000117":20,"13000118":26,"13000120":20,"13000122":20,"13000123":0,"13000124":6,"13000125":0,"13000126":12,"13000127":20,"13000128":7,"13000129":4,"13000130":3,"13000131":3,"13000132":3,"13000133":0,"13000135":22,"13000136":7,"13000137":24,"13000138":34,"13000140":7,"13000143":2,"13000144":2,"13000146":10,"13000147":24,"13000149":20,"13000150":0,"13000151":1,"13000152":22,"13000153":20,"13000154":1,"13000155":26,"13000156":20,"13000157":4,"13000158":20,"13000159":28,"13000160":0,"13000161":0,"13000162":26,"13000163":18,"13000164":11,"13000165":22,"13000167":28,"13000168":28,"13000169":0,"13000170":22,"13000171":6,"13000172":24,"13000173":0,"13000176":32,"13000177":3,"13000178":3,"13000179":0,"13000180":0,"13000181":24,"13000183":2,"13000184":22,"13000185":36,"13000187":0,"13000188":6,"13000189":1,"13000190":9,"13000191":28,"13000192":11,"13000193":20,"13000194":32,"13000196":5,"13000197":10,"13000198":20,"13000199":20,"13000200":10,"13000201":20,"13000202":18,"13000203":22,"13000204":34,"13000205":24,"13000206":0,"13000207":20,"13000208":6,"13000209":0,"13000210":2,"13000211":22,"13000213":11,"13000214":9,"13000215":10,"13000216":26,"13000217":22,"13000219":2,"13000220":32,"13000221":10,"13000222":21,"13000225":3,"13000226":12,"13000227":0,"13000230":37,"13000231":33,"13000232":5,"13000233":24,"13000234":3,"13000236":6,"13000237":1,"13000238":20,"13000239":22,"13000240":3,"13000242":4,"13000244":17,"13000245":37,"13000246":2,"13000247":3,"13000248":23,"13000251":3,"13000252":34,"13000253":7,"13000254":34,"13000255":12,"13000256":20,"13000257":2,"13000258":24,"13000259":38,"13000260":34,"13000261":4,"13000263":21,"13000264":22,"13000265":24,"13000266":34,"13000267":10,"13000268":1,"13000269":19,"13000270":3,"13000271":24,"13000273":0,"13000274":18,"13000275":1,"13000276":12,"13000277":7,"13000278":33,"13000280":3,"13000281":3,"13000282":0,"13000283":17,"13000284":32,"13000285":9,"13000287":22,"13000288":18,"13000289":26,"13000290":2,"13000291":13,"13000292":36,"13000293":28,"13000294":1,"13000295":10,"13000296":1,"13000298":12,"13000299":1,"13000300":36,"13000301":2,"13000302":10,"13000304":24,"13000306":1,"13000307":0,"13000310":2,"13000311":10,"13000312":2,"13000313":0,"13000314":3,"13000315":3,"13000317":2,"13000318":9,"13000319":20,"13000320":32,"13000321":32,"13000322":2,"13000323":26,"13000324":2,"13000326":15,"13000328":12,"13000329":32,"13000331":20,"13000332":10,"13000333":12,"13000334":18,"13000336":10,"13000337":0,"13000338":7,"13000339":1,"13000340":22,"13000341":10,"13000342":14,"13000343":24,"13000344":28,"13000346":0,"13000347":10,"13000348":29,"13000349":10,"13000350":15,"13000351":3,"13000352":10,"13000353":39,"13000354":0,"13000355":18,"13000356":26,"13000358":0,"13000359":0,"13000360":9,"13000361":10,"13000362":2,"13000363":20,"13000364":10,"13000365":35,"13000366":7,"13000367":3,"13000368":1,"13000370":22,"13000371":0,"13000372":22,"13000374":10,"13000375":0,"13000376":18,"13000377":10,"13000378":4,"13000379":28,"13000380":39,"13000381":15,"13000382":16,"13000383":10,"13000384":10,"13000385":2,"13000386":20,"13000387":23,"13000388":18,"13000389":13,"13000390":24,"13000391":12,"13000392":18,"13000393":15,"13000394":24,"13000395":13,"13000396":22,"13000397":0,"13000398":20,"13000399":6,"13000400":4,"13000401":2,"13000402":26,"13000403":21,"13000404":1,"13000406":13,"13000408":32,"13000409":15,"13000411":13,"13000412":26,"13000413":20,"13000414":20,"13000415":12,"13000416":15,"13000417":13,"13000418":36,"13000419":26,"13000420":4,"13000422":22,"13000423":35,"13000424":22,"13000427":18,"13000428":0,"13000429":10,"13000431":24,"13000432":22,"13000434":10,"13000435":35,"13000437":10,"13000438":2,"13000439":15,"13000440":15,"13000441":3,"13000442":1,"13000443":21,"13000447":21,"13000448":22,"13000449":17,"13000450":15,"13000452":2,"13000453":13,"13000454":34,"13000455":35,"13000456":28,"13000457":10,"13000458":28,"13000459":21,"13000460":24,"13000461":10,"13000462":22,"13000464":0,"13000465":17,"13000466":36,"13000468":33,"13000470":0,"13000471":22,"13000472":15,"13000475":32,"13000476":17,"13000477":22,"13000478":22,"13000480":15,"13000481":22,"13000482":6,"13000484":20,"13000485":20,"13000486":13,"13000487":0,"13000489":7,"13000490":10,"13000491":0,"13000492":10,"13000493":26,"13000494":20,"13000495":22,"13000496":10,"13000497":2,"13000498":26,"13000499":28,"13000500":10,"13000501":0,"13000503":26,"13000506":35,"13000507":0,"13000508":7,"13000509":15,"13000510":26,"13000511":34,"13000512":16,"13000514":28,"13000515":10,"13000516":13,"13000517":3,"13000518":15,"13000519":37,"13000520":36,"13000522":38,"13000523":13,"13000524":15,"13000525":28,"13000526":28,"13000527":7,"13000528":18,"13000529":10,"13000530":13,"13000532":26,"13000533":22,"13000535":33,"13000536":7,"13000538":13,"13000539":1,"13000540":13,"13000541":2,"13000542":7,"13000543":26,"13000544":7,"13000545":15,"13000546":10,"13000547":2,"13000548":24,"13000549":34,"13000550":38,"13000551":0,"13000552":17,"13000553":32,"13000554":0,"13000555":12,"13000557":0,"13000558":15,"13000559":20,"13000561":0,"13000563":28,"13000564":1,"13000565":21,"13000566":7,"13000567":0,"13000568":0,"13000570":0,"13000571":22,"13000572":22,"13000573":24,"13000575":22,"13000576":20,"13000578":11,"13000579":15,"13000580":12,"13000581":0,"13000582":0,"13000583":12,"13000584":15,"13000585":2,"13000586":11,"13000587":10,"13000588":13,"13000589":28,"13000592":24,"13000593":13,"13000595":10,"13000596":10,"13000597":28,"13000599":19,"13000607":11,"13000609":0,"13000610":1,"13000612":24,"13000615":24,"13000617":10,"13000628":0,"13000629":0,"13000632":10,"13000633":26,"13000636":10,"13000637":15,"13000638":0,"13000639":0,"13000641":38,"13000642":22,"13000644":11,"13000645":17,"13000648":40,"13000649":40,"13000650":40,"13000652":40,"13000654":40,"13000655":40,"13000656":40,"13000657":40,"13000658":40,"13000659":40,"13000660":20,"13000663":34,"13000676":20,"13000681":22,"13000682":22,"13000691":22,"13000692":22,"13000695":0,"13000696":24,"13000707":32,"13000710":2,"13000712":0,"13000715":0,"13000722":10,"13000723":10,"13000725":27,"13000731":3,"13000735":26,"13000742":24,"13000745":10,"13000748":10,"13000749":10,"13000750":7,"13000751":7,"13000752":7,"13000753":13,"13000755":0,"13000756":26,"13000766":0,"13000769":26,"13000773":7,"13000802":9,"13000811":24,"13000823":0,"13000828":19,"13000829":0,"13000842":0,"13000845":40,"13000846":0,"13000855":26,"13000858":0,"13000859":10,"13000860":8,"13000870":12,"13000883":0,"13000885":26,"13000887":10,"13000890":10,"13000901":20,"13000902":20,"13000903":20,"13000904":20,"13000905":20,"13000911":4,"13000914":35,"13000916":10,"13000918":20,"13000938":10,"13000940":10,"13000941":10,"13000942":10,"13000944":10,"13000945":7,"13000957":3,"13000967":6,"13000968":18,"13000973":19,"13000976":18,"13000980":34,"13000981":0,"13000989":10,"13000991":40,"13001024":0,"13001025":6,"13001027":28,"13001035":7,"13001036":7,"13001073":18,"13001076":0,"13001077":20,"13001078":18,"13001079":18,"13001080":18,"13001081":18,"13001091":38,"13001102":18,"13001103":18,"13001104":9,"13001122":18,"13001123":18,"13001141":26,"13001147":0,"13001151":7,"13001160":0,"13001161":0,"13001163":27,"13001198":24,"13001204":0,"13001206":38,"13001207":10,"13001211":31,"13001219":12,"13001220":39,"13001238":0,"13001241":38,"13001244":9,"13001247":39,"13001252":18,"13001267":24,"13001274":12,"13001279":18,"13001305":2,"13001306":18,"13001307":0,"13001309":32,"13001311":0,"13001313":0,"13001315":1,"13001316":0,"13001317":24,"13001319":12,"13001321":24,"13001325":24,"13001327":0,"13001328":7,"13001329":0,"13001337":37,"13001342":24,"13001343":7,"13001350":0,"13001351":0,"13001353":0,"13001374":37,"13001376":37,"13001383":12,"13001386":18,"13001393":24,"13001395":10,"13001396":0,"13001399":35,"13001400":10,"13001401":10,"13001402":18,"13001404":21,"13001405":40,"13001409":20,"13001413":15,"13001415":9,"13001419":0,"13001429":23,"13001431":31,"13001454":11,"13001459":0,"13001460":0,"13001478":0,"13001486":10,"13001492":5,"13001503":7,"13001531":1,"13001532":1,"13001535":10,"13001536":0},"dup":["11051531","11066924","13000016","13000121","13000195","13000223","13000279","13000308","13000430","13000556","13000591","13000619","13000651","13000653","13000841","13000982","13001213","13001214","13001215","13001216","13001217","13001218"]};
+const CD_KEY='rdl.cdmap.v1',CDN_KEY='rdl.cdnew.v1',CD_DUP=new Set(CD_SEED.dup);
+const cdJ=(k,d)=>{try{const x=JSON.parse(localStorage.getItem(k));return x==null?d:x}catch(e){return d}};
+const cdOver=()=>cdJ(CD_KEY,{});
+function cdLookup(code){
+  code=String(code==null?'':code).trim();if(!code)return '';
+  const o=cdOver();if(o[code])return o[code];
+  if(CD_DUP.has(code))return '';
+  const si=CD_SEED.m[code];if(si!==undefined)return CD_SEED.d[si];
+  const dps=new Set(cdJ(CDN_KEY,[]).filter(x=>x&&String(x.code)===code&&x.depot).map(x=>x.depot));
+  return dps.size===1?[...dps][0]:'';
+}
+const cdIsDup=code=>CD_DUP.has(String(code==null?'':code).trim())&&!cdOver()[String(code).trim()];
+function cdSet(code,depot){const o=cdOver();o[String(code).trim()]=depot;localStorage.setItem(CD_KEY,JSON.stringify(o))}
+/* a customer created with Add New Customer: the code is remembered with its depot (the Admin's phone gets it from the user's backup) */
+function cdLearnNew(code,depot,name){
+  code=String(code).trim();const l=cdJ(CDN_KEY,[]).filter(x=>!(x&&String(x.code)===code&&!x._u));
+  l.push({code,depot,name:name||'',at:Date.now()});localStorage.setItem(CDN_KEY,JSON.stringify(l));
+  if(window.RDL_ROLE==='admin'&&!CD_DUP.has(code))cdSet(code,depot)}
+/* give every row of an uploaded file its depot from its customer code; rows that cannot be placed are taken out and listed */
+function cdAssign(rows,kind,old){
+  const cuOf=a=>String(kind==='out'?a.cu:a.bp).trim(),known={};
+  ((old&&old.out)||[]).concat((old&&old.cr)||[]).forEach(a=>{const c=String(a.cu!==undefined?a.cu:a.bp).trim();if(a.dp&&!(c in known))known[c]=a.dp});
+  const keep=[],lost=new Map();let filled=0;
+  rows.forEach(a=>{const c=cuOf(a);
+    if(a.dp){keep.push(a);return}   /* a file that does carry a Depot Name still works as before */
+    let d=cdLookup(c);if(!d&&!cdIsDup(c)&&!CD_DUP.has(c))d=known[c]||'';
+    if(d){a.dp=d;filled++;keep.push(a)}
+    else{const q=lost.get(c)||{code:c,name:a.nm||'',why:CD_DUP.has(c)?'dup':'unknown',rows:0,kind};q.rows++;if(!q.name&&a.nm)q.name=a.nm;lost.set(c,q)}});
+  rows.length=0;keep.forEach(x=>rows.push(x));
+  rows.hasDp=true;rows.nodp=0;rows.notUp=[...lost.values()];rows.filled=filled;return rows}
+window.RDLCD={lookup:cdLookup,isDup:cdIsDup,set:cdSet,learnNew:cdLearnNew,assign:cdAssign,seed:CD_SEED};
+
 /* ---- parsers: identify files by their columns, not by file name ---- */
 /* Outstanding file: columns are matched by NAME (any order, extra columns ignored, capital/small letters and extra spaces do not matter).
    "Days 1" (SAP export) = the app's "Days Limit"; rows whose Days 1 is 0 are NOT taken. Old files with a "Days Limit" column still work. */
@@ -2690,7 +2768,10 @@ window.RDLDEPOT={admin:dAdmin,sel:dSel,key:dKey,cuIn,fl:ledFl,nameOf:cu=>cuDn().
   td:cu=>{const t=document.createElement('td');t.className='c-dp';const s=document.createElement('span');s.className='chip-g cn';s.textContent=cuDn().get(String(cu))||'\u2014';t.appendChild(s);return t},
   names:()=>{const m=store.get('m'),o={};if(m)(m.out||[]).concat(m.cr||[]).forEach(r=>{if(r.dp)o[r.dp]=1});return Object.keys(o).sort()},
   set:v=>{try{v?localStorage.setItem(DSK,v):localStorage.removeItem(DSK)}catch(e){}location.reload()}};
-document.addEventListener('click',e=>{const t=e.target&&e.target.closest&&e.target.closest('#depotLine');if(!t||!dAdmin())return;
+/* Outstanding Register card: ONLY the left round icon opens the depot list (small ▾ badge); the rest of the card opens the Outstanding Register */
+(function(){const st=document.createElement('style');st.textContent='.total.dpk .ic{cursor:pointer}.total.dpk .ic::after{content:"\\25BE";position:absolute;right:-5px;top:-5px;width:22px;height:22px;border-radius:50%;background:#fff;color:#0a49b5;font-size:15px;line-height:22px;text-align:center;font-weight:900;box-shadow:0 2px 6px #0a2f8a66}';document.head.appendChild(st);
+  const mark=()=>{try{const t=document.querySelector('.total');if(t)t.classList.toggle('dpk',!!dAdmin())}catch(e){}};mark();setInterval(mark,1500)})();
+document.addEventListener('click',e=>{const t=e.target&&e.target.closest&&e.target.closest('.total .ic');if(!t||!dAdmin())return;
   e.stopPropagation();e.preventDefault();if(document.getElementById('dpPick'))return;
   const ov=document.createElement('div');ov.id='dpPick';ov.style.cssText='position:fixed;inset:0;z-index:99999;background:#0008;display:flex;align-items:center;justify-content:center;padding:18px';
   const bx=document.createElement('div');bx.style.cssText='background:#fff;color:#0b2a5b;border-radius:16px;max-width:380px;width:100%;max-height:80vh;overflow:auto;padding:14px;font:600 15px system-ui,sans-serif';
@@ -2723,6 +2804,21 @@ function curStatus(){
   {let u=document.getElementById('curUp');if(!u){u=document.createElement('div');u.id='curUp';u.className='hint';$('#curDb').after(u)}
    let U={};try{U=JSON.parse(localStorage.getItem('rdl.upl.v1')||'{}')||{}}catch(e){}
    const f=t=>t?new Date(t).toLocaleString('en-GB'):'not recorded';u.textContent='Last upload — Outstanding: '+f(U.out)+' • Credit Limit: '+f(U.cr)}
+  {let sk=document.getElementById('curSkip');if(!sk){sk=document.createElement('div');sk.id='curSkip';($('#curUp')||$('#curDb')).after(sk)}
+   sk.textContent='';let S=null;try{S=JSON.parse(localStorage.getItem('rdl.upskip.v1')||'null')}catch(e){}
+   if(S&&S.list&&S.list.length){
+     const w=document.createElement('div');w.style.cssText='margin-top:10px;padding:10px 12px;border-radius:12px;background:#fff4d6;color:#6b4a00;font-size:13px';
+     const hd=document.createElement('div');hd.style.cssText='font-weight:800;margin-bottom:6px';
+     hd.textContent='⚠ Last upload ('+new Date(S.at).toLocaleString('en-GB')+'): '+S.list.length+' customer'+(S.list.length===1?'':'s')+' were NOT uploaded';w.appendChild(hd);
+     const why=x=>x.why==='dup'?'Duplicate code — no depot chosen yet':'Code is not in the depot list';
+     const box=document.createElement('div');box.style.cssText='max-height:220px;overflow:auto;border-top:1px solid #e6cf94';
+     S.list.forEach(x=>{const r=document.createElement('div');r.style.cssText='padding:5px 0;border-bottom:1px solid #f0e2b4;word-break:break-word';
+       r.textContent=x.code+' • '+(x.name||'(no name)')+' • '+(x.kind==='out'?'Outstanding':'Credit limit')+' • '+x.rows+' row'+(x.rows===1?'':'s')+' • '+why(x);box.appendChild(r)});w.appendChild(box);
+     const bar=document.createElement('div');bar.style.cssText='display:flex;gap:8px;margin-top:8px';
+     const mkb=(t,fn)=>{const b2=document.createElement('button');b2.type='button';b2.className='st-btn od-clear';b2.textContent=t;b2.style.flex='1';b2.onclick=fn;bar.appendChild(b2)};
+     mkb('Download list (.csv)',()=>{const q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"',csv='﻿'+['Code,Name,File,Rows,Reason'].concat(S.list.map(x=>[x.code,x.name,x.kind==='out'?'Outstanding':'Credit limit',x.rows,why(x)].map(q).join(','))).join('\r\n');
+       const a2=document.createElement('a');a2.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a2.download='not-uploaded-'+isoToday()+'.csv';document.body.appendChild(a2);a2.click();a2.remove()});
+     mkb('Hide list',()=>{localStorage.removeItem('rdl.upskip.v1');sk.textContent=''});w.appendChild(bar);sk.appendChild(w)}}
   $('#curDcr').textContent=d?`Current Daily Collection & Order: ${d.fileName} • last date ${dispDate(d.lastDate)} • ${fmt(d.rows.length)} entries • uploaded ${new Date(d.at).toLocaleString('en-GB')}`:'No Daily Collection & Order uploaded yet.';
 }
 async function pick(file,fn){return fn(await file.arrayBuffer())}
@@ -2733,11 +2829,14 @@ async function onDb(kind,file){
     const x=await readXlsx(await file.arrayBuffer()), R=await x.rows(x.sheets[0]);
     const r=kind==='out'?parseOutstanding(R):parseCredit(R);
     if(!r){say(id,'✗ Wrong file — expected columns for '+(kind==='out'?'Outstanding data':'Credit limit data'),'bad');}
-    else{pend[kind]=r;const o0=store.get('m')||{out:[],cr:[]};unifyDepots([o0.out,o0.cr],[r]);
+    else{const o0=store.get('m')||{out:[],cr:[]};cdAssign(r,kind,o0);
+      if(!r.length){say(id,'✗ No customer could be placed in a depot — '+fmt(r.notUp.length)+' customer(s) are duplicate codes or not in the depot list','bad');$('#bDb').disabled=!(pend.out||pend.cr);return}
+      pend[kind]=r;unifyDepots([o0.out,o0.cr],[r]);
       const dn=Object.keys(depotsOf(r)).sort(),kn=Object.keys(depotsOf(o0.out,o0.cr)),nw=kn.length?dn.filter(n=>!kn.includes(n)):[];
       let dt='',dw=false;
       if(!r.hasDp){dt=' • ⚠ No "Depot Name" column found';dw=true}
       else{dt=' • '+dn.length+' depot(s): '+dn.join(', ');if(r.nodp){dt+=' • ⚠ '+fmt(r.nodp)+' row(s) without Depot Name';dw=true}
+        if(r.notUp&&r.notUp.length){const du=r.notUp.filter(x=>x.why==='dup').length,un=r.notUp.length-du;dt+=' • ⚠ '+fmt(r.notUp.length)+' customer(s) will NOT be uploaded ('+(du?du+' duplicate code'+(du===1?'':'s'):'')+(du&&un?', ':'')+(un?un+' not in the depot list':'')+') — the list is shown after the upload';dw=true}
         if(nw.length){dt+=' • ⚠ New depot name(s): '+nw.join(', ')+' — check the spelling';dw=true}}
       say(id,(kind==='out'?`✓ ${fmt(r.length)} bills • ${new Set(r.map(a=>a.cu)).size} customers • ${__m(r.reduce((s,a)=>s+a.amt,0))}`+(r.skipped?` • ${fmt(r.skipped)} rows skipped (Days 1 = 0 / blank)`:'')
       :`✓ ${fmt(r.length)} credit lines • ${new Set(r.map(a=>a.bp)).size} customers`+(r.skipped?` • ${fmt(r.skipped)} rows skipped (Credit Limit = 0)`:'')+(r.unknown?` • ⚠ ${fmt(r.unknown)} rows skipped (unknown Credit Segment)`:''))+dt,(r.unknown||dw)?'warn':'ok');}
@@ -2816,6 +2915,7 @@ async function applyDb(){
     try{const U=JSON.parse(localStorage.getItem('rdl.upl.v1')||'{}')||{};if(pend.out)U.out=Date.now();if(pend.cr)U.cr=Date.now();localStorage.setItem('rdl.upl.v1',JSON.stringify(U))}catch(e){}   /* last upload of each file; rdl.* so Backup / Restore keep it */
     store.set('m',nm);try{localStorage.setItem('rdlgate.cut',cut||'')}catch(e){}
   }catch(e){say('#sDb','✗ Could not save on this device','bad');return}
+  try{const q=k=>pend[k]&&pend[k].notUp?pend[k].notUp:[];localStorage.setItem('rdl.upskip.v1',JSON.stringify({at:Date.now(),list:q('out').concat(q('cr'))}))}catch(e){}   /* customers left out of this upload: shown on the Database Upload page */
   say('#sDb','✓ Database saved.'+note+' Restarting app…','ok');setTimeout(()=>{try{sessionStorage.setItem('rdl.openSettings','1')}catch(e){}location.reload()},has?3200:1300);
 }
 window.RDL.applyRemote=function(p){
@@ -4376,10 +4476,10 @@ function page(id,title,parent,build){
   const top=el('div','st-top'),b=el('button');b.type='button';b.innerHTML=BK;b.setAttribute('aria-label','Back');b.onclick=()=>open(window.RDL_ROLE==='user'&&parent==='setsec'?'settings':parent);
   top.appendChild(b);top.appendChild(el('h2',null,title));p.appendChild(top);
   const body=el('div','sbody');p.appendChild(body);pages[id]={body,build};return p}
-const PROT=new Set(['bcu','updoff','setdb','setcu','setup','setdcr','setupd','updout','updcr','seterase','setbp','setbackup']);
+const PROT=new Set(['bcu','updoff','setdb','setcu','setup','setdcr','setupd','updout','updcr','seterase','setbp','shiftcu','setbackup']);
 /* access limits (set by the Admin): which module each page belongs to */
-const PAGEMOD={setup:'dbup',setdcr:'dcr',setbackup:'backup',setcorr:'corr',updout:'corr',updcr:'corr',updoff:'corr',setbp:'newcust',seterase:'erase',setlog:'actlog',setusers:'users',setwa:'wa',setnotif:'notif',settheme:'theme',sethdr:'theme',setfont:'theme',setfsize:'theme',setfdesign:'theme'};
-const PAGEANY={setdb:['dcr','dbup','backup'],setcu:['corr','newcust','erase'],setupd:['corr','newcust','erase'],bcu:['corr','newcust']};
+const PAGEMOD={setup:'dbup',setdcr:'dcr',setbackup:'backup',setcorr:'corr',updout:'corr.out',updcr:'corr.cr',updoff:'corr.off',setbp:'newcust',shiftcu:'shift',seterase:'erase',setlog:'actlog',setusers:'users',setwa:'wa',setnotif:'notif',settheme:'theme.look',sethdr:'theme.hdr',setfont:'theme.look',setfsize:'theme.look',setfdesign:'theme.look'};
+const PAGEANY={setdb:['dcr','dbup','backup'],setcu:['corr','newcust','shift','erase'],setupd:['corr.out','corr.cr','corr.off','newcust','shift','erase'],bcu:['corr.cr','corr.off','newcust','shift']};
 const accOK=id=>{const A=window.RDLACC;if(!A)return window.RDL_ROLE!=='user';
   if(window.RDL_ROLE==='user'&&(id==='setsec'||id==='setusers'))return false;
   if(PAGEMOD[id])return A.can(PAGEMOD[id]);if(PAGEANY[id])return A.any(PAGEANY[id]);return true};
@@ -4389,6 +4489,7 @@ function open(id){
   const pg=pages[id];if(pg&&pg.build){pg.body.textContent='';pg.build(pg.body)}
   show(id);
   if(pg&&window.RDLACC&&PAGEMOD[id])RDLACC.lock(pg.body,RDLACC.level(PAGEMOD[id])===1);   /* view only: buttons that change something are switched off */
+  if(id==='setup'&&window.RDLACC){[['fOut','dbup.out'],['fCr','dbup.cr']].forEach(([f,k])=>{const ok=RDLACC.can(k),lb=document.querySelector('label[for='+f+']'),inp=document.getElementById(f);if(lb)lb.style.display=ok?'':'none';if(inp)inp.disabled=!ok})}   /* each file option can be closed on its own */
   if(id==='setup'||id==='setdcr')R.curStatus&&R.curStatus()}
 const card=(h,hint)=>{const c=el('div','st-card');if(h)c.appendChild(el('h3',null,h));if(hint)c.appendChild(el('p','hint',hint));return c};
 const msgBox=()=>el('div','stt');
@@ -4424,20 +4525,20 @@ function buildMainList(){
   if(role!=='user')mainList.appendChild(tile(IC.lock,G.red,'App Security','Users, PIN, corrections and activity log',async()=>{if(await unlock())open('setsec')}));
   if(role==='user'){   /* a user has no App Security: the parts the Admin allowed are listed here */
     if(A&&A.any(['dcr','dbup','backup']))mainList.appendChild(tile(IC.db,G.blue,'Database Settings','Daily Collection & Order upload and other database tools',()=>open('setdb')));
-    if(A&&A.any(['corr','newcust','erase']))mainList.appendChild(tile(IC.pen,G.red,'Database Correction & Update','Correction, update, new customer and erase',()=>open('setcu')));
+    if(A&&A.any(['corr','newcust','shift','erase']))mainList.appendChild(tile(IC.pen,G.red,'Database Correction & Update','Correction, update, new customer and erase',()=>open('setcu')));
     if(can('actlog'))mainList.appendChild(tile(IC.cal,G.blue,'Activity Log','What was changed, and undo the last change',()=>open('setlog')))}
-  if(can('theme'))mainList.appendChild(tile(IC.pen,G.red,'Header Text','Change the app title and depot name',()=>open('sethdr')));
+  if(can('theme.hdr'))mainList.appendChild(tile(IC.pen,G.red,'Header Text','Change the app title and depot name',()=>open('sethdr')));
   if(can('notif'))mainList.appendChild(tile(IC.bell,G.amber,'Notification Settings','Choose which due bills notify you',()=>open('setnotif')));
   if(can('wa'))mainList.appendChild(tile(svg('<path d="M20 2H4a2 2 0 00-2 2v18l4-4h14a2 2 0 002-2V4a2 2 0 00-2-2z"/>'),G.green,'WhatsApp Message','Change the wording of the overdue message',()=>open('setwa')));
-  if(can('theme')){
+  if(can('theme.look')){
     mainList.appendChild(tile(IC.theme,G.purple,'Theme Settings','Light, dark or follow the phone',()=>open('settheme')));
     mainList.appendChild(tile(IC.font,G.grey,'Font Settings','Text size and font design',()=>open('setfont')))}}
 /* the Admin's limits changed (or arrived): rebuild the menu, the bottom tabs and leave a page that is now closed */
 function accRefresh(){
   const A=window.RDLACC;buildMainList();
-  $$('.nav button').forEach(b=>{const p=b.dataset.p;if(p==='sales'||p==='collection')b.style.display=(A&&!A.can('entry'))?'none':''});
+  $$('.nav button').forEach(b=>{const p=b.dataset.p;if(p==='sales'||p==='collection')b.style.display=(A&&!A.can(p==='sales'?'entry.sales':'entry.coll'))?'none':''});
   const on=document.querySelector('.pg.on');
-  if(on&&((on.id&&!accOK(on.id))||((on.id==='sales'||on.id==='collection')&&A&&!A.can('entry'))))show('home')}
+  if(on&&((on.id&&!accOK(on.id))||((on.id==='sales'||on.id==='collection')&&A&&!A.can(on.id==='sales'?'entry.sales':'entry.coll'))))show('home')}
 window.RDL_ACC_REFRESH=accRefresh;buildMainList();
 setTimeout(accRefresh,0);
 
@@ -4469,6 +4570,76 @@ page('setnotif','Notification Settings','settings',b=>{
   row('Notifications on','notif');row('Bills due today','nToday');row('Bills due tomorrow','nTomorrow');
   b.appendChild(c)});
 
+/* ---------- Admin: Depot-wise / Customer-wise backup & restore (only that depot's / that customer's data; everything else untouched) ---------- */
+window.RDLBKP_EXTRA=function(b,bok){
+  if(!bok('backup.scope')||!RDLDEPOT.admin())return;
+  const SKIP={'rdl.master.v1':1,'rdl.bkp.v1':1,'rdl.cdmap.v1':1,'rdl.cdnew.v1':1,'rdl.upskip.v1':1,'rdl.prefs.v1':1};
+  const nk=s=>String(s==null?'':s).trim(),lw=s=>nk(s).toLowerCase().replace(/\s+/g,' ');
+  const mk=(codes,names)=>{
+    const one=x=>{
+      if(typeof x==='string'){return codes.has(x.split('|')[0])}
+      if(!x||typeof x!=='object'||Array.isArray(x))return false;
+      for(const f of ['cu','bp','code','cust','customer']){if(x[f]!=null&&codes.has(nk(x[f])))return true}
+      for(const f of ['nm','n','name','customer']){if(x[f]!=null&&typeof x[f]==='string'&&names.has(lw(x[f])))return true}
+      return false};
+    const pick=v=>{
+      if(Array.isArray(v))return v.filter(one);
+      if(v&&typeof v==='object'){const o={};Object.keys(v).forEach(k=>{const w=v[k];if(Array.isArray(w)||(w&&typeof w==='object'))o[k]=pick(w)});return o}
+      return v};
+    /* merge: current data minus this customer's rows, plus the rows from the file */
+    const put=(cur,inc)=>{
+      if(Array.isArray(inc)){const c=Array.isArray(cur)?cur:[];return c.filter(x=>!one(x)).concat(inc)}
+      if(inc&&typeof inc==='object'){const o=(cur&&typeof cur==='object'&&!Array.isArray(cur))?cur:{};Object.keys(inc).forEach(k=>{const w=inc[k];if(Array.isArray(w)||(w&&typeof w==='object'))o[k]=put(o[k],w)});return o}
+      return cur===undefined?inc:cur};
+    return{one,pick,put}};
+  const info=(scope,key)=>{
+    const m=JSON.parse(localStorage.getItem('rdl.master.v1')||'null');if(!m)return null;
+    let outs,crs;
+    if(scope==='depot'){const k=RDLDEPOT.key(key);outs=m.out.filter(r=>RDLDEPOT.key(r.dp)===k);crs=m.cr.filter(r=>RDLDEPOT.key(r.dp)===k)}
+    else{outs=m.out.filter(r=>nk(r.cu)===nk(key));crs=m.cr.filter(r=>nk(r.bp)===nk(key))}
+    const codes=new Set(),names=new Set();outs.forEach(r=>{codes.add(nk(r.cu));if(r.nm)names.add(lw(r.nm))});crs.forEach(r=>{codes.add(nk(r.bp));if(r.nm)names.add(lw(r.nm))});
+    return{m,outs,crs,codes,names}};
+  const c=card('Depot / Customer backup (Admin only)','Save or restore the data of ONE depot or ONE customer. Everything else in the app stays untouched.'),m1=msgBox();
+  const ty=el('select','list-search');[['depot','Depot-wise'],['customer','Customer-wise']].forEach(([v,t])=>{const o=el('option',null,t);o.value=v;ty.appendChild(o)});
+  const dp=el('select','list-search');RDLDEPOT.names().forEach(n=>{const o=el('option',null,n);o.value=n;dp.appendChild(o)});
+  const cu=el('input','list-search');cu.placeholder='Customer code, e.g. 13000999';cu.style.display='none';
+  ty.onchange=()=>{dp.style.display=ty.value==='depot'?'':'none';cu.style.display=ty.value==='depot'?'none':''};
+  const dl=el('button','st-btn','Download this backup');dl.type='button';
+  const pd=n=>String(n).padStart(2,'0');
+  dl.onclick=()=>{
+    const scope=ty.value,key=scope==='depot'?dp.value:cu.value.trim();if(!key){say(m1,'✗ '+(scope==='depot'?'Select a depot':'Type the customer code'),'bad');return}
+    const I=info(scope,key);if(!I){say(m1,'✗ No database in this app','bad');return}
+    if(!I.outs.length&&!I.crs.length){say(m1,'✗ Nothing found for '+key,'bad');return}
+    const F=mk(I.codes,I.names),data={};
+    Object.keys(localStorage).filter(k=>k.startsWith('rdl.')&&!SKIP[k]).forEach(k=>{let v;try{v=JSON.parse(localStorage.getItem(k))}catch(e){return}if(v&&typeof v==='object'){const p=F.pick(v);if(JSON.stringify(p).length>4)data[k]=p}});
+    const nm=scope==='customer'?((I.crs[0]&&I.crs[0].nm)||(I.outs[0]&&I.outs[0].nm)||''):'';
+    const o={app:'RDL Credit Tracker',scope,key,label:nm,at:new Date().toISOString(),master:{out:I.outs,cr:I.crs},data};
+    const d=new Date(),fn=d.getFullYear()+'-'+pd(d.getMonth()+1)+'-'+pd(d.getDate())+'_'+pd(d.getHours())+pd(d.getMinutes())+'_'+(scope==='depot'?'Depot-':'Customer-')+key.replace(/[^A-Za-z0-9._-]+/g,'')+'.json';
+    const bl=new Blob([JSON.stringify(o)],{type:'application/json'}),a=el('a');a.href=URL.createObjectURL(bl);a.download=fn;document.body.appendChild(a);a.click();a.remove();
+    say(m1,'✓ '+fn+' ('+Math.round(bl.size/1024)+' KB): '+I.outs.length+' bills, '+I.crs.length+' credit lines'+(scope==='depot'?' of '+I.codes.size+' customers':'')+' + their posted data, notes, promise, visits.','ok')};
+  c.appendChild(ty);c.appendChild(dp);c.appendChild(cu);c.appendChild(dl);c.appendChild(m1);b.appendChild(c);
+  const r=card('Restore a depot / customer file (Admin only)','Only that depot\'s or that customer\'s data is replaced. A safety backup of the whole app is saved first.'),m2=msgBox(),f=el('input');f.type='file';f.accept='.json,application/json';f.hidden=true;f.id='fBackupScope';
+  const lab=el('label','fp');lab.htmlFor='fBackupScope';lab.appendChild(el('span',null,'Depot / customer file'));lab.appendChild(el('em',null,'Choose .json file'));
+  f.onchange=async()=>{const file=f.files[0];if(!file)return;
+    try{
+      const o=JSON.parse(await file.text());
+      if(!o||!/^RDL/i.test(String(o.app||''))||!o.master||!(o.scope==='depot'||o.scope==='customer')){say(m2,'✗ This is not a depot / customer backup file (use the full Restore above for a full backup)','bad');f.value='';return}
+      const ok=await RDLUI.ask({title:'Restore '+(o.scope==='depot'?'depot ':'customer ')+o.key+(o.label?' — '+o.label:'')+'?',msg:'File from '+new Date(o.at).toLocaleString('en-GB')+'.\n'+o.master.out.length+' bills and '+o.master.cr.length+' credit lines. Only this '+o.scope+' is replaced; all other data stays as it is.',ok:'Restore',danger:true});if(!ok){f.value='';return}
+      try{if(window.RDLGATE&&RDLGATE.sendBackup)await RDLGATE.sendBackup(true)}catch(e){if(!await RDLUI.ask({title:'Safety backup not saved',msg:'The safety backup of the current app could not be saved ('+(e&&e.message||e)+'). Restore anyway?',ok:'Restore anyway',danger:true})){f.value='';return}}
+      const M=JSON.parse(localStorage.getItem('rdl.master.v1')||'null')||{out:[],cr:[],at:Date.now()};
+      const codes=new Set(),names=new Set();o.master.out.forEach(r=>{codes.add(nk(r.cu));if(r.nm)names.add(lw(r.nm))});o.master.cr.forEach(r=>{codes.add(nk(r.bp));if(r.nm)names.add(lw(r.nm))});
+      if(o.scope==='depot'){const k=RDLDEPOT.key(o.key);M.out.forEach(r=>{if(RDLDEPOT.key(r.dp)===k){codes.add(nk(r.cu));if(r.nm)names.add(lw(r.nm))}});M.cr.forEach(r=>{if(RDLDEPOT.key(r.dp)===k){codes.add(nk(r.bp));if(r.nm)names.add(lw(r.nm))}})}
+      const dk=o.scope==='depot'?RDLDEPOT.key(o.key):null;
+      /* remove only this depot's rows (depot) or this customer's rows (customer), then put the file's rows back */
+      const mine=(r,cd)=>dk?RDLDEPOT.key(r.dp)===dk:codes.has(nk(cd));
+      M.out=M.out.filter(r=>!mine(r,r.cu)).concat(o.master.out);M.cr=M.cr.filter(r=>!mine(r,r.bp)).concat(o.master.cr);M.rev=(M.rev||0)+1;
+      localStorage.setItem('rdl.master.v1',JSON.stringify(M));
+      const F=mk(codes,names);
+      Object.keys(o.data||{}).forEach(k=>{let cur=null;try{cur=JSON.parse(localStorage.getItem(k))}catch(e){}localStorage.setItem(k,JSON.stringify(F.put(cur,o.data[k])))});
+      say(m2,'✓ Restored '+o.scope+' '+o.key+'. Restarting app… Then press "Publish database" so users get it.','ok');setTimeout(()=>location.reload(),1400)
+    }catch(e){say(m2,'✗ This file could not be read','bad')}f.value=''};
+  r.appendChild(lab);r.appendChild(f);r.appendChild(m2);b.appendChild(r)};
+
 /* ---------- Backup ---------- */
 page('setbackup','Database Backup','setdb',b=>{
   const c=card('Backup','Saves the database, Collection & Order, posted bills and collections, and your settings into one file on this phone.'),m=msgBox();
@@ -4486,7 +4657,7 @@ page('setbackup','Database Backup','setdb',b=>{
         say(m,e&&e.name==='AbortError'?'Share cancelled — no backup was recorded':'✗ Could not share the backup',e&&e.name==='AbortError'?'':'bad')}}
     else{saveF(f);say(m,'Sharing is not available here, so the file was saved to Downloads instead: '+f.name,'ok')}
     window.dispatchEvent(new Event('rdl:remind'))};
-  c.appendChild(bk);c.appendChild(sh);c.appendChild(m);b.appendChild(c);
+  c.appendChild(bk);c.appendChild(sh);c.appendChild(m);const BA=window.RDLACC,bok=k=>!BA||BA.can(k);if(bok('backup.dl'))b.appendChild(c);
   const r=card('Restore','Replaces everything in the app with the contents of a backup file.'),m2=msgBox(),f=el('input');f.type='file';f.accept='.json,application/json';f.hidden=true;f.id='fBackup';
   const lab=el('label','fp');lab.htmlFor='fBackup';lab.appendChild(el('span',null,'Backup file'));lab.appendChild(el('em',null,'Choose .json file'));
   f.onchange=async()=>{const file=f.files[0];if(!file)return;
@@ -4494,7 +4665,8 @@ page('setbackup','Database Backup','setdb',b=>{
       const ok=await RDLUI.ask({title:'Restore this backup?',msg:'Backup from '+new Date(o.at).toLocaleString('en-GB')+'.\nAll current app data will be replaced.',ok:'Restore',danger:true});if(!ok)return;
       Object.keys(localStorage).filter(k=>k.startsWith('rdl.')).forEach(k=>localStorage.removeItem(k));Object.entries(o.data).forEach(([k,v])=>localStorage.setItem(k,v));localStorage.setItem('rdl.cleanstart.v2','1');localStorage.setItem('rdl.seed.v1','1');   /* so the one-time clean start never wipes a restored backup */
       say(m2,'✓ Restored. Restarting app…','ok');setTimeout(()=>location.reload(),1200)}catch(e){say(m2,'✗ This is not a valid RDL Credit Tracker backup file','bad')}f.value=''};
-  r.appendChild(lab);r.appendChild(f);r.appendChild(m2);b.appendChild(r)});
+  r.appendChild(lab);r.appendChild(f);r.appendChild(m2);if(bok('backup.rs'))b.appendChild(r);
+  window.RDLBKP_EXTRA&&window.RDLBKP_EXTRA(b,bok)});
 
 /* ---------- WhatsApp Message (wording of the Overdue page message) ---------- */
 page('setwa','WhatsApp Message','settings',b=>{
@@ -4710,7 +4882,7 @@ page('setsec','App Security','settings',b=>{
   if(!unlocked()){b.appendChild(el('p','hint','Locked. Go back and open App Security again.'));return}
   const l=el('div','set-list'),A=window.RDLACC;
   if(A.any(['dcr','dbup','backup']))l.appendChild(tile(IC.db,G.blue,'Database Settings','Backup, database upload and daily Collection & Order upload',()=>open('setdb')));
-  if(A.any(['corr','newcust','erase']))l.appendChild(tile(IC.pen,G.red,'Database Correction & Update','Correction, database update, new customer create and erase',()=>open('setcu')));
+  if(A.any(['corr','newcust','shift','erase']))l.appendChild(tile(IC.pen,G.red,'Database Correction & Update','Correction, database update, new customer create and erase',()=>open('setcu')));
   if(A.can('users'))l.appendChild(tile(svg('<path d="M16 11a3 3 0 100-6 3 3 0 000 6zM8 11a3 3 0 100-6 3 3 0 000 6zm0 2c-2.3 0-7 1.2-7 3.5V19h14v-2.5C15 14.2 10.3 13 8 13zm8 0c-.4 0-.7 0-1.1.1 1.2.8 2.100 1.900 2.100 3.400V19h6v-2.500c0-2.300-4.700-3.500-7-3.500z"/>'),G.green,'User Manage & Access Control','Create, disable, delete users and set what each can do',()=>open('setusers')));
   if(A.can('actlog'))l.appendChild(tile(IC.cal,G.blue,'Activity Log','What was changed, and undo the last change',()=>open('setlog')));
   l.appendChild(tile(IC.lock,G.purple,secG().on?'Change PIN':'Set PIN',secG().on?'Set a new 4-digit PIN':'PIN lock is OFF. Tap to set a new PIN and recovery code',async()=>{if(await setPin('Change PIN',true)){open('setsec')}}));
@@ -4736,21 +4908,27 @@ page('setusers','User Manage & Access Control','setsec',b=>{
     +'.ua-b{padding:8px 12px;border-radius:10px;border:0;background:#1f4e78;color:#fff;font-size:13px;cursor:pointer}.ua-b.alt{background:#e8eef5;color:#1f4e78}.ua-b.red{background:#fde8e6;color:#c0392b}.ua-b:disabled{opacity:.5}'
     +'.ua-ed{margin-top:10px;padding-top:8px;border-top:1px dashed #8aa0c466}'
     +'.ua-r{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:7px 0}.ua-r small{display:block;opacity:.7;font-size:11.5px}'
-    +'.ua-r select,.ua-in.sel{padding:7px;border-radius:8px;border:1px solid #8aa0c466;background:transparent;color:inherit;font-size:13.5px}'
+    +'.ua-sub{margin:3px 0 3px 14px;font-size:13px}.ua-sub small{font-size:11px}.ua-r select,.ua-in.sel{padding:7px;border-radius:8px;border:1px solid #8aa0c466;background:transparent;color:inherit;font-size:13.5px}'
     +'.ua-h{font-weight:700;font-size:13.5px;margin:12px 0 2px}'
     +'.ua-lr{font-size:12px;padding:5px 0;border-bottom:1px solid #8aa0c433;word-break:break-word}.ua-lr.bad{color:#c0392b}.ua-lr b{font-weight:700}';
     document.head.appendChild(cs)}
   const msg=e=>String(e&&e.message||e||'').replace(/^Error:\s*/,'').replace(/^ACCESS_DENIED:\s*/,'');
+  const W=k=>ACC.level(k)===2,mayCreate=W('users.create'),mayEdit=W('users.edit'),mayDel=W('users.delete'),mayPerm=W('users.perms'),mayLog=ACC.level('users.log')>0;   /* each option of User Manage is opened or closed on its own */
   const LV=[[2,'Full access'],[1,'View only'],[0,'No access']],LVT={2:'full',1:'view only',0:'no access'};
   /* one row per part of the app: Full access / View only / No access. Returns the chosen limits. */
   const accEditor=(host,role,cur)=>{
-    const sel={};
-    ACC.modsFor(role).forEach(m=>{const row=el('div','ua-r'),lb=el('div');lb.appendChild(document.createTextNode(m.t));lb.appendChild(el('small',null,m.d||''));row.appendChild(lb);
+    const sel={},subSel={};
+    ACC.modsFor(role).forEach(m=>{const row=el('div','ua-r'),lb=el('div');lb.appendChild(document.createTextNode(m.t+(m.sub?' (whole group)':'')));lb.appendChild(el('small',null,m.d||''));row.appendChild(lb);
       const s=el('select');LV.forEach(o=>{if(o[0]===1&&!m.ro)return;const op=el('option',null,o[1]);op.value=o[0];s.appendChild(op)});
-      s.value=String(ACC.lvl(cur,role,m.k));sel[m.k]=s;row.appendChild(s);host.appendChild(row)});
-    return{get:()=>{const p={};ACC.modsFor(role).forEach(m=>{p[m.k]=+sel[m.k].value});return p}}};
+      s.value=String(ACC.lvl(cur,role,m.k));sel[m.k]=s;row.appendChild(s);host.appendChild(row);
+      (m.sub||[]).forEach(sm=>{if(sm.adminOnly&&role!=='admin')return;
+        const r2=el('div','ua-r ua-sub'),l2=el('div');l2.appendChild(document.createTextNode('↳ '+sm.t));if(sm.d)l2.appendChild(el('small',null,sm.d));r2.appendChild(l2);
+        const s2=el('select');[['inh','Same as the group'],['2','Full access'],['0','No access']].forEach(o=>{const op=el('option',null,o[1]);op.value=o[0];s2.appendChild(op)});
+        const cv=cur&&cur[sm.k];s2.value=(cv===0||cv===2)?String(cv):'inh';subSel[sm.k]=s2;r2.appendChild(s2);host.appendChild(r2)})});
+    return{get:()=>{const p={};ACC.modsFor(role).forEach(m=>{p[m.k]=+sel[m.k].value;(m.sub||[]).forEach(sm=>{const x=subSel[sm.k];if(x&&x.value!=='inh')p[sm.k]=+x.value})});return p}}};
   /* short text: where this account differs from the usual defaults */
-  const summary=(p,role)=>{const r=[];ACC.modsFor(role).forEach(m=>{const v=ACC.lvl(p,role,m.k),d=ACC.lvl({},role,m.k);if(v!==d)r.push(m.t+': '+LVT[v])});
+  const summary=(p,role)=>{const r=[];ACC.modsFor(role).forEach(m=>{const v=ACC.lvl(p,role,m.k),d=ACC.lvl({},role,m.k);if(v!==d)r.push(m.t+': '+LVT[v]);
+      (m.sub||[]).forEach(sm=>{if(sm.adminOnly&&role!=='admin')return;const sv=p&&p[sm.k];if(sv===0||sv===2)r.push(sm.t+': '+LVT[sv])})});
     return r.length?'Changed from default — '+r.join(' • '):'Default access'};
 
   /* ---- add a user or an admin ---- */
@@ -4764,7 +4942,7 @@ page('setusers','User Manage & Access Control','setsec',b=>{
   const accHost=el('div');add.appendChild(accHost);let ed=null;
   const paint=()=>{accHost.textContent='';ed=accEditor(accHost,rs.value,{});asgBox.style.display=rs.value==='admin'?'none':''};
   rs.onchange=paint;paint();
-  const ab=el('button','st-btn','Add account');ab.type='button';add.appendChild(ab);const am=msgBox();add.appendChild(am);b.appendChild(add);
+  const ab=el('button','st-btn','Add account');ab.type='button';add.appendChild(ab);const am=msgBox();add.appendChild(am);if(mayCreate)b.appendChild(add);
 
   const listCard=card('Accounts');const list=el('div');listCard.appendChild(list);b.appendChild(listCard);
 
@@ -4773,7 +4951,7 @@ page('setusers','User Manage & Access Control','setsec',b=>{
   const usel=el('select','ua-in sel'),d1=el('input','ua-in'),d2=el('input','ua-in');d1.type=d2.type='date';
   const fromD=new Date();fromD.setDate(fromD.getDate()-7);d1.value=ymd(fromD);d2.value=ymd(new Date());
   cc.appendChild(el('label','od-label','User'));cc.appendChild(usel);cc.appendChild(el('label','od-label','From'));cc.appendChild(d1);cc.appendChild(el('label','od-label','To'));cc.appendChild(d2);
-  const cb=el('button','st-btn','Show changes');cb.type='button';const cl=el('div');cc.appendChild(cb);cc.appendChild(cl);b.appendChild(cc);
+  const cb=el('button','st-btn','Show changes');cb.type='button';const cl=el('div');cc.appendChild(cb);cc.appendChild(cl);if(mayLog)b.appendChild(cc);
   const OP={add:'Added',edit:'Edited',del:'Deleted'};
   cb.onclick=async()=>{cl.textContent='Loading…';cb.disabled=true;
     try{const j=await GT.api('listChanges',{email:usel.value,from:d1.value,to:d2.value});cl.textContent='';
@@ -4800,6 +4978,22 @@ page('setusers','User Manage & Access Control','setsec',b=>{
       {const t=u.lastBackup?new Date(u.lastBackup):null,mins=t?Math.max(0,Math.round((Date.now()-t)/60000)):null,
         ago=mins===null?'no backup yet':mins<2?'just now':mins<60?mins+' min ago':mins<1440?Math.round(mins/60)+' h ago':Math.round(mins/1440)+' day'+(Math.round(mins/1440)===1?'':'s')+' ago',
         d=el('div','ua-s','Last backup: '+ago);if(u.active&&(mins===null||mins>1440)){d.style.color='#d90000';d.style.fontWeight='800'}r.appendChild(d)}
+      {const db=el('button','ua-b alt','Devices & activity');db.type='button';db.style.margin='4px 0 4px 6px';let dbox=null;
+        const fm=x=>{try{return new Date(x).toLocaleString('en-GB')}catch(e){return String(x)}};
+        const sec=(h)=>{const t=el('div','ua-s',h);t.style.cssText='font-weight:800;margin:10px 0 4px';dbox.appendChild(t)};
+        const ln=(t,c)=>{const x=el('div','ua-s',t);x.style.cssText='white-space:pre-line;margin-bottom:6px;border-bottom:1px solid #e4ecf8;padding-bottom:4px'+(c?';color:'+c:'');dbox.appendChild(x)};
+        db.onclick=async()=>{if(dbox){dbox.remove();dbox=null;return}dbox=el('div','ua-ed');r.appendChild(dbox);dbox.textContent='Loading…';
+          try{const j=await GT.api('userActivity',{email:u.email});dbox.textContent='';
+            sec('Devices ('+j.devices.length+')');
+            if(!j.devices.length)ln('No device seen yet. A device appears here after its next backup.');
+            j.devices.forEach(d=>ln((d.label||'Unknown device')+' \u2022 id …'+d.device+'\nLast seen: '+fm(d.lastAt)+'\nFirst seen: '+fm(d.firstAt)));
+            if(j.devices.length>1)ln('⚠ This person uses '+j.devices.length+' devices.','#b86e00');
+            sec('Sign-ins & account actions ('+j.log.length+')');
+            if(!j.log.length)ln('Nothing recorded yet.');
+            j.log.forEach(x=>ln(fm(x.at)+'  •  '+x.action+(x.result&&x.result!=='OK'?' ('+x.result+')':'')+(x.note?'\n'+x.note:'')+(String(x.by).toLowerCase()!==String(u.email).toLowerCase()?'\nby '+x.by:''),x.result==='FAIL'?'#d90000':''));
+            sec('Changes made in the app ('+j.changes.length+')');
+            if(!j.changes.length)ln('No changes recorded yet.');
+            j.changes.forEach(x=>ln(fm(x.at)+'  •  '+x.kind+' • '+x.op+(x.detail?'\n'+x.detail:'')))}catch(e){dbox.textContent=msg(e)}};r.appendChild(db)}
       r.appendChild(el('div','ua-s',(isAdm?'All depots and customers':(RDLAssign.describe(u.assign)||u.depot||'all depots'))+' • '+(u.active?'Active':'Turned off')));
       if(u.root){r.appendChild(el('div','ua-s','Main Admin: cannot be limited, turned off or deleted.'));list.appendChild(r);return}
       const cur=(pm&&pm[em])||{};
@@ -4809,18 +5003,18 @@ page('setusers','User Manage & Access Control','setsec',b=>{
       const bs=el('div','ua-bs');r.appendChild(bs);
       const btn=(t,cls,fn)=>{const x=el('button','ua-b '+(cls||''),t);x.type='button';x.onclick=()=>fn(x);bs.appendChild(x);return x};
       const mayStop=!isAdm||iAmRoot;   /* only the Main Admin may turn off or delete another admin */
-      if(mayStop)btn(u.active?'Turn off':'Turn on','',async x=>{
+      if(mayStop&&mayEdit)btn(u.active?'Turn off':'Turn on','',async x=>{
         if(u.active&&!await RDLUI.ask({title:'Turn off '+u.email+'?',msg:'They lose access the next time they open the app. You can turn them on again later.'}))return;
         x.disabled=true;try{await GT.api('saveUser',{email:u.email,active:!u.active});load()}catch(e){x.disabled=false;await RDLUI.alert('Could not change',msg(e))}});
-      if(!isAdm)btn('Depots & customers','alt',()=>RDLAssign.open({title:(u.name||u.email),assign:u.assign,email:u.email,users:()=>Promise.resolve(us),save:a=>GT.api('saveUser',{email:u.email,assign:a}).then(load)}));
+      if(!isAdm&&mayEdit)btn('Depots & customers','alt',()=>RDLAssign.open({title:(u.name||u.email),assign:u.assign,email:u.email,users:()=>Promise.resolve(us),save:a=>GT.api('saveUser',{email:u.email,assign:a}).then(load)}));
       let box=null;
-      btn('Access','alt',()=>{
+      if(mayPerm)btn('Access','alt',()=>{
         if(box){box.remove();box=null;return}
         box=el('div','ua-ed');r.appendChild(box);
         const e2=accEditor(box,u.role,cur);
         const sv=el('button','st-btn','Save access');sv.type='button';const st=msgBox();box.appendChild(sv);box.appendChild(st);
         sv.onclick=async()=>{sv.disabled=true;try{await GT.api('setPerms',{email:u.email,perms:e2.get()});say(st,'Saved. It applies the next time this account opens the app with internet.','ok');load()}catch(e){sv.disabled=false;say(st,msg(e),'bad')}}});
-      if(mayStop)btn('Delete','red',async x=>{
+      if(mayStop&&mayDel)btn('Delete','red',async x=>{
         if(!await RDLUI.ask({title:'Delete '+u.email+'?',msg:'The account is removed from the Google Sheet and loses access. Its backups are kept. This cannot be undone.'}))return;
         x.disabled=true;try{await GT.api('deleteUser',{email:u.email});load()}catch(e){x.disabled=false;await RDLUI.alert('Could not delete',msg(e))}});
       list.appendChild(r)})};
@@ -4844,8 +5038,8 @@ page('setusers','User Manage & Access Control','setsec',b=>{
 page('setcu','Database Correction & Update','setsec',b=>{
   if(!unlocked()){b.appendChild(el('p','hint','Locked. Go back and open App Security again.'));return}
   const l=el('div','set-list'),A=window.RDLACC;
-  if(A.can('corr'))l.appendChild(tile(IC.pen,G.red,'Database Correction','Edit or delete posted sales, collections and drafts',()=>{CV.set=0;CED.clear();CDL.clear();open('setcorr')}));
-  if(A.any(['corr','newcust','erase']))l.appendChild(tile(IC.edit,G.amber,'Database Update','Update Outstanding and Credit limit, create customers, erase data',()=>open('setupd')));
+  if(A.can('corr.edit')||A.can('corr.del'))l.appendChild(tile(IC.pen,G.red,'Database Correction','Edit or delete posted sales, collections and drafts',()=>{CV.set=0;CED.clear();CDL.clear();open('setcorr')}));
+  if(A.any(['corr.out','corr.cr','corr.off','newcust','shift','erase']))l.appendChild(tile(IC.edit,G.amber,'Database Update','Update Outstanding and Credit limit, create customers, erase data',()=>open('setupd')));
   b.appendChild(l)});
 
 const CV={tab:'dz',q:'',d1:'',d2:'',set:0,sel:null,lit:false};
@@ -4891,7 +5085,7 @@ page('setcorr','Database Correction','setcu',b=>{
   const groups=[...g.values()].sort((a,b2)=>String(a[0].o.nm||'').localeCompare(String(b2[0].o.nm||'')));
   const info=el('p','hint',rows.length+' record'+(rows.length===1?'':'s')+' • '+groups.length+' customer'+(groups.length===1?'':'s'));b.appendChild(info);
   if(!rows.length){b.appendChild(el('div','nempty','Nothing found for this selection.'));return}
-  const act=el('div','od-actions'),be=el('button','st-btn','Edit selected (0)'),bd=el('button','st-btn danger','Delete selected (0)');be.type=bd.type='button';act.appendChild(be);act.appendChild(bd);b.appendChild(act);
+  const act=el('div','od-actions'),be=el('button','st-btn','Edit selected (0)'),bd=el('button','st-btn danger','Delete selected (0)');be.type=bd.type='button';const CA=window.RDLACC,CEOK=!CA||CA.can('corr.edit'),CDOK=!CA||CA.can('corr.del');if(!CEOK)be.style.display='none';if(!CDOK)bd.style.display='none';act.appendChild(be);act.appendChild(bd);b.appendChild(act);
   const heads=T==='dz'?['Depot Name','Customer','Company','Edit','Delete','Billing Document','Posting Date','Against Bill','Payment Type','Collected','TDS','Total']
     :T==='rv'?['Depot Name','Customer','Company','Edit','Delete','Billing Document','Posting Date','Payment Date','Days Limit','Bill Amount']
     :['Depot Name','Customer','Company','Edit','Delete','Payment Type','Collection & Order Date','Collected','TDS','Total'];
@@ -4902,26 +5096,26 @@ page('setcorr','Database Correction','setcu',b=>{
   const sync=()=>{
     be.textContent='Edit selected ('+CED.size+')';bd.textContent='Delete selected ('+CDL.size+')';be.disabled=!CED.size;bd.disabled=!CDL.size;
     groups.forEach(gr=>{const ok=gr.filter(x=>x.cb&&!x.cb.lock);const ce=gr.cust,e=ok.filter(x=>!x.cb.noEdit);
-      ce.ed.checked=!!e.length&&e.every(x=>CED.has(x.t+'|'+x.id));ce.ed.disabled=!e.length;ce.dl.checked=!!ok.length&&ok.every(x=>CDL.has(x.t+'|'+x.id));ce.dl.disabled=!ok.length})};
+      ce.ed.checked=!!e.length&&e.every(x=>CED.has(x.t+'|'+x.id));ce.ed.disabled=!e.length;const okd=ok.filter(x=>!x.cb.noDel);ce.dl.checked=!!okd.length&&okd.every(x=>CDL.has(x.t+'|'+x.id));ce.dl.disabled=!okd.length})};
   groups.forEach(gr=>{
     gr.sort((a,b2)=>String(a.o.co).localeCompare(String(b2.o.co))||(a.date<b2.date?1:-1));
     gr.cust={};
-    gr.forEach((x,i)=>{const o=x.o,r=el('tr'),key=x.t+'|'+x.id,lock=!!locked(o),noEdit=x.t==='dr';
+    gr.forEach((x,i)=>{const o=x.o,r=el('tr'),key=x.t+'|'+x.id,lock=!!locked(o),noEdit=x.t==='dr'||!CEOK,noDel=!CDOK;
       if(i===0){{const dp=RDLDEPOT.td(o.cu);dp.rowSpan=gr.length;dp.style.verticalAlign='middle';r.appendChild(dp)}
         const cu=el('td','c-name');cu.rowSpan=gr.length;cu.style.verticalAlign='middle';
         const nc=el('div','chip-g cn',o.nm||('Customer '+o.cu));nc.appendChild(el('small',null,'Code: '+o.cu));cu.appendChild(nc);
         const mk=(lab,cls)=>{const l=el('label','cg-ck'),i2=el('input');i2.type='checkbox';l.appendChild(i2);l.appendChild(document.createTextNode(lab));l.style.cssText='display:flex;align-items:center;gap:6px;margin-top:6px;font-size:12px';return[l,i2]};
         const[le,ie]=mk('Edit all'),[ld2,id2]=mk('Delete all');
-        if(T!=='dr')cu.appendChild(le);cu.appendChild(ld2);gr.cust.ed=ie;gr.cust.dl=id2;
+        if(T!=='dr'&&CEOK)cu.appendChild(le);if(CDOK)cu.appendChild(ld2);gr.cust.ed=ie;gr.cust.dl=id2;
         ie.onchange=()=>{gr.forEach(y=>{if(y.cb&&!y.cb.lock&&!y.cb.noEdit){const kk=y.t+'|'+y.id;if(ie.checked){CED.add(kk);CDL.delete(kk)}else CED.delete(kk);y.cb.e.checked=ie.checked;if(ie.checked)y.cb.d.checked=false}});sync()};
-        id2.onchange=()=>{gr.forEach(y=>{if(y.cb&&!y.cb.lock){const kk=y.t+'|'+y.id;if(id2.checked){CDL.add(kk);CED.delete(kk)}else CDL.delete(kk);y.cb.d.checked=id2.checked;if(id2.checked)y.cb.e.checked=false}});sync()};
+        id2.onchange=()=>{gr.forEach(y=>{if(y.cb&&!y.cb.lock&&!y.cb.noDel){const kk=y.t+'|'+y.id;if(id2.checked){CDL.add(kk);CED.delete(kk)}else CDL.delete(kk);y.cb.d.checked=id2.checked;if(id2.checked)y.cb.e.checked=false}});sync()};
         r.appendChild(cu)}
       cell(r,R.coName(o.co),'c-co');
-      const cb={lock,noEdit};
+      const cb={lock,noEdit,noDel};
       const tk=(set,other,dis)=>{const td2=el('td','c-lim');if(dis){td2.textContent=lock?'🔒':'—';r.appendChild(td2);return null}
         const i2=el('input');i2.type='checkbox';i2.checked=set.has(key);i2.style.cssText='width:20px;height:20px';
         i2.onchange=()=>{if(i2.checked){set.add(key);other.set.delete(key);if(other.box)other.box.checked=false}else set.delete(key);sync()};td2.appendChild(i2);r.appendChild(td2);return i2};
-      const oth={set:CDL,box:null};cb.e=tk(CED,oth,lock||noEdit);const oth2={set:CED,box:cb.e};cb.d=tk(CDL,oth2,lock);oth.box=cb.d;
+      const oth={set:CDL,box:null};cb.e=tk(CED,oth,lock||noEdit);const oth2={set:CED,box:cb.e};cb.d=tk(CDL,oth2,lock||noDel);oth.box=cb.d;
       if(cb.e)cb.e.onchange=()=>{if(cb.e.checked){CED.add(key);CDL.delete(key);if(cb.d)cb.d.checked=false}else CED.delete(key);sync()};
       if(cb.d)cb.d.onchange=()=>{if(cb.d.checked){CDL.add(key);CED.delete(key);if(cb.e)cb.e.checked=false}else CDL.delete(key);sync()};
       if(T==='dz'){cell(r,o.bill);cell(r,dd(o.date));cell(r,String(o.ag).split('|')[0]);cell(r,(o.type||'')+(o.ref?' '+o.ref:''));cell(r,money(o.col),'num');cell(r,money(o.tds||0),'num');cell(r,money((+o.col||0)+(+o.tds||0)),'num cb')}
@@ -4962,16 +5156,17 @@ const customers=()=>{const m=R.master,mp=new Map();if(!m)return[];m.cr.forEach(r
 /* ---------- Database Update ---------- */
 page('setupd','Database Update','setcu',b=>{
   const l=el('div','set-list'),A=window.RDLACC;
-  if(A.can('corr'))l.appendChild(tile(IC.edit,G.blue,'Outstanding Update','Edit bills of one customer, business and date',()=>open('updout')));
-  if(A.any(['corr','newcust']))l.appendChild(tile(IC.edit,G.purple,'Business & Credit Update','Credit line update, credit line on / off and add new customer',()=>open('bcu')));
+  if(A.can('corr.out'))l.appendChild(tile(IC.edit,G.blue,'Outstanding Update','Edit bills of one customer, business and date',()=>open('updout')));
+  if(A.any(['corr.cr','corr.off','newcust','shift']))l.appendChild(tile(IC.edit,G.purple,'Business & Credit Update','Credit line update, credit line on / off and add new customer',()=>open('bcu')));
   if(A.can('erase'))l.appendChild(tile(IC.del,G.red,'Database Erase','Delete Outstanding, Credit limit, Collection & Order or ALL data',()=>open('seterase')));
   b.appendChild(l)});
 
 page('bcu','Business & Credit Update','setupd',b=>{
   const l=el('div','set-list'),A=window.RDLACC;
-  if(A.can('corr'))l.appendChild(tile(IC.edit,G.purple,'Credit Line Update','Edit credit & days limit, or add a new business to a customer',()=>open('updcr')));
-  if(A.can('corr'))l.appendChild(tile(IC.edit,G.amber,'Credit Line On / Off','Switch off credit lines with 0% utilization (removed from total limit)',()=>open('updoff')));
+  if(A.can('corr.cr'))l.appendChild(tile(IC.edit,G.purple,'Credit Line Update','Edit credit & days limit, or add a new business to a customer',()=>open('updcr')));
+  if(A.can('corr.off'))l.appendChild(tile(IC.edit,G.amber,'Credit Line On / Off','Switch off credit lines with 0% utilization (removed from total limit)',()=>open('updoff')));
   if(A.can('newcust'))l.appendChild(tile(IC.user,G.green,'Add New Customer','Add a new customer to the database',()=>open('setbp')));
+  if(A.can('shift'))l.appendChild(tile(IC.edit,G.red,'Move Customer to another Depot','Move ALL data of a customer to a different depot',()=>open('shiftcu')));
   b.appendChild(l)});
 
 page('updoff','Credit Line On / Off','bcu',b=>{
@@ -5116,16 +5311,17 @@ page('updcr','Credit Line Update','bcu',b=>{
 page('seterase','Database Erase','setupd',b=>{
   const m0=R.master,d0=R.dcr;
   const c=card('Erase data','Choose what to delete. You will be asked to confirm.'),msg=msgBox(),l=el('div','set-list');
-  l.appendChild(tile(IC.del,G.red,'Outstanding data','Delete all SAP bills'+(m0?' ('+fmt(base()?base().out.length:0)+' bills)':''),async()=>{
+  const EA=window.RDLACC,eok=k=>!EA||EA.can(k);
+  if(eok('erase.out'))l.appendChild(tile(IC.del,G.red,'Outstanding data','Delete all SAP bills'+(m0?' ('+fmt(base()?base().out.length:0)+' bills)':''),async()=>{
     const bm=base();if(!bm||!bm.out.length){say(msg,'There is no Outstanding data','warn');return}
     if(!await RDLUI.ask({title:'Erase Outstanding data?',msg:fmt(bm.out.length)+' SAP bills will be deleted. Bills and collections posted in the app stay, and are reconciled when you upload new Outstanding data.',ok:'Erase',danger:true}))return;
     bm.out=[];saveBase(bm);refreshAll();say(msg,'✓ Outstanding data erased. Upload new Outstanding data when ready.','ok')}));
-  l.appendChild(tile(IC.del,G.red,'Credit limit data','Delete all credit lines'+(m0?' ('+fmt(base()?base().cr.length:0)+' lines)':''),async()=>{
+  if(eok('erase.cr'))l.appendChild(tile(IC.del,G.red,'Credit limit data','Delete all credit lines'+(m0?' ('+fmt(base()?base().cr.length:0)+' lines)':''),async()=>{
     const bm=base();if(!bm||!bm.cr.length){say(msg,'There is no Credit limit data','warn');return}
     if(!await RDLUI.ask({title:'Erase Credit limit data?',msg:fmt(bm.cr.length)+' credit lines will be deleted.',ok:'Erase',danger:true}))return;
     bm.cr=[];saveBase(bm);refreshAll();say(msg,'✓ Credit limit data erased. Upload new Credit limit data when ready.','ok')}));
-  l.appendChild(tile(IC.del,G.red,'Collection & Order','Delete the Collection & Order of one date',()=>eraseDcr(msg)));
-  l.appendChild(tile(IC.del,G.red,'Erase ALL data','Delete everything and start fresh',()=>eraseAll(msg)));
+  if(eok('erase.dcr'))l.appendChild(tile(IC.del,G.red,'Collection & Order','Delete the Collection & Order of one date',()=>eraseDcr(msg)));
+  if(eok('erase.all'))l.appendChild(tile(IC.del,G.red,'Erase ALL data','Delete everything and start fresh',()=>eraseAll(msg)));
   c.appendChild(l);c.appendChild(msg);b.appendChild(c)});
 
 async function eraseAll(msg){
@@ -5201,8 +5397,46 @@ page('setbp','Add New Customer','bcu',b=>{
       const key=co+'|'+L.seg.value.trim();if(seen.has(key)){say(msg,'✗ Two credit lines have the same company and segment','bad');return}seen.add(key);
       rows.push({bp:/^\d+$/.test(bp)?bp:bp,nm,dp:dpn,co:+co,cn:(cos.find(x=>x[0]===co)||[0,''])[1],seg:L.seg.value.trim(),dl:dl+' Days',exp:ex,lim,util:Math.round(ex/lim*1000)/10,ex:ex-lim,sn:L.sn.value.trim()})}
     if(!await RDLUI.ask({title:'Add this customer?',msg:nm+' ('+bp+') in '+dpn+' with '+rows.length+' credit line'+(rows.length===1?'':'s')+' will be added to the database.',ok:'Add'}))return;
-    bm.cr.push(...rows);saveBase(bm);refreshAll();say(msg,'✓ '+nm+' added with '+rows.length+' credit line'+(rows.length===1?'':'s')+'. It now appears in the Customer list and Collection & Order posting.','ok');
+    bm.cr.push(...rows);saveBase(bm);try{window.RDLCD&&RDLCD.learnNew(bp,dpn,nm)}catch(e){}refreshAll();say(msg,'✓ '+nm+' added with '+rows.length+' credit line'+(rows.length===1?'':'s')+'. It now appears in the Customer list and Collection & Order posting.','ok');
     code.value='';name.value='';dpNew.value='';linesHost.textContent='';lines.length=0;addLine()};
+});
+
+page('shiftcu','Move Customer to another Depot','bcu',b=>{
+  const c=card('Move Customer to another Depot','Search the customer code. ALL its data (bills, outstanding, credit lines, collections, notes, promise, visits) moves to the new depot. The old depot no longer sees it after you Publish.'),msg=msgBox();
+  c.appendChild(el('label','od-label','Customer Code *'));
+  const code=el('input','list-search');code.placeholder='e.g. 13000999';c.appendChild(code);
+  const info=el('div');info.style.cssText='margin:10px 0;font-weight:700';c.appendChild(info);
+  c.appendChild(el('label','od-label','New Depot *'));
+  const sel=el('select','list-search');c.appendChild(sel);
+  const row=el('div','od-actions'),find=el('button','st-btn od-clear','Find'),go=el('button','st-btn','Move Customer');find.type=go.type='button';row.appendChild(find);row.appendChild(go);c.appendChild(row);c.appendChild(msg);b.appendChild(c);
+  let cur=null;
+  function look(){
+    const bp=code.value.trim();cur=null;info.textContent='';sel.textContent='';
+    if(!bp){say(msg,'✗ Type the customer code','bad');return}
+    const bm=base();if(!bm){say(msg,'✗ No database in this app','bad');return}
+    const outs=bm.out.filter(r=>String(r.cu)===bp),crs=bm.cr.filter(r=>String(r.bp)===bp);
+    if(!outs.length&&!crs.length){say(msg,'✗ No customer with this code in the database','bad');return}
+    const nm=(crs[0]&&crs[0].nm)||(outs[0]&&(outs[0].nm||outs[0].cn))||'';
+    const ds=[...new Set(outs.concat(crs).map(r=>String(r.dp||'').trim()).filter(Boolean))];
+    cur={bp,nm,ds};
+    info.textContent=nm+' ('+bp+') — now in: '+(ds.join(', ')||'no depot')+'  •  '+outs.length+' bills, '+crs.length+' credit lines';
+    const o0=el('option',null,'Select new depot');o0.value='';sel.appendChild(o0);
+    RDLDEPOT.names().forEach(n=>{if(ds.length===1&&RDLDEPOT.key(n)===RDLDEPOT.key(ds[0]))return;const o=el('option',null,n);o.value=n;sel.appendChild(o)});
+    say(msg,'','ok')}
+  find.onclick=look;code.onkeydown=e=>{if(e.key==='Enter')look()};
+  go.onclick=async()=>{
+    if(!cur)look();if(!cur)return;
+    const nd=sel.value;if(!nd){say(msg,'✗ Select the new depot','bad');return}
+    if(!await RDLUI.ask({title:'Move this customer?',msg:cur.nm+' ('+cur.bp+') will move from '+(cur.ds.join(', ')||'no depot')+' to '+nd+' with ALL its data. A backup is saved first.',ok:'Move'}))return;
+    try{if(window.RDLGATE&&RDLGATE.sendBackup)await RDLGATE.sendBackup(true)}catch(e){if(!await RDLUI.ask({title:'Backup not saved',msg:'The safety backup could not be saved ('+(e&&e.message||e)+'). Move anyway?',ok:'Move anyway'}))return}
+    const bm=base();let n=0;
+    bm.out.forEach(r=>{if(String(r.cu)===cur.bp){r.dp=nd;n++}});bm.cr.forEach(r=>{if(String(r.bp)===cur.bp){r.dp=nd;n++}});
+    saveBase(bm);
+    try{window.RDLCD&&RDLCD.set(cur.bp,nd)}catch(e){}
+    /* posted RV/DZ rows follow the customer's depot automatically when publishing; notes, promise, TDS, visits are keyed by customer, so they stay with it */
+    refreshAll();
+    say(msg,'✓ '+cur.nm+' moved to '+nd+' ('+n+' rows). Now press "Publish database" so the old depot stops seeing it and the new depot gets it.','ok');
+    code.value='';info.textContent='';sel.textContent='';cur=null}
 });
 
 window.RDL.admin={open,show};
@@ -7188,6 +7422,15 @@ function build(ov){
   const box=el('div','sbf');box.appendChild(el('div','sbf-h','\u2726 Today\u2019s focus'));
   /* summary strip */
   const sm=el('div','sbf-sm');[['Outstanding',money(sum(all,bal)),''],['Overdue',money(odAmt),'r'],['Next 7 Days',money(D.upAmt),'g']].forEach(([l,v,c])=>{const x=el('div','sbf-t '+c);x.appendChild(el('small',null,l));x.appendChild(el('b',null,v));if(l==='Next 7 Days'){const e=estCol(open,t);x.appendChild(el('span','sbf-es','Estimated To Come'));x.appendChild(el('span','sbf-es',money(e)));x.title='Estimate only: each open bill due date + that customer\u2019s usual delay (from past collections). No history = due date.'}sm.appendChild(x)});box.appendChild(sm);
+  /* ADMIN ONLY: users' backup status today (users never see this block) */
+  try{const G2=window.RDLGATE,sm2=G2&&G2.session&&G2.session()&&G2.session().role==='admin'&&G2.bkSummary&&G2.bkSummary();
+   if(sm2){box.appendChild(el('div','sbf-sh','Admin \u2022 Users\u2019 backup today'));
+    const c2=el('div','sbf-d');
+    if(sm2.loading){c2.appendChild(el('div','sbf-e','লোড হচ্ছে… একটু পরে আবার খুলুন।'))}
+    else{const ch=el('div','sbf-ch');[['\u2705 '+sm2.n.green+' ঠিক আছে'],['\u23F3 '+sm2.n.amber+' ২ ঘণ্টার বেশি আগে'],['\u274C '+sm2.n.red+' আজ ব্যাকআপ নেই']].forEach(x=>ch.appendChild(el('span',null,x[0])));c2.appendChild(ch);
+      if(!sm2.list.length)c2.appendChild(el('div','sbf-e','সব ইউজারের আজকের ব্যাকআপ আছে।'));
+      sm2.list.forEach(u=>{const r=el('div','sbf-r '+(u.st==='red'?'hi':'md'));const l=el('div');l.appendChild(el('b',null,u.name));l.appendChild(el('small',null,u.txt));r.appendChild(l);c2.appendChild(r)})}
+    box.appendChild(c2)}}catch(e){}
   /* today's schedule (read-only: from Tools > Schedule) */
   {const TY={regular:['Regular Visit','#1d6fe8'],visit:['Regular Visit','#1d6fe8'],collection:['Visit for Collection','#0b9a62'],tds:['Visit for TDS Collection','#0d8f86'],issue:['Visit for Other Issue','#e0802a'],sap:['SAP Cheque / Cash Receive','#c0392b'],meeting:['Meeting','#7a4de0'],other:['Others','#6b7fa6']};
    const hm=tm=>{if(!tm)return '';const[h,mi]=tm.split(':').map(Number);return(h%12||12)+':'+pad(mi)+' '+(h<12?'AM':'PM')};
