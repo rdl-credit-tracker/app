@@ -2794,7 +2794,7 @@ const D=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"]
 const p=n=>String(n).padStart(2,"0");
 function tick(){const n=new Date();
  d.textContent=p(n.getDate())+" "+M[n.getMonth()]+" "+n.getFullYear();
- t.innerHTML=p(n.getHours())+":"+p(n.getMinutes())+":<i style=\"color:inherit;font-style:normal;display:inline;padding:0;border:0\">"+p(n.getSeconds())+"</i>";
+ t.innerHTML=(n.getHours()%12||12)+":"+p(n.getMinutes())+":<i style=\"color:inherit;font-style:normal;display:inline;padding:0;border:0\">"+p(n.getSeconds())+"</i> "+(n.getHours()>=12?"PM":"AM");
  w.textContent=D[n.getDay()];
  if(dayKey(n)!==DAY0)midnight()}
 const dayKey=n=>n.getFullYear()+"-"+n.getMonth()+"-"+n.getDate(),DAY0=dayKey(new Date());
