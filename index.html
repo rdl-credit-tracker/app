@@ -1931,7 +1931,7 @@ function bkRender(j){
     u.pend=!!(t&&(+merged[u.email]||0)<t)});
   var ord={red:0,amber:1,green:2};users.sort(function(a,b){return ord[a.st]-ord[b.st]||String(a.name||a.email).localeCompare(String(b.name||b.email))});
   var chip=document.getElementById('rgx-hub'),bd=document.getElementById('rgx-bkb');
-  if(chip){var cnt=n.red||n.amber;if(!cnt){if(bd)bd.remove()}else{if(!bd){bd=h('i');bd.id='rgx-bkb';bd.style.cssText='font-style:normal;position:absolute;left:calc(50% + 8px);top:2px;min-width:17px;height:17px;padding:0 4px;box-sizing:border-box;border-radius:9px;color:#fff;font:700 11px/17px system-ui,sans-serif;text-align:center;border:2px solid #fff;pointer-events:none';chip.appendChild(bd)}
+  if(chip){var cnt=n.red||n.amber;if(!cnt){if(bd)bd.remove()}else{if(!bd){bd=h('i');bd.id='rgx-bkb';bd.style.cssText='font-style:normal;position:absolute;left:calc(50% - 26px);top:2px;min-width:17px;height:17px;padding:0 4px;box-sizing:border-box;border-radius:9px;color:#fff;font:700 11px/17px system-ui,sans-serif;text-align:center;border:2px solid #fff;pointer-events:none';chip.appendChild(bd)}
     bd.textContent=String(cnt);bd.style.background=n.red?'#c0392b':'#d68910'}}   /* red number on the cloud icon = users without a backup today */
   if(!users.length){el.hidden=true;return}
   if(bkOpen===null)bkOpen=(n.red+n.amber)>0;
@@ -2260,10 +2260,10 @@ function buildHub(){
    +'#rgx-hubbody .hc-gn{--bg:linear-gradient(135deg,#e8f8ec,#cdefd6);--bd:#a5dcb3;--tc:#14502a;--dc:#3f7352;--ic:radial-gradient(circle at 35% 30%,#7ee59a,#1f9a45 75%);--sd:#136a2e;--go:linear-gradient(#32b85a,#1f9a45)}';
     document.head.appendChild(hx)}
   function sec(t,ico,grad){var d=h('div','hc-sec'),i=document.createElement('s');i.style.background=grad;i.innerHTML=svg(ico);d.appendChild(i);d.appendChild(h('span',null,t));d.appendChild(h('b'));p.appendChild(d);return d}
-  function fold(d){var w=h('div','hc-dp'),n=d.nextSibling,A=[];while(n){A.push(n);n=n.nextSibling}A.forEach(function(x){w.appendChild(x)});p.appendChild(w);
-    var cv=h('span','hc-cv');d.appendChild(cv);d.classList.add('hc-fold');
-    function paint(){var cl=window.__hubDepoOpen===false;w.style.display=cl?'none':'';cv.innerHTML=svg(cl?'cvd':'cvu');d.setAttribute('aria-expanded',cl?'false':'true')}
-    d.onclick=function(){window.__hubDepoOpen=(window.__hubDepoOpen===false);paint()};paint()}
+  function fold(d,key){var w=h('div','hc-dp'),n=d.nextSibling,A=[];while(n&&!(n.classList&&n.classList.contains('hc-sec'))){A.push(n);n=n.nextSibling}A.forEach(function(x){w.appendChild(x)});p.insertBefore(w,n||null);
+    var cv=h('span','hc-cv');d.appendChild(cv);d.classList.add('hc-fold');window.__hubClosed=window.__hubClosed||{};
+    function paint(){var cl=!!window.__hubClosed[key];w.style.display=cl?'none':'';cv.innerHTML=svg(cl?'cvd':'cvu');d.setAttribute('aria-expanded',cl?'false':'true')}
+    d.onclick=function(){window.__hubClosed[key]=!window.__hubClosed[key];paint()};paint()}
   function card(t,theme,ico,fn,hint,par){var b=h('button','hc hc-'+theme);b.type='button';
     var i=h('span','hc-ic');i.innerHTML=svg(ico);b.appendChild(i);
     var x=h('span','hc-tx'),tt=h('span','hc-t',t);b.__t=tt;x.appendChild(tt);if(hint)x.appendChild(h('span','hc-d',hint));b.appendChild(x);
@@ -2276,18 +2276,20 @@ function buildHub(){
     card('নতুন ডাটাবেস ডিপোতে পাঠান','hero','up',function(b){run(b,'পাঠানো হচ্ছে…',function(){return pushData()})},'শুধু তখন চাপুন, যখন আপনি নতুন Database Upload করেছেন। ডিপোর ইউজাররা তখন নতুন তথ্য পাবে। প্রতিদিন চাপার দরকার নেই।');
     card('ইউজারদের কাজ আমার অ্যাপে আনুন','blue','dl',function(b){run(b,'আনা হচ্ছে…',function(){return mergeBackups().then(function(r){
       buildHub();showMergeReport(r);return r.done.length?'✓ মার্জ হয়েছে':'কিছু মার্জ হয়নি'})})},'ইউজাররা যা পোস্ট করেছে তা আপনার অ্যাপে যোগ হয়। সাধারণত নিজে থেকেই হয়। উপরের কার্ডে "এখনো আপনার অ্যাপে আনা হয়নি" দেখালে এটা চাপুন।');
-    fold(dpSec);
-    sec('ইউজার ও লগ','usr','linear-gradient(#8466e8,#4a2cc4)');
+    fold(dpSec,'dp');
+    var ulSec=sec('ইউজার ও লগ','usr','linear-gradient(#8466e8,#4a2cc4)');
     var g2=h('div','hc-g2');p.appendChild(g2);
     card('ইউজার ও পারমিশন','pu','grp',function(){go('setusers')},'',g2);
     card('অ্যাক্টিভিটি লগ','am','clip',function(){go('setlog')},'',g2);
+    fold(ulSec,'ul');
   }else{
     card('সর্বশেষ তথ্য নিন','hero','ref',function(b){run(b,'দেখা হচ্ছে…',function(){return pullData(false).then(function(c){if(c){setTimeout(function(){location.reload()},800);return 'নতুন তথ্য এসেছে। রিলোড হচ্ছে…'}return 'আপনার কাছে সর্বশেষ তথ্যই আছে।'})})},'অ্যাডমিন নতুন ডাটাবেস পাঠালে এটা চেপে নিন।');
-    fold(dpSec);
+    fold(dpSec,'dp');
   }
-  sec('ব্যাকআপ','shd','linear-gradient(#32b85a,#1f9a45)');
+  var bkSec=sec('ব্যাকআপ','shd','linear-gradient(#32b85a,#1f9a45)');
   card('আমার ব্যাকআপের অবস্থা','tl','clk',function(){var t=+LS.getItem('rdlgate.bk')||0;rep.textContent=t?('শেষ ব্যাকআপ সেভ: '+new Date(t).toLocaleString('en-GB')+(LS.getItem('rdlgate.bkdirty')==='1'?'\nএরপর নতুন কাজ হয়েছে — এখনই ব্যাকআপ সেভ করুন।':'\nসবকিছু সেভ আছে।')):'এই ফোন থেকে এখনো ব্যাকআপ সেভ হয়নি।';rep.style.display='block'},'শেষ ব্যাকআপ কখন হয়েছে দেখুন।');
   card('এখনই ব্যাকআপ সেভ করুন','gn','save',function(b){run(b,'সেভ হচ্ছে…',function(){return sendBackup().then(function(){return 'ব্যাকআপ Drive-এ সেভ হয়েছে।'})})},'কাজ করলে ৩ সেকেন্ডের মধ্যে নিজে থেকেই সেভ হয়। লাল বার এলে, বা কাজ শেষে নিশ্চিত হতে চাইলে এটা চাপুন।');
+  fold(bkSec,'bk');
   p.appendChild(rep)}
 /* header profile icon: the user's photo, small, inside the icon */
 function chipKey(){return 'rdlgate.photo.'+String((S&&S.email)||'').toLowerCase()}
