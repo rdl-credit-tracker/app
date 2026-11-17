@@ -4336,8 +4336,8 @@ function buildUpload(){
    ['Quick Collection','Type a collection in by hand','b','i-wal',()=>openManual('c')],
    ['Quick Sales','Type a sales bill in by hand','g','i-sales',()=>openManual('s')],
    ['Drafts ('+(dr.length+sdN)+')',dr.length+sdN?dr.length+' collection'+(dr.length===1?'':'s')+' \u2022 '+sdN+' sales waiting to be posted':'Collections and sales waiting to be posted','a','i-stmt',()=>window.RDL.openDrafts(),1],
-   ['Daily Collection & Order Upload','Every day: upload the Daily Collection and Order file','v','i-upl',()=>{if(window.RDL_openSet)window.RDL_openSet('setdcr')},1],
-   ['DCR Upload','Daily Call Report \u2014 customers visited, time spent, purpose','g','i-clock',()=>{if(window.RDL.openVisitsPC)window.RDL.openVisitsPC()},1]].forEach(([t,sub,k,ic,fn,wide])=>{
+   ['Daily Collection & Order Upload','Every day: enter sales and collection, make the Excel, send to Drafts','v','i-upl',()=>{if(window.RDL.openCOE)window.RDL.openCOE();else if(window.RDL_openSet)window.RDL_openSet('setdcr')},1],
+   ['DCR Upload','Daily Call Report \u2014 customers visited, time spent, Excel','g','i-clock',()=>{if(window.RDL.openVisitsPC)window.RDL.openVisitsPC()},1]].forEach(([t,sub,k,ic,fn,wide])=>{
     const K=C[k],b=el('button','up-b'+(wide?' wide':''));b.type='button';
     b.style.cssText='color:'+K[5]+';background:linear-gradient(135deg,'+K[0]+','+K[1]+');border-color:'+K[2]+';box-shadow:0 8px 14px -9px '+K[6]+',inset 0 2px 0 #ffffffcc';
     const i=el('span','up-i');i.style.cssText='background:linear-gradient(135deg,'+K[3]+','+K[4]+');box-shadow:0 3px 0 '+K[4]+'66';i.innerHTML='<svg viewBox="0 0 24 24"><use href="#'+ic+'"/></svg>';
@@ -7279,10 +7279,11 @@ function drawD(){const B=DP.body;B.textContent='';
   const add=el('button','st-btn','+ Add visit');add.type='button';add.onclick=()=>openDF({date:DV.date});B.appendChild(add);
   if(!L.length)B.appendChild(el('div','mv-empty','No visit recorded for this day.'));
   L.forEach(v=>{const card=el('div','mv-item');card.style.setProperty('--c','#1d6fe8');const top=el('div','mv-top');
-    top.appendChild(el('span','mv-chip',v.purpose||'Visit'));top.appendChild(el('span','mv-time','⏰ '+(v.tin?hm(v.tin):'—')+(v.tout?' – '+hm(v.tout):'')));const m=mins(v.tin,v.tout);if(m>0)top.appendChild(el('span','mv-time','• '+dur(m)));card.appendChild(top);
-    dpLine(card,v);card.appendChild(el('div','mv-nm',v.nm||'(no name)'));if(v.note)card.appendChild(el('div','mv-nt',v.note));
+    top.appendChild(el('span','mv-chip',v.vp||v.purpose||'Visit'));top.appendChild(el('span','mv-time','⏰ '+(v.tin?hm(v.tin):'—')+(v.tout?' – '+hm(v.tout):'')));const m=mins(v.tin,v.tout);if(m>0)top.appendChild(el('span','mv-time','• '+dur(m)));card.appendChild(top);
+    dpLine(card,v);card.appendChild(el('div','mv-nm',v.nm||'(no name)'));if(v.vw)card.appendChild(el('div','mv-nt','Visited with: '+v.vw));if(v.note)card.appendChild(el('div','mv-nt',v.note));
     const ac=el('div','mv-act'),btn=(t,f,c)=>{const b=el('button',c||'',t);b.type='button';b.onclick=f;ac.appendChild(b)};
     btn('Edit',()=>openDF(v,true));btn('Delete',()=>{if(confirm('Delete this visit?')){const V=getV();V.visits=V.visits.filter(x=>x.id!==v.id);saveV(V);drawD();refreshMore()}},'del');card.appendChild(ac);B.appendChild(card)});
+  dcrExcelCard(B);
   /* day-wise report */
   B.appendChild(el('div','mv-day','Day-wise report'));const rg=el('select','list-search');[[7,'Last 7 days'],[15,'Last 15 days'],[30,'Last 30 days'],[90,'Last 90 days']].forEach(([v,l])=>rg.appendChild(new Option(l,v)));rg.value=DV.days;rg.onchange=()=>{DV.days=+rg.value;drawD()};B.appendChild(rg);
   const V=getV().visits.filter(dpShow),t=today(),tb=el('table','mv-tbl'),th=el('tr');['Date','Visits','Customers','Time'].forEach(h=>th.appendChild(el('th',null,h)));tb.appendChild(th);
@@ -7298,17 +7299,217 @@ function openDF(v,edit){v=v||{};const B=DF.body;B.textContent='';DF.h.textConten
   box.appendChild(el('label','od-label','Time in'));box.appendChild(r1);box.appendChild(el('label','od-label','Time out'));box.appendChild(r2);
   const du=el('div','stt');box.appendChild(du);const upd=()=>{const m=mins(tin.value,tout.value);if(m==null){du.className='stt';du.textContent=''}else if(m<=0){du.className='stt bad';du.textContent='Time out must be after time in'}else{du.className='stt ok';du.textContent='Time spent: '+dur(m)}};
   n1.onclick=()=>{tin.value=nowT();upd()};n2.onclick=()=>{tout.value=nowT();upd()};tin.oninput=tout.oninput=upd;upd();
-  const pu=el('select','list-search');PUR.forEach(p=>pu.appendChild(new Option(p)));pu.value=PUR.includes(v.purpose)?v.purpose:'Collection';field(box,'Purpose of visit',pu);
-  const nt=el('textarea','mv-ta');nt.placeholder='What happened / result / next step';nt.value=v.note||'';field(box,'Details',nt);
+  const pu=el('select','list-search');VP.forEach(p=>pu.appendChild(new Option(p)));pu.value=VP.includes(v.vp)?v.vp:VP[0];field(box,'Visit Point',pu);
+  const vw=el('input','list-search');vw.placeholder='Self';vw.value=v.vw!=null?v.vw:'Self';field(box,'Visited With (If any)',vw);
+  const nt=el('textarea','mv-ta');nt.placeholder='Remarks';nt.value=v.note||'';field(box,'Remarks',nt);
   const msg=el('div','stt');box.appendChild(msg);
   const row=el('div','od-actions'),sv=el('button','st-btn','Save'),cn=el('button','st-btn od-clear','Cancel');sv.type=cn.type='button';row.appendChild(sv);row.appendChild(cn);box.appendChild(row);
   cn.onclick=()=>{show('dcrp');drawD()};
   sv.onclick=()=>{const bad=x=>{msg.className='stt bad';msg.textContent=x};if(!pk.nm)return bad('Enter the customer name');if(!dt.value||dt.value>today())return bad('Choose a valid date (not in the future)');
     if(tin.value&&tout.value&&mins(tin.value,tout.value)<=0)return bad('Time out must be after time in');
-    const V=getV(),o={id:edit?v.id:uidn(),date:dt.value,cu:pk.cu,nm:pk.nm,tin:tin.value,tout:tout.value,purpose:pu.value,note:nt.value.trim()};
+    const V=getV(),o={id:edit?v.id:uidn(),date:dt.value,cu:pk.cu,nm:pk.nm,tin:tin.value,tout:tout.value,vp:pu.value,vw:vw.value.trim(),note:nt.value.trim()};
     if(edit)V.visits=V.visits.map(x=>x.id===v.id?o:x);else V.visits.push(o);
     if(!saveV(V))return bad('Could not save on this device');DV.date=o.date;show('dcrp');drawD();refreshMore()};
   show('dcrf')}
+/* ---- DCR Excel: adds one day's visits to the user's latest DCR file. Only the last sheet (and, for a new month, the package list) is touched; every other part of the file is kept as it is. ---- */
+const XE=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const MONN=['January','February','March','April','May','June','July','August','September','October','November','December'];
+const serialOf=d=>Math.round((Date.UTC(+d.slice(0,4),+d.slice(5,7)-1,+d.slice(8,10))-Date.UTC(1899,11,30))/864e5);
+const dateOfSerial=n=>new Date(Date.UTC(1899,11,30)+n*864e5);
+const VP=['Accounts & Pharmacy','Accounts'];
+const DX={name:'',buf:null};
+async function buildDcrXlsx(buf,date,L){
+  const zip=await JSZip.loadAsync(buf),rd=async p=>{const f=zip.file(p);return f?f.async('string'):null};
+  let wb=await rd('xl/workbook.xml'),rel=await rd('xl/_rels/workbook.xml.rels'),ct=await rd('[Content_Types].xml');
+  if(!wb||!rel||!ct)throw new Error('This is not a DCR Excel file');
+  const shs=[...wb.matchAll(/<sheet [^>]*\/>/g)].map(m=>m[0]);if(!shs.length)throw new Error('No sheet found in this file');
+  const lastSh=shs[shs.length-1],rid=/r:id="([^"]+)"/.exec(lastSh)[1];
+  const tgt=new RegExp('<Relationship [^>]*Id="'+rid+'"[^>]*>').exec(rel)[0],tp=/Target="([^"]+)"/.exec(tgt)[1];
+  const path=tp.startsWith('/')?tp.slice(1):'xl/'+tp;let sx=await rd(path);
+  const rows=[...sx.matchAll(/<row r="(\d+)"[^>]*?(?:\/>|>[\s\S]*?<\/row>)/g)];
+  let lastRow=0,lastTop=0,lastDate=0;
+  for(const m of rows){const n=+m[1];if(n>lastRow)lastRow=n;const b=new RegExp('<c r="B'+n+'"[^>]*>\\s*<v>([^<]+)</v>').exec(m[0]);if(b&&n>6){const v=+b[1];if(v>lastDate)lastDate=v;lastTop=n}}
+  const ts=serialOf(date);
+  if(lastTop&&ts<=lastDate)throw new Error('This date is already in the file (last date: '+dateOfSerial(lastDate).toISOString().slice(0,10)+')');
+  const sa=s=>s?' s="'+s+'"':'',cs=(r,s,t)=>t===''||t==null?'<c r="'+r+'"'+sa(s)+'/>':'<c r="'+r+'"'+sa(s)+' t="inlineStr"><is><t xml:space="preserve">'+XE(t)+'</t></is></c>';
+  const rowOf=(x,n)=>{const m=new RegExp('<row r="'+n+'"[^>]*?(?:/>|>[\\s\\S]*?</row>)').exec(x);if(!m)throw new Error('Unexpected sheet layout');return m[0]};
+  const tpl=(x,top)=>{const mg=new RegExp('<mergeCell ref="B'+top+':B(\\d+)"').exec(x),end=mg?+mg[1]:top;
+    const info=n=>{const r=rowOf(x,n),at=/^<row r="\d+"([^>]*?)\/?>/.exec(r)[1],st={};for(const m of r.matchAll(/<c r="([A-H])\d+"([^>]*?)(?:\/>|>)/g)){const s=/\ss="(\d+)"/.exec(m[2]);st[m[1]]=s?s[1]:null}return{at,st}};
+    const cm=new RegExp('<c r="C'+top+'"[^>]*?(?:/>|>[\\s\\S]*?</c>)').exec(rowOf(x,top));
+    return{top:info(top),mid:info(Math.min(top+1,end)),end:info(end),emp:cm?cm[0]:''}};
+  const n=L.length;if(!n)throw new Error('No visit recorded for this day');
+  const mk=(T,start,sl)=>{let o='';for(let i=0;i<n;i++){const f=i===0?T.top:(i===n-1?T.end:T.mid),r=start+i,s=f.st,v=L[i],m=mins(v.tin,v.tout);
+    let c='<c r="A'+r+'"'+sa(s.A)+'><v>'+(sl+i)+'</v></c>';
+    c+=i===0?'<c r="B'+r+'"'+sa(s.B)+'><v>'+ts+'</v></c>':'<c r="B'+r+'"'+sa(s.B)+'/>';
+    if(i===0&&T.emp)c+=T.emp.replace(/ r="C\d+"/,' r="C'+r+'"').replace(/ s="\d+"/,sa(s.C)||'');else c+='<c r="C'+r+'"'+sa(s.C)+'/>';
+    c+=cs('D'+r,s.D,v.nm||'')+cs('E'+r,s.E,m>0?m+' Minutes':'')+cs('F'+r,s.F,v.vp||v.purpose||VP[0])+cs('G'+r,s.G,v.vw||'Self')+cs('H'+r,s.H,v.note||'');
+    o+='<row r="'+r+'"'+f.at+'>'+c+'</row>'}return o};
+  const sel=(x,a,b)=>x.replace(/<selection [^>]*\/>/,'<selection activeCell="A'+a+'" sqref="A'+a+':H'+b+'"/>').replace(/topLeftCell="[^"]*"/,'topLeftCell="A'+Math.max(1,a-8)+'"');
+  const dm=lastTop?dateOfSerial(lastDate):null,td=dateOfSerial(ts),same=dm&&dm.getUTCMonth()===td.getUTCMonth()&&dm.getUTCFullYear()===td.getUTCFullYear();
+  let msg;
+  if(same){
+    const T=tpl(sx,lastTop),slm=new RegExp('<c r="A'+lastRow+'"[^>]*><v>(\\d+)').exec(sx),start=lastRow+1,end=start+n-1;
+    sx=sx.replace('</sheetData>',mk(T,start,(slm?+slm[1]:0)+1)+'</sheetData>').replace(/<dimension ref="[^"]*"\/>/,'<dimension ref="A1:H'+end+'"/>');
+    if(n>1)sx=sx.replace(/<mergeCells count="(\d+)">/,(_,c)=>'<mergeCells count="'+(+c+2)+'">').replace('</mergeCells>','<mergeCell ref="B'+start+':B'+end+'"/><mergeCell ref="C'+start+':C'+end+'"/></mergeCells>');
+    sx=sel(sx,start,end);zip.file(path,sx);msg='Added to the last sheet';
+  }else{
+    const T=tpl(sx,7),start=7,end=start+n-1,pre=sx.slice(0,sx.indexOf('<sheetData>')+11),mi=sx.indexOf('</mergeCells>');
+    if(mi<0)throw new Error('Unexpected sheet layout');
+    const mon=MONN[td.getUTCMonth()]+'-'+td.getUTCFullYear();let hdr='';
+    for(let i=1;i<=6;i++){let r=rowOf(sx,i);if(i===4)r=r.replace(/<c r="A4"( s="\d+")? t="s"><v>\d+<\/v><\/c>/,(_,s)=>'<c r="A4"'+(s||'')+' t="inlineStr"><is><t>Month: '+mon+'</t></is></c>');hdr+=r}
+    const hm=[...sx.matchAll(/<mergeCell ref="A[1-4]:H[1-4]"\/>/g)].map(m=>m[0]),nm=n>1?['<mergeCell ref="B7:B'+end+'"/>','<mergeCell ref="C7:C'+end+'"/>']:[];
+    let head=pre.replace(/<dimension ref="[^"]*"\/>/,'<dimension ref="A1:H'+end+'"/>');head=sel(head,7,end).replace(/ topLeftCell="[^"]*"/,'');
+    const all=hm.concat(nm),np=sx.slice(mi+13);
+    const nx=head+hdr+mk(T,start,1)+'</sheetData><mergeCells count="'+all.length+'">'+all.join('')+'</mergeCells>'+np;
+    zip.file(path,sx.replace(' tabSelected="1"',''));
+    let nn=0;zip.forEach(p=>{const m=/^xl\/worksheets\/sheet(\d+)\.xml$/.exec(p);if(m&&+m[1]>nn)nn=+m[1]});nn++;
+    const np2='xl/worksheets/sheet'+nn+'.xml';zip.file(np2,nx);
+    const old=zip.file(path.replace('worksheets/','worksheets/_rels/')+'.rels');if(old)zip.file('xl/worksheets/_rels/sheet'+nn+'.xml.rels',await old.async('string'));
+    let mr=0;for(const m of rel.matchAll(/Id="rId(\d+)"/g))mr=Math.max(mr,+m[1]);const nr='rId'+(mr+1);
+    rel=rel.replace('</Relationships>','<Relationship Id="'+nr+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet'+nn+'.xml"/></Relationships>');
+    let ms=0;for(const s of shs)ms=Math.max(ms,+(/sheetId="(\d+)"/.exec(s)||[0,0])[1]);
+    const bn=/name="([^"]*)"/.exec(lastSh)[1],nme=/[A-Za-z]+-\d{4}\s*$/.test(bn)?bn.replace(/[A-Za-z]+-\d{4}\s*$/,mon):bn.trim()+'-'+mon;
+    wb=wb.replace(lastSh,lastSh+'<sheet name="'+nme+'" sheetId="'+(ms+1)+'" r:id="'+nr+'"/>').replace(/activeTab="\d+"/,'activeTab="'+shs.length+'"');
+    ct=ct.replace('</Types>','<Override PartName="/'+np2+'" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>');
+    zip.file('xl/workbook.xml',wb);zip.file('xl/_rels/workbook.xml.rels',rel);zip.file('[Content_Types].xml',ct);msg='New sheet: '+nme;
+  }
+  const blob=await zip.generateAsync({type:'blob',compression:'DEFLATE',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  return{blob,msg,n}}
+function dcrExcelCard(B){
+  const c=el('div','st-card');c.appendChild(el('div','mv-day','DCR Excel'));
+  const fi=el('input');fi.type='file';fi.accept='.xlsx';fi.hidden=true;
+  const pk=el('button','st-btn od-clear',DX.name||'Choose your latest DCR Excel file');pk.type='button';pk.onclick=()=>fi.click();
+  const st=el('div','stt'),say=(t,k)=>{st.className='stt'+(k?' '+k:'');st.textContent=t};
+  fi.onchange=async()=>{const f=fi.files[0];fi.value='';if(!f)return;try{DX.buf=await f.arrayBuffer();DX.name=f.name;pk.textContent=f.name;say('✓ File ready','ok')}catch(e){say('✗ Could not read this file','bad')}};
+  const run=async share=>{if(!DX.buf)return say('Choose the latest DCR Excel file first','bad');const L=vOf(DV.date);if(!L.length)return say('No visit recorded for this day','bad');
+    say('Making the file…');
+    try{const r=await buildDcrXlsx(DX.buf,DV.date,L),f=new File([r.blob],DX.name,{type:r.blob.type});
+      if(share&&navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f],title:'DCR '+dd(DV.date),text:'Daily Call Report — '+dd(DV.date)});say('✓ '+r.msg+' • '+r.n+' visit'+(r.n===1?'':'s')+' • shared','ok')}
+      else{const a=el('a');a.href=URL.createObjectURL(r.blob);a.download=DX.name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);say('✓ '+r.msg+' • '+r.n+' visit'+(r.n===1?'':'s')+(share?' • sharing is not available here, so the file was downloaded':' • downloaded'),'ok')}
+    }catch(e){if(e&&e.name==='AbortError')say('');else say('✗ '+(e&&e.message||'Could not make the file'),'bad')}};
+  const row=el('div','od-actions'),dl=el('button','st-btn','Download Excel'),sh=el('button','st-btn','Share to Outlook');dl.type=sh.type='button';dl.onclick=()=>run(false);sh.onclick=()=>run(true);row.appendChild(dl);row.appendChild(sh);
+  c.appendChild(el('div','mv-nt','Adds the visits of the day shown above to the end of your last sheet.'));c.appendChild(pk);c.appendChild(fi);c.appendChild(row);c.appendChild(st);B.appendChild(c)}
+/* ---- Collection & Order Entry: the day's orders and collections are typed here, then (1) added to the end of the user's latest Collection & Order Excel, copying the last block's look exactly, and (2) saved into the app as the Daily Collection & Order data, so Smart Post can send them to Drafts. Nothing is posted from here. ---- */
+const COL7=['RPL','RNL','PCL','REXIME','RBCL','Jenphar','NLS'],OCL='DEFGHIJ'.split(''),CCL='MNOPQRS'.split('');
+const CX={name:'',buf:null,date:today()},coGet=()=>jget('rdl.coe.v1',{}),coSet=x=>jset('rdl.coe.v1',x),coList=d=>coGet()[d]||[];
+const rnd2=x=>Math.round(x*100)/100,fm2=n=>Number(n).toLocaleString('en-US',{maximumFractionDigits:2});
+(function(){const s=document.createElement('style');s.textContent='.coe-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:6px 0 10px}.coe-c small{display:block;font-weight:700;margin:0 0 3px;opacity:.8}.coe-c input{width:100%;box-sizing:border-box}';document.head.appendChild(s)})();
+async function buildCoXlsx(buf,date,E){
+  const zip=await JSZip.loadAsync(buf),rd=async p=>{const f=zip.file(p);return f?f.async('string'):null};
+  let wb=await rd('xl/workbook.xml'),rel=await rd('xl/_rels/workbook.xml.rels'),ct=await rd('[Content_Types].xml');
+  if(!wb||!rel||!ct)throw new Error('This is not a Collection & Order Excel file');
+  const shs=[...wb.matchAll(/<sheet [^>]*\/>/g)].map(m=>m[0]);if(!shs.length)throw new Error('No sheet found in this file');
+  const lastSh=shs[shs.length-1],rid=/r:id="([^"]+)"/.exec(lastSh)[1];
+  const tgt=new RegExp('<Relationship [^>]*Id="'+rid+'"[^>]*>').exec(rel)[0],tp=/Target="([^"]+)"/.exec(tgt)[1];
+  const path=tp.startsWith('/')?tp.slice(1):'xl/'+tp;let sx=await rd(path);
+  if(!/<c r="K7"[^>]*><f>/.test(sx))throw new Error('This does not look like the Collection & Order file');
+  const rows=[...sx.matchAll(/<row r="(\d+)"[^>]*?(?:\/>|>[\s\S]*?<\/row>)/g)];
+  let lastRow=0,lastTop=0,lastDate=0;
+  for(const m of rows){const n=+m[1];if(n>lastRow)lastRow=n;const b=new RegExp('<c r="B'+n+'"[^>]*>\\s*<v>([^<]+)</v>').exec(m[0]);if(b&&n>7){const v=+b[1];if(v>lastDate)lastDate=v;lastTop=n}}
+  const ts=serialOf(date);
+  if(lastTop&&ts<=lastDate)throw new Error('This date is already in the file (last date: '+dateOfSerial(lastDate).toISOString().slice(0,10)+')');
+  const sa=s=>s?' s="'+s+'"':'',cs=(r,s,t)=>t===''||t==null?'<c r="'+r+'"'+sa(s)+'/>':'<c r="'+r+'"'+sa(s)+' t="inlineStr"><is><t xml:space="preserve">'+XE(t)+'</t></is></c>';
+  const rowOf=(x,n)=>{const m=new RegExp('<row r="'+n+'"[^>]*?(?:/>|>[\\s\\S]*?</row>)').exec(x);if(!m)throw new Error('Unexpected sheet layout');return m[0]};
+  const tpl=(x,top)=>{const mg=new RegExp('<mergeCell ref="B'+top+':B(\\d+)"').exec(x),end=mg?+mg[1]:top;
+    const info=n=>{const r=rowOf(x,n),at=/^<row r="\d+"([^>]*?)\/?>/.exec(r)[1],st={};for(const m of r.matchAll(/<c r="([A-U])\d+"([^>]*?)(?:\/>|>)/g)){const s=/\ss="(\d+)"/.exec(m[2]);st[m[1]]=s?s[1]:null}return{at,st}};
+    return{top:info(top),mid:info(Math.min(top+1,end)),end:info(end)}};
+  const n=E.length;if(!n)throw new Error('No entry for this day');
+  const sums={};const add=(L,v)=>{sums[L]=(sums[L]||0)+v};
+  const mk=(T,start,sl)=>{let o='';for(let i=0;i<n;i++){const f=n===1?T.top:(i===0?T.top:(i===n-1?T.end:T.mid)),r=start+i,s=f.st,e=E[i];
+    let c='<c r="A'+r+'"'+sa(s.A)+'><v>'+(sl+i)+'</v></c>';
+    c+=i===0?'<c r="B'+r+'"'+sa(s.B)+'><v>'+ts+'</v></c>':'<c r="B'+r+'"'+sa(s.B)+'/>';
+    c+=cs('C'+r,s.C,e.nm);
+    const nc=(L,v)=>v?'<c r="'+L+r+'"'+sa(s[L])+'><v>'+v+'</v></c>':'<c r="'+L+r+'"'+sa(s[L])+'/>';
+    let to=0,tc=0;
+    OCL.forEach((L,j)=>{const v=+(e.o||{})[COL7[j]]||0;to+=v;add(L,v);c+=nc(L,v)});
+    c+='<c r="K'+r+'"'+sa(s.K)+'><f>SUM(D'+r+':J'+r+')</f><v>'+rnd2(to)+'</v></c><c r="L'+r+'"'+sa(s.L)+'/>';
+    CCL.forEach((L,j)=>{const v=+(e.c||{})[COL7[j]]||0;tc+=v;add(L,v);c+=nc(L,v)});
+    c+='<c r="T'+r+'"'+sa(s.T)+'><f>SUM(M'+r+':S'+r+')</f><v>'+rnd2(tc)+'</v></c>'+cs('U'+r,s.U,e.rm||'');
+    add('K',to);add('T',tc);
+    o+='<row r="'+r+'"'+f.at+'>'+c+'</row>'}return o};
+  const tot=(x,reset)=>{for(const L of [...OCL,'K',...CCL,'T'])x=x.replace(new RegExp('(<c r="'+L+'7"[^>]*><f>[^<]*</f><v>)([^<]*)(</v>)'),(m,a,v,z)=>a+rnd2((reset?0:+v)+(sums[L]||0))+z);return x};
+  const sel=(x,a,b,top)=>x.replace(/<selection pane="bottomLeft"[^>]*\/>/,'<selection pane="bottomLeft" activeCell="A'+a+'" sqref="A'+a+':U'+b+'"/>').replace(/(<pane [^>]*?)topLeftCell="[^"]*"/,'$1topLeftCell="A'+top+'"');
+  const dm=lastTop?dateOfSerial(lastDate):null,td=dateOfSerial(ts),same=dm&&dm.getUTCMonth()===td.getUTCMonth()&&dm.getUTCFullYear()===td.getUTCFullYear();
+  let msg;
+  if(same){
+    const T=tpl(sx,lastTop),slm=new RegExp('<c r="A'+lastRow+'"[^>]*><v>(\\d+)').exec(sx),start=lastRow+1,end=start+n-1;
+    sx=sx.replace('</sheetData>',mk(T,start,(slm?+slm[1]:0)+1)+'</sheetData>').replace(/<dimension ref="[^"]*"\/>/,'<dimension ref="A1:U'+Math.max(end,lastRow)+'"/>');
+    sx=tot(sx,false);
+    if(n>1)sx=sx.replace(/<mergeCells count="(\d+)">/,(_,c)=>'<mergeCells count="'+(+c+1)+'">').replace('</mergeCells>','<mergeCell ref="B'+start+':B'+end+'"/></mergeCells>');
+    sx=sel(sx,start,end,Math.max(8,start-6));zip.file(path,sx);msg='Added to the last sheet';
+  }else{
+    const T=tpl(sx,8),start=8,end=start+n-1,pre=sx.slice(0,sx.indexOf('<sheetData>')+11),mi=sx.indexOf('</mergeCells>');
+    if(mi<0)throw new Error('Unexpected sheet layout');
+    const mon=MONN[td.getUTCMonth()]+'-'+td.getUTCFullYear(),mon3=MONN[td.getUTCMonth()].slice(0,3)+'-'+td.getUTCFullYear();
+    let hdr='';
+    for(let i=1;i<=7;i++){let r=rowOf(sx,i);if(i===4){const sm=/<c r="A4"( s="\d+")? t="s"><v>(\d+)<\/v><\/c>/.exec(r);let txt='Month: '+mon3;
+        if(sm){const ss=await rd('xl/sharedStrings.xml'),si=ss?[...ss.matchAll(/<si>([\s\S]*?)<\/si>/g)]:[],t0=si[+sm[2]]?si[+sm[2]][1].replace(/<[^>]+>/g,''):'';if(/[A-Za-z]{3,9}-\d{4}/.test(t0))txt=t0.replace(/[A-Za-z]{3,9}-\d{4}/,mon3)}
+        r=r.replace(/<c r="A4"( s="\d+")? t="s"><v>\d+<\/v><\/c>/,(_,s)=>'<c r="A4"'+(s||'')+' t="inlineStr"><is><t>'+XE(txt)+'</t></is></c>')}hdr+=r}
+    const body=mk(T,start,1);hdr=tot(hdr,true);
+    const hm=[...sx.matchAll(/<mergeCell ref="([A-Z]+)(\d+):([A-Z]+)(\d+)"\/>/g)].filter(m=>+m[2]<=7&&+m[4]<=7).map(m=>m[0]),nm=n>1?['<mergeCell ref="B8:B'+end+'"/>']:[];
+    let head=pre.replace(/<dimension ref="[^"]*"\/>/,'<dimension ref="A1:U'+end+'"/>');head=sel(head,8,end,8);
+    const all=hm.concat(nm),np=sx.slice(mi+13);
+    const nx=head+hdr+body+'</sheetData><mergeCells count="'+all.length+'">'+all.join('')+'</mergeCells>'+np;
+    zip.file(path,sx.replace(' tabSelected="1"',''));
+    let nn=0;zip.forEach(p=>{const m=/^xl\/worksheets\/sheet(\d+)\.xml$/.exec(p);if(m&&+m[1]>nn)nn=+m[1]});nn++;
+    const np2='xl/worksheets/sheet'+nn+'.xml';zip.file(np2,nx);
+    const old=zip.file(path.replace('worksheets/','worksheets/_rels/')+'.rels');if(old)zip.file('xl/worksheets/_rels/sheet'+nn+'.xml.rels',await old.async('string'));
+    let mr=0;for(const m of rel.matchAll(/Id="rId(\d+)"/g))mr=Math.max(mr,+m[1]);const nr='rId'+(mr+1);
+    rel=rel.replace('</Relationships>','<Relationship Id="'+nr+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet'+nn+'.xml"/></Relationships>');
+    let ms=0;for(const s of shs)ms=Math.max(ms,+(/sheetId="(\d+)"/.exec(s)||[0,0])[1]);
+    const bn=/name="([^"]*)"/.exec(lastSh)[1],nme=/[A-Za-z]+-\d{4}\s*$/.test(bn)?bn.replace(/[A-Za-z]+-\d{4}\s*$/,mon):bn.trim()+'-'+mon;
+    wb=wb.replace(lastSh,lastSh+'<sheet name="'+nme+'" sheetId="'+(ms+1)+'" r:id="'+nr+'"/>').replace(/activeTab="\d+"/,'activeTab="'+shs.length+'"');
+    ct=ct.replace('</Types>','<Override PartName="/'+np2+'" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>');
+    zip.file('xl/workbook.xml',wb);zip.file('xl/_rels/workbook.xml.rels',rel);zip.file('[Content_Types].xml',ct);msg='New sheet: '+nme;
+  }
+  const blob=await zip.generateAsync({type:'blob',compression:'DEFLATE',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  return{blob,msg,n}}
+/* the day's entries become the app's Daily Collection & Order data (same shape as the uploaded file), so Smart Post can send them to Drafts */
+function coSave(date,E){const d=jget('rdl.dcr.v1',null)||{rows:[]},cl=o=>{const r={};COL7.forEach(k=>{const v=+(o||{})[k];if(v)r[k]=v});return r},nk=s=>String(s||'').toLowerCase();
+  const rows=(d.rows||[]).filter(r=>!(r.d===date&&E.some(e=>nk(e.nm)===nk(r.n))));
+  E.forEach(e=>rows.push({d:date,n:e.nm,o:cl(e.o),c:cl(e.c),...(e.rm?{rm:e.rm}:{})}));
+  jset('rdl.dcr.v1',{...d,rows,lastDate:rows.reduce((m,r)=>r.d>m?r.d:m,''),at:Date.now()})}
+const CP=mkPage('coep','Collection & Order',()=>{if(R.openUpload)R.openUpload()});
+function drawCO(){const B=CP.body;B.textContent='';
+  const di=el('input','list-search');di.type='date';di.value=CX.date;di.max=today();di.onchange=()=>{if(di.value){CX.date=di.value;drawCO()}};B.appendChild(di);
+  const E=coList(CX.date),box=el('div','st-card');B.appendChild(box);
+  box.appendChild(el('label','od-label','Customer Name'));const pk=picker(box,{});
+  const grid=(title)=>{box.appendChild(el('div','mv-day',title));const g=el('div','coe-grid'),ins={};COL7.forEach(k=>{const w=el('div','coe-c');w.appendChild(el('small',null,k));const i=el('input','list-search');i.type='number';i.inputMode='decimal';i.min='0';i.step='any';w.appendChild(i);g.appendChild(w);ins[k]=i});box.appendChild(g);return ins};
+  const oi=grid('Business Wise Order'),ci=grid('Business Wise Collection');
+  const nt=el('textarea','mv-ta');nt.placeholder='Remarks';field(box,'Remarks',nt);
+  const msg=el('div','stt');box.appendChild(msg);
+  const ab=el('button','st-btn','+ Add entry');ab.type='button';box.appendChild(ab);
+  ab.onclick=()=>{const bad=x=>{msg.className='stt bad';msg.textContent=x};if(!pk.cu)return bad('Choose the customer from the list');if(!CX.date||CX.date>today())return bad('Choose a valid date (not in the future)');
+    const rd=ins=>{const r={};COL7.forEach(k=>{const v=+ins[k].value;if(v>0)r[k]=v;else if(v<0)r.__bad=1});return r},o=rd(oi),c=rd(ci);if(o.__bad||c.__bad)return bad('Amounts cannot be negative');
+    if(!Object.keys(o).length&&!Object.keys(c).length)return bad('Enter at least one order or collection amount');
+    if(E.some(e=>e.cu===pk.cu))return bad('This customer is already added for this day. Delete it first to change it.');
+    const X=coGet();X[CX.date]=E.concat([{id:Date.now()+'',cu:pk.cu,nm:pk.nm,o,c,rm:nt.value.trim()}]);coSet(X);drawCO()};
+  /* the day's list */
+  const sum=(k)=>E.reduce((s,e)=>s+COL7.reduce((a,x)=>a+(+(e[k]||{})[x]||0),0),0);
+  B.appendChild(el('div','mv-day',dow(CX.date)+', '+dd(CX.date)+' • '+E.length+' entr'+(E.length===1?'y':'ies')+' • Order '+fm2(sum('o'))+' • Collection '+fm2(sum('c'))));
+  E.forEach(e=>{const card=el('div','mv-item');card.style.setProperty('--c','#1d6fe8');card.appendChild(el('div','mv-nm',e.nm));
+    const t=k=>COL7.filter(x=>+(e[k]||{})[x]).map(x=>x+' '+fm2(e[k][x])).join(', ');
+    if(t('o'))card.appendChild(el('div','mv-nt','Order: '+t('o')));if(t('c'))card.appendChild(el('div','mv-nt','Collection: '+t('c')));if(e.rm)card.appendChild(el('div','mv-nt',e.rm));
+    const ac=el('div','mv-act'),b=el('button','del','Delete');b.type='button';b.onclick=()=>{if(confirm('Delete this entry?')){const X=coGet();X[CX.date]=E.filter(x=>x.id!==e.id);coSet(X);drawCO()}};ac.appendChild(b);card.appendChild(ac);B.appendChild(card)});
+  /* Excel + app */
+  const c=el('div','st-card');c.appendChild(el('div','mv-day','Excel and Drafts'));
+  const fi=el('input');fi.type='file';fi.accept='.xlsx';fi.hidden=true;
+  const pf=el('button','st-btn od-clear',CX.name||'Choose your latest Collection & Order Excel file');pf.type='button';pf.onclick=()=>fi.click();
+  const st=el('div','stt'),say=(t,k)=>{st.className='stt'+(k?' '+k:'');st.textContent=t};
+  fi.onchange=async()=>{const f=fi.files[0];fi.value='';if(!f)return;try{CX.buf=await f.arrayBuffer();CX.name=f.name;pf.textContent=f.name;say('✓ File ready','ok')}catch(x){say('✗ Could not read this file','bad')}};
+  const run=async mode=>{if(!E.length)return say('Add at least one entry for this day','bad');
+    if(mode==='app'){try{coSave(CX.date,E);say('✓ Saved in the app. Open Smart Post, pick '+dd(CX.date)+' and press Save to Draft. Then review and post from Drafts.','ok')}catch(x){say('✗ Could not save on this device','bad')}return}
+    if(!CX.buf)return say('Choose the latest Collection & Order Excel file first','bad');say('Making the file…');
+    try{const r=await buildCoXlsx(CX.buf,CX.date,E),f=new File([r.blob],CX.name,{type:r.blob.type});coSave(CX.date,E);
+      const tail=' • saved in the app for Smart Post';
+      if(mode==='share'&&navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f],title:'Collection & Order '+dd(CX.date),text:'Daily Sales Order & Collection Statements — '+dd(CX.date)});say('✓ '+r.msg+' • '+r.n+' entr'+(r.n===1?'y':'ies')+' • shared'+tail,'ok')}
+      else{const a=el('a');a.href=URL.createObjectURL(r.blob);a.download=CX.name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);say('✓ '+r.msg+' • '+r.n+' entr'+(r.n===1?'y':'ies')+(mode==='share'?' • sharing is not available here, so the file was downloaded':' • downloaded')+tail,'ok')}
+    }catch(x){if(x&&x.name==='AbortError')say('');else say('✗ '+(x&&x.message||'Could not make the file'),'bad')}};
+  const row=el('div','od-actions'),dl=el('button','st-btn','Download Excel'),sh=el('button','st-btn','Share to Outlook'),sp=el('button','st-btn od-clear','Save to app only'),op=el('button','st-btn od-clear','Open Smart Post');
+  dl.type=sh.type=sp.type=op.type='button';dl.onclick=()=>run('dl');sh.onclick=()=>run('share');sp.onclick=()=>run('app');op.onclick=()=>{if(R.openTab)R.openTab('s','post')};
+  [dl,sh,sp,op].forEach(b=>row.appendChild(b));
+  c.appendChild(el('div','mv-nt','Adds the entries above to the end of your last sheet, then saves them in the app. Posting happens only after you review them in Drafts.'));c.appendChild(pf);c.appendChild(fi);c.appendChild(row);c.appendChild(st);B.appendChild(c)}
+R.openCOE=()=>{CX.date=today();drawCO();show('coep')};
 function openD(){dcrPC=0;DV.date=today();drawD();show('dcrp')}
 
 /* =====================================================  MORE page  ===================================================== */
