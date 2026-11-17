@@ -4336,7 +4336,7 @@ function buildUpload(){
    ['Quick Collection','Type a collection in by hand','b','i-wal',()=>openManual('c')],
    ['Quick Sales','Type a sales bill in by hand','g','i-sales',()=>openManual('s')],
    ['Drafts ('+(dr.length+sdN)+')',dr.length+sdN?dr.length+' collection'+(dr.length===1?'':'s')+' \u2022 '+sdN+' sales waiting to be posted':'Collections and sales waiting to be posted','a','i-stmt',()=>window.RDL.openDrafts(),1],
-   ['Daily Collection & Order Upload','Every day: enter sales and collection, make the Excel, send to Drafts','v','i-upl',()=>{if(window.RDL.openCOE)window.RDL.openCOE();else if(window.RDL_openSet)window.RDL_openSet('setdcr')},1],
+   ['Daily Collection & Order Upload','Every day: upload the Excel file, or enter business wise sales & collection and make the Excel','v','i-upl',()=>{if(window.RDL.openCOE)window.RDL.openCOE();else if(window.RDL_openSet)window.RDL_openSet('setdcr')},1],
    ['DCR Upload','Daily Call Report \u2014 customers visited, time spent, Excel','g','i-clock',()=>{if(window.RDL.openVisitsPC)window.RDL.openVisitsPC()},1]].forEach(([t,sub,k,ic,fn,wide])=>{
     const K=C[k],b=el('button','up-b'+(wide?' wide':''));b.type='button';
     b.style.cssText='color:'+K[5]+';background:linear-gradient(135deg,'+K[0]+','+K[1]+');border-color:'+K[2]+';box-shadow:0 8px 14px -9px '+K[6]+',inset 0 2px 0 #ffffffcc';
@@ -7317,7 +7317,10 @@ const MONN=['January','February','March','April','May','June','July','August','S
 const serialOf=d=>Math.round((Date.UTC(+d.slice(0,4),+d.slice(5,7)-1,+d.slice(8,10))-Date.UTC(1899,11,30))/864e5);
 const dateOfSerial=n=>new Date(Date.UTC(1899,11,30)+n*864e5);
 const VP=['Accounts & Pharmacy','Accounts'];
-const DX={name:'',buf:null};
+const DX={name:'',buf:null,saved:null};
+/* the app remembers the DCR Excel: chosen once, then every new Excel it makes is kept for the next day */
+const dxDb=(m,fn)=>new Promise((res,rej)=>{try{const q=indexedDB.open('rdl-coefile',1);q.onupgradeneeded=()=>q.result.createObjectStore('f');q.onerror=()=>rej(q.error);q.onsuccess=()=>{const d=q.result,t=d.transaction('f',m),r=fn(t.objectStore('f'));t.oncomplete=()=>{d.close();res(r&&r.result)};t.onerror=t.onabort=()=>{d.close();rej(t.error)}}}catch(e){rej(e)}}),
+dxGet=()=>dxDb('readonly',s=>s.get('dcr')).catch(()=>null),dxSet=o=>dxDb('readwrite',s=>s.put(o,'dcr'));
 async function buildDcrXlsx(buf,date,L){
   const zip=await JSZip.loadAsync(buf),rd=async p=>{const f=zip.file(p);return f?f.async('string'):null};
   let wb=await rd('xl/workbook.xml'),rel=await rd('xl/_rels/workbook.xml.rels'),ct=await rd('[Content_Types].xml');
@@ -7378,20 +7381,27 @@ async function buildDcrXlsx(buf,date,L){
 function dcrExcelCard(B){
   const c=el('div','st-card');c.appendChild(el('div','mv-day','DCR Excel'));
   const fi=el('input');fi.type='file';fi.accept='.xlsx';fi.hidden=true;
-  const pk=el('button','st-btn od-clear',DX.name||'Choose your latest DCR Excel file');pk.type='button';pk.onclick=()=>fi.click();
+  const lab=()=>DX.buf?DX.name+' (new file chosen)':DX.saved?'\u2713 Saved file: '+DX.saved.name+' \u2014 tap to change':'Choose your DCR Excel file (first time only)';
+  const pk=el('button','st-btn od-clear',lab());pk.type='button';pk.onclick=()=>fi.click();
+  dxGet().then(o=>{DX.saved=o&&o.buf?o:null;if(DX.saved&&!DX.buf)DX.name=DX.saved.name;pk.textContent=lab()});
   const st=el('div','stt'),say=(t,k)=>{st.className='stt'+(k?' '+k:'');st.textContent=t};
-  fi.onchange=async()=>{const f=fi.files[0];fi.value='';if(!f)return;try{DX.buf=await f.arrayBuffer();DX.name=f.name;pk.textContent=f.name;say('✓ File ready','ok')}catch(e){say('✗ Could not read this file','bad')}};
-  const run=async share=>{if(!DX.buf)return say('Choose the latest DCR Excel file first','bad');const L=vOf(DV.date);if(!L.length)return say('No visit recorded for this day','bad');
+  fi.onchange=async()=>{const f=fi.files[0];fi.value='';if(!f)return;try{DX.buf=await f.arrayBuffer();DX.name=f.name;pk.textContent=lab();say('✓ File ready. The app will remember it after you make the Excel.','ok')}catch(e){say('✗ Could not read this file','bad')}};
+  const run=async share=>{const picked=!!DX.buf,sv=DX.saved,base=picked?DX.buf:(sv?((sv.bases||{})[DV.date]||sv.buf):null);if(!base)return say('Choose the DCR Excel file once (first time only)','bad');const L=vOf(DV.date);if(!L.length)return say('No visit recorded for this day','bad');
     say('Making the file…');
-    try{const r=await buildDcrXlsx(DX.buf,DV.date,L),f=new File([r.blob],DX.name,{type:r.blob.type});
+    try{const r=await buildDcrXlsx(base,DV.date,L),f=new File([r.blob],DX.name,{type:r.blob.type});
+      try{const nb=await r.blob.arrayBuffer(),bs=picked?{}:Object.assign({},sv.bases||{});bs[DV.date]=base;const ks=Object.keys(bs).sort();while(ks.length>3)delete bs[ks.shift()];
+        const o={name:DX.name,buf:nb,bases:bs,at:Date.now()};await dxSet(o);DX.saved=o;DX.buf=null;pk.textContent=lab()}catch(e){}   /* this new file is the base for tomorrow; the file before today is kept too, so today can be made again */
       if(share&&navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f],title:'DCR '+dd(DV.date),text:'Daily Call Report — '+dd(DV.date)});say('✓ '+r.msg+' • '+r.n+' visit'+(r.n===1?'':'s')+' • shared','ok')}
       else{const a=el('a');a.href=URL.createObjectURL(r.blob);a.download=DX.name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);say('✓ '+r.msg+' • '+r.n+' visit'+(r.n===1?'':'s')+(share?' • sharing is not available here, so the file was downloaded':' • downloaded'),'ok')}
     }catch(e){if(e&&e.name==='AbortError')say('');else say('✗ '+(e&&e.message||'Could not make the file'),'bad')}};
   const row=el('div','od-actions'),dl=el('button','st-btn','Download Excel'),sh=el('button','st-btn','Share to Outlook');dl.type=sh.type='button';dl.onclick=()=>run(false);sh.onclick=()=>run(true);row.appendChild(dl);row.appendChild(sh);
-  c.appendChild(el('div','mv-nt','Adds the visits of the day shown above to the end of your last sheet.'));c.appendChild(pk);c.appendChild(fi);c.appendChild(row);c.appendChild(st);B.appendChild(c)}
+  c.appendChild(el('div','mv-nt','Adds the visits of the day shown above to the end of your last sheet. The app remembers your Excel file, so you choose it only the first time; after that every new Excel it makes is kept for the next day.'));c.appendChild(pk);c.appendChild(fi);c.appendChild(row);c.appendChild(st);B.appendChild(c)}
 /* ---- Collection & Order Entry: the day's orders and collections are typed here, then (1) added to the end of the user's latest Collection & Order Excel, copying the last block's look exactly, and (2) saved into the app as the Daily Collection & Order data, so Smart Post can send them to Drafts. Nothing is posted from here. ---- */
 const COL7=['RPL','RNL','PCL','REXIME','RBCL','Jenphar','NLS'],OCL='DEFGHIJ'.split(''),CCL='MNOPQRS'.split('');
 const CX={name:'',buf:null,date:today()},coGet=()=>jget('rdl.coe.v1',{}),coSet=x=>jset('rdl.coe.v1',x),coList=d=>coGet()[d]||[];
+/* the app remembers the Collection & Order Excel: chosen once, then every new Excel it makes is kept for the next day */
+const coDb=(m,fn)=>new Promise((res,rej)=>{try{const q=indexedDB.open('rdl-coefile',1);q.onupgradeneeded=()=>q.result.createObjectStore('f');q.onerror=()=>rej(q.error);q.onsuccess=()=>{const d=q.result,t=d.transaction('f',m),r=fn(t.objectStore('f'));t.oncomplete=()=>{d.close();res(r&&r.result)};t.onerror=t.onabort=()=>{d.close();rej(t.error)}}}catch(e){rej(e)}}),
+coFileGet=()=>coDb('readonly',s=>s.get('latest')).catch(()=>null),coFileSet=o=>coDb('readwrite',s=>s.put(o,'latest'));
 const rnd2=x=>Math.round(x*100)/100,fm2=n=>Number(n).toLocaleString('en-US',{maximumFractionDigits:2});
 (function(){const s=document.createElement('style');s.textContent='.coe-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:6px 0 10px}.coe-c small{display:block;font-weight:700;margin:0 0 3px;opacity:.8}.coe-c input{width:100%;box-sizing:border-box}';document.head.appendChild(s)})();
 async function buildCoXlsx(buf,date,E){
@@ -7471,7 +7481,11 @@ function coSave(date,E){const d=jget('rdl.dcr.v1',null)||{rows:[]},cl=o=>{const 
   jset('rdl.dcr.v1',{...d,rows,lastDate:rows.reduce((m,r)=>r.d>m?r.d:m,''),at:Date.now()})}
 const CP=mkPage('coep','Collection & Order',()=>{if(R.openUpload)R.openUpload()});
 function drawCO(){const B=CP.body;B.textContent='';
+  /* two ways to do the daily work: type business-wise entries (this page) or upload the Excel file (old page, unchanged) */
+  {const sw=el('div','od-actions'),a=el('button','st-btn','Business Wise Entry'),u=el('button','st-btn od-clear','Excel Upload');a.type=u.type='button';
+   u.onclick=()=>{if(window.RDL_openSet)window.RDL_openSet('setdcr')};sw.appendChild(a);sw.appendChild(u);B.appendChild(sw)}
   const di=el('input','list-search');di.type='date';di.value=CX.date;di.max=today();di.onchange=()=>{if(di.value){CX.date=di.value;drawCO()}};B.appendChild(di);
+  B.appendChild(el('p','hint','Date of the sales and collection being entered: yesterday by default (Thursday if today is Saturday). The Excel and the posting use this date.'));
   const E=coList(CX.date),box=el('div','st-card');B.appendChild(box);
   box.appendChild(el('label','od-label','Customer Name'));const pk=picker(box,{});
   const grid=(title)=>{box.appendChild(el('div','mv-day',title));const g=el('div','coe-grid'),ins={};COL7.forEach(k=>{const w=el('div','coe-c');w.appendChild(el('small',null,k));const i=el('input','list-search');i.type='number';i.inputMode='decimal';i.min='0';i.step='any';w.appendChild(i);g.appendChild(w);ins[k]=i});box.appendChild(g);return ins};
@@ -7494,13 +7508,18 @@ function drawCO(){const B=CP.body;B.textContent='';
   /* Excel + app */
   const c=el('div','st-card');c.appendChild(el('div','mv-day','Excel and Drafts'));
   const fi=el('input');fi.type='file';fi.accept='.xlsx';fi.hidden=true;
-  const pf=el('button','st-btn od-clear',CX.name||'Choose your latest Collection & Order Excel file');pf.type='button';pf.onclick=()=>fi.click();
+  const lab=()=>CX.buf?CX.name+' (new file chosen)':CX.saved?'\u2713 Saved file: '+CX.saved.name+' \u2014 tap to change':'Choose your Collection & Order Excel file (first time only)';
+  const pf=el('button','st-btn od-clear',lab());pf.type='button';pf.onclick=()=>fi.click();
+  coFileGet().then(o=>{CX.saved=o&&o.buf?o:null;if(CX.saved&&!CX.buf)CX.name=CX.saved.name;pf.textContent=lab()});
   const st=el('div','stt'),say=(t,k)=>{st.className='stt'+(k?' '+k:'');st.textContent=t};
-  fi.onchange=async()=>{const f=fi.files[0];fi.value='';if(!f)return;try{CX.buf=await f.arrayBuffer();CX.name=f.name;pf.textContent=f.name;say('✓ File ready','ok')}catch(x){say('✗ Could not read this file','bad')}};
+  fi.onchange=async()=>{const f=fi.files[0];fi.value='';if(!f)return;try{CX.buf=await f.arrayBuffer();CX.name=f.name;pf.textContent=lab();say('✓ File ready. The app will remember it after you make the Excel.','ok')}catch(x){say('✗ Could not read this file','bad')}};
   const run=async mode=>{if(!E.length)return say('Add at least one entry for this day','bad');
     if(mode==='app'){try{coSave(CX.date,E);say('✓ Saved in the app. Open Smart Post, pick '+dd(CX.date)+' and press Save to Draft. Then review and post from Drafts.','ok')}catch(x){say('✗ Could not save on this device','bad')}return}
-    if(!CX.buf)return say('Choose the latest Collection & Order Excel file first','bad');say('Making the file…');
-    try{const r=await buildCoXlsx(CX.buf,CX.date,E),f=new File([r.blob],CX.name,{type:r.blob.type});coSave(CX.date,E);
+    const picked=!!CX.buf,sv=CX.saved,base=picked?CX.buf:(sv?((sv.bases||{})[CX.date]||sv.buf):null);
+    if(!base)return say('Choose the Collection & Order Excel file once (first time only)','bad');say('Making the file…');
+    try{const r=await buildCoXlsx(base,CX.date,E),f=new File([r.blob],CX.name,{type:r.blob.type});coSave(CX.date,E);
+      try{const nb=await r.blob.arrayBuffer(),bs=picked?{}:Object.assign({},sv.bases||{});bs[CX.date]=base;const ks=Object.keys(bs).sort();while(ks.length>3)delete bs[ks.shift()];
+        const o={name:CX.name,buf:nb,bases:bs,at:Date.now()};await coFileSet(o);CX.saved=o;CX.buf=null;pf.textContent=lab()}catch(e){}   /* this new file is the base for tomorrow; the file before today is kept too, so today can be made again */
       const tail=' • saved in the app for Smart Post';
       if(mode==='share'&&navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f],title:'Collection & Order '+dd(CX.date),text:'Daily Sales Order & Collection Statements — '+dd(CX.date)});say('✓ '+r.msg+' • '+r.n+' entr'+(r.n===1?'y':'ies')+' • shared'+tail,'ok')}
       else{const a=el('a');a.href=URL.createObjectURL(r.blob);a.download=CX.name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);say('✓ '+r.msg+' • '+r.n+' entr'+(r.n===1?'y':'ies')+(mode==='share'?' • sharing is not available here, so the file was downloaded':' • downloaded')+tail,'ok')}
@@ -7508,8 +7527,8 @@ function drawCO(){const B=CP.body;B.textContent='';
   const row=el('div','od-actions'),dl=el('button','st-btn','Download Excel'),sh=el('button','st-btn','Share to Outlook'),sp=el('button','st-btn od-clear','Save to app only'),op=el('button','st-btn od-clear','Open Smart Post');
   dl.type=sh.type=sp.type=op.type='button';dl.onclick=()=>run('dl');sh.onclick=()=>run('share');sp.onclick=()=>run('app');op.onclick=()=>{if(R.openTab)R.openTab('s','post')};
   [dl,sh,sp,op].forEach(b=>row.appendChild(b));
-  c.appendChild(el('div','mv-nt','Adds the entries above to the end of your last sheet, then saves them in the app. Posting happens only after you review them in Drafts.'));c.appendChild(pf);c.appendChild(fi);c.appendChild(row);c.appendChild(st);B.appendChild(c)}
-R.openCOE=()=>{CX.date=today();drawCO();show('coep')};
+  c.appendChild(el('div','mv-nt','Adds the entries above to the end of your last sheet, then saves them in the app. Posting happens only after you review them in Drafts. The app remembers your Excel file, so you choose it only the first time; after that every new Excel it makes is kept for the next day.'));c.appendChild(pf);c.appendChild(fi);c.appendChild(row);c.appendChild(st);B.appendChild(c)}
+R.openCOE=()=>{CX.date=R.salesDay?R.salesDay():today();drawCO();show('coep')};   /* the file made today is for the sales day (yesterday; Thursday on Saturday), same as Today Sales and the uploaded file */
 function openD(){dcrPC=0;DV.date=today();drawD();show('dcrp')}
 
 /* =====================================================  MORE page  ===================================================== */
