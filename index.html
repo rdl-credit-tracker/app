@@ -3896,7 +3896,7 @@ function manualPage(P,ttl,bk){
     go.onclick=()=>{go.disabled=true;const L2=ld();let n=0;L2.dr=L2.dr||[];   /* goes to Drafts first; nothing is posted until you press Post there */
       for(const x of parts){const o=x.o;L2.dr.push({id:uid0(),cu:x.b.cu,co:x.b.co,nm:x.b.nm||names.get(String(x.b.cu)),ag:uid(x.b),bn:String(x.b.bill),col:x.c,tds:x.t,...(x.xt?{xt:+x.xt.toFixed(2)}:{}),type:o.ty.value,ref:o.rf.value.trim(),...(o.rd.value?{rd:o.rd.value}:{}),pdt:f,ds:today(),manual:1,...(x.b.due?{bd:x.b.due}:{}),at:Date.now()});n++}
       try{sv(L2)}catch(e){go.disabled=false;st2.className='stt bad';st2.textContent='Could not save on this device';return}
-      msg.c='✓ Saved '+n+' collection draft'+(n===1?'':'s')+' • '+__m(gc+gt)+'. Review and post it from Posting Hub → Drafts.';cards();document.dispatchEvent(new Event('visibilitychange'));render('c');hubReload()};
+      msg.c='✓ Saved '+n+' collection draft'+(n===1?'':'s')+' • '+__m(gc+gt)+'. Review and post it from Posting Center → Drafts.';cards();document.dispatchEvent(new Event('visibilitychange'));render('c');hubReload()};
     window.scrollTo(0,0)};
   loadCos()}
 function render(w,rev){window.RDLNav&&RDLNav.level(w,rev?1:0,()=>render(w));if(rev!=='manual'&&mState){const n=mState;mState=0;try{history.go(-n)}catch(e){}}
@@ -3970,7 +3970,7 @@ function bulkBar(gx,gck,cks,rebuild){
         if(a.length===1)q=a[0].doc;   /* one bill: that bill's row */
         else if(a.every(r=>String(r.cu)===String(a[0].cu)))q=String(a[0].cu);   /* several bills of one customer: that customer's table */
         else{const ds=a.map(r=>r.d).filter(Boolean).sort();R.historyRange=ds.length?{a:ds[0],b:ds[ds.length-1]}:null}   /* several customers: the posting dates just posted */
-        window.RDL.openUpload();Promise.resolve().then(()=>RDL.openReg([k],q,true))}   /* Posting Hub is shown for one tick so Back returns to it, then the register opens */
+        window.RDL.openUpload();Promise.resolve().then(()=>RDL.openReg([k],q,true))}   /* Posting Center is shown for one tick so Back returns to it, then the register opens */
       return}
     s.forEach(b=>{if(b._ok)b.remove()});
     cks.forEach(x=>{if(x.totUp)x.totUp();if(!live(x).length&&x.row.isConnected)x.row.remove()});
@@ -4312,7 +4312,7 @@ function review(w,P,L,ttl,bk){const dates=[...sel[w]].sort(),secs=[],t0=today(),
 
 /* ---------- Register (Weekly card, bottom menu, posting) and Upload page ---------- */
 function goPage(id,nav){document.querySelectorAll('.pg').forEach(x=>x.classList.remove('on'));document.querySelectorAll('.nav button').forEach(x=>x.classList.remove('on'));$('#'+id).classList.add('on');const nb=$('.nav button[data-p="'+nav+'"]');if(nb)nb.classList.add('on');window.scrollTo(0,0)}
-function openReg(pre,q,hub){tab.a='search';R.regPre=pre||['RV','DZ'];R.historyPre=q?{w:'a',q}:null;R.fromHub=!!hub;render('a');   /* hub=true: opened right after Post selected, so Back returns to Posting Hub */goPage('scr','scr');msg.a=''}
+function openReg(pre,q,hub){tab.a='search';R.regPre=pre||['RV','DZ'];R.historyPre=q?{w:'a',q}:null;R.fromHub=!!hub;render('a');   /* hub=true: opened right after Post selected, so Back returns to Posting Center */goPage('scr','scr');msg.a=''}
 window.RDL.openReg=openReg;
 document.querySelectorAll('.nav button').forEach(b=>{if(b.dataset.p==='scr')b.addEventListener('click',()=>{msg.a='';openReg(['RV','DZ'])})});
 {const rc=document.getElementById('regCard');if(rc){const go=k=>openReg(k==='RV'?['RV']:k==='DZ'?['DZ']:['RV','DZ']);
@@ -4320,14 +4320,14 @@ document.querySelectorAll('.nav button').forEach(b=>{if(b.dataset.p==='scr')b.ad
 window.RDL.openTab=(w,t,q)=>{if(t==='search'&&w!=='a')return openReg(w==='s'?['RV']:['DZ'],q);tab[w]=t;msg[w]='';R.historyPre=q?{w,q}:null;render(w);const id={s:'sales',c:'collection',a:'scr'}[w];goPage(id,id==='scr'?'scr':id)};
 /* after the reload that follows a Daily Collection & Order upload: open Sales & Collection Posting */
 {let go=0;try{go=sessionStorage.getItem('rdl.openPosting');if(go)sessionStorage.removeItem('rdl.openPosting')}catch(e){}if(go){const run=()=>{try{window.RDL.openTab('s','post')}catch(e){}};if(document.readyState==='complete')setTimeout(run,300);else window.addEventListener('load',()=>setTimeout(run,300))}}
-/* after saving a manual Sales / Collection draft: reload the app and come back to Posting Hub */
+/* after saving a manual Sales / Collection draft: reload the app and come back to Posting Center */
 const hubReload=()=>{try{sessionStorage.setItem('rdl.openHub','1')}catch(e){}setTimeout(()=>location.reload(),350)};
 {let h=0;try{h=sessionStorage.getItem('rdl.openHub');if(h)sessionStorage.removeItem('rdl.openHub')}catch(e){}if(h){const run=()=>{try{window.RDL.openUpload()}catch(e){}};if(document.readyState==='complete')setTimeout(run,300);else window.addEventListener('load',()=>setTimeout(run,300))}}
 /* Sales & Collection Upload page (More menu): only the posting boxes */
 function buildUpload(){
   if(mState){const n=mState;mState=0;try{history.go(-n)}catch(e){}}
   const P=$('#upl');P.className='pg st'+(P.classList.contains('on')?' on':'');P.textContent='';
-  const top=el('div','st-top'),bk=el('button');bk.type='button';bk.innerHTML=BKS0;bk.setAttribute('aria-label','Back');bk.onclick=()=>{const b=$('.nav button[data-p="more"]');if(b)b.click()};top.appendChild(bk);top.appendChild(el('h2',null,'Posting Hub'));P.appendChild(top);
+  const top=el('div','st-top'),bk=el('button');bk.type='button';bk.innerHTML=BKS0;bk.setAttribute('aria-label','Back');bk.onclick=()=>{const b=$('.nav button[data-p="more"]');if(b)b.click()};top.appendChild(bk);top.appendChild(el('h2',null,'Posting Center'));P.appendChild(top);
   if(msg.a){P.appendChild(el('div','stt ok',msg.a));msg.a=''}
   const dr=(ld().dr||[]),sdN=(ld().sd||[]).length,drT=dr.reduce((a,d)=>a+(+d.col||0)+(+d.tds||0),0);
   const C={v:['#f8f4ff','#e3d8fb','#d0c0f3','#9a88f5','#6a52d9','#33248a','#6a52d966'],b:['#fff','#dbeafe','#a9c9f5','#4f9bff','#1650d8','#0f3ca3','#1650d855'],g:['#fff','#d8f7ea','#a5e6cb','#34d399','#0b9a62','#065f46','#0b9a6255'],a:['#fffdf5','#ffeac4','#f3d794','#f8c24d','#d98200','#6b4200','#d9820055'],n:['#f4f9ff','#dcebff','#b9d3f5','#4f9bff','#0a49b5','#0a2f78','#0a49b566']};
@@ -4426,7 +4426,7 @@ function manualSales(P,ttl,bk){
     go.onclick=()=>{go.disabled=true;const L2=ld();L2.sd=L2.sd||[];   /* one sales draft per company: the RV number is given only when it is posted */
       E.forEach(e=>L2.sd.push({id:uid0(),co:e.co,cu:bp,nm:names.get(String(bp)),amt:e.amt,post:f,days:e.days,ds:today(),at:Date.now()}));
       try{sv(L2)}catch(x){go.disabled=false;st2.className='stt bad';st2.textContent='Could not save on this device';return}
-      msg.s='✓ Saved '+E.length+' sales draft'+plural+' • '+money(tot)+' • '+names.get(String(bp))+' ('+E.map(e=>coLab(e.co)).join(', ')+'). Review and post '+(E.length===1?'it':'them')+' from Posting Hub → Drafts.';
+      msg.s='✓ Saved '+E.length+' sales draft'+plural+' • '+money(tot)+' • '+names.get(String(bp))+' ('+E.map(e=>coLab(e.co)).join(', ')+'). Review and post '+(E.length===1?'it':'them')+' from Posting Center → Drafts.';
       cards();document.dispatchEvent(new Event('visibilitychange'));render('s');hubReload()};
     window.scrollTo(0,0)}}
 
@@ -4474,9 +4474,9 @@ function records(w){
 }
 R.registerRecords=records;setTimeout(()=>window.dispatchEvent(new Event('rdl:dcr')),0);   /* the dashboard card reads these records */
 const SALES={heads:['Customer Name','Company','Billing Document','Bill Type','Posting Date','Due Date','Amount','Collected Amount','TDS','Balance','Days Limit','Status'],
-  amtLabel:'Total Sales Amount',empty:'No sales posted yet. Use “Posting Hub” in Settings › Daily Work Tools to post sales.'};
+  amtLabel:'Total Sales Amount',empty:'No sales posted yet. Use “Posting Center” in Settings › Daily Work Tools to post sales.'};
 const COLL={heads:['Customer Name','Company','Billing Document','Bill Type','Posting Date','Against Bill','Payment Type','Cheque / BEFTN No.','Collected Amount','TDS','Total Settled','File Date'],
-  amtLabel:'Total Collected',empty:'No collections posted yet. Use “Posting Hub” in Settings › Daily Work Tools to post collections.'};
+  amtLabel:'Total Collected',empty:'No collections posted yet. Use “Posting Center” in Settings › Daily Work Tools to post collections.'};
 /* ---- edit / delete of a manually posted collection (DZ with manual flag) ---- */
 const sv0=L=>localStorage.setItem(LK,JSON.stringify(L)),tdy=()=>ymd(new Date());
 /* sales day of an entry day = the day before it; for Saturday it is Thursday (Friday is the holiday) */
@@ -4521,7 +4521,7 @@ async function editManual(x){
     z.edited=new Date().toISOString();
     try{sv0(L2)}catch(e){await RDLUI.alert('Could not save','Nothing was changed.');return}
     afterChange(x);return}}
-const ALL={heads:['Customer Name','Company','Billing Document','Bill Type','Posting Date','Due Date / Against Bill','Bill Amount','Collected','TDS','Balance','Total Settled','Days / Payment Type','Status / Cheque No.'],empty:'No sales or collections posted yet. Use “Posting Hub” in Tools.'};
+const ALL={heads:['Customer Name','Company','Billing Document','Bill Type','Posting Date','Due Date / Against Bill','Bill Amount','Collected','TDS','Balance','Total Settled','Days / Payment Type','Status / Cheque No.'],empty:'No sales or collections posted yet. Use “Posting Center” in Tools.'};
 {const dst=document.createElement('style');dst.textContent=':is(#sales,#collection,#scr) .cs-dpt td.c-dp{position:sticky;left:0;z-index:2;background:#fff;white-space:normal;border-left:1px solid #e6eef9;min-width:96px;max-width:96px;width:96px;box-shadow:4px 0 6px -4px #0a3a9a30;vertical-align:middle}:is(#sales,#collection,#scr) .cs-dpt tbody tr:nth-child(even) td.c-dp{background:#f4f8ff}:is(#sales,#collection,#scr) .cs-dpt td.c-dp .chip-g{font-size:12px;word-break:break-word}html body :is(#sales,#collection,#scr) .cs-dpt th:first-child{position:sticky;left:0;z-index:4;min-width:96px!important;max-width:96px!important;width:96px}html body :is(#sales,#collection,#scr) .cs-dpt td.c-n2{left:96px!important}html body :is(#sales,#collection,#scr) .cs-dpt thead th:nth-child(2){position:sticky;left:96px;z-index:3}html body :is(#sales,#collection,#scr) .cs-dpt tr.cs-tot>td.c-dp{background:#0b2a8a!important}';document.head.appendChild(dst)}
 R.history=function(w0,P){
   const w='a',C={empty:ALL.empty,heads:w0==='s'?['Customer Name','Company','Billing Document','Bill Type','Posting Date','Payment Date','Bill Amount','Collected','TDS','Balance','Days Limit','Status']:w0==='c'?['Customer Name','Company','Billing Document','Bill Type','Posting Date','Against Bill','Bill Amount','Collected','TDS','Total Settled','Payment Type','Cheque / BEFTN No.']:ALL.heads},all=records('a'),host=el('div'),dflt=(w0==='a'&&R.regPre)||(w0==='c'?['DZ']:w0==='s'?['RV']:['RV','DZ']);P.appendChild(host);
@@ -4749,10 +4749,10 @@ function page(id,title,parent,build){
   const top=el('div','st-top'),b=el('button');b.type='button';b.innerHTML=BK;b.setAttribute('aria-label','Back');b.onclick=()=>open(window.RDL_ROLE==='user'&&parent==='setsec'?'settings':parent);
   top.appendChild(b);top.appendChild(el('h2',null,title));p.appendChild(top);
   const body=el('div','sbody');p.appendChild(body);pages[id]={body,build};return p}
-const PROT=new Set(['bcu','updoff','setdb','setcu','setup','setdcr','setupd','updout','updcr','seterase','setbp','shiftcu','setbackup']);
+const PROT=new Set(['bcu','updoff','setdb','setup','setdcr','setupd','updout','updcr','seterase','setbp','shiftcu','setbackup']);
 /* access limits (set by the Admin): which module each page belongs to */
 const PAGEMOD={setup:'dbup',setdcr:'dcr',setbackup:'backup',setcorr:'corr',updout:'corr.out',updcr:'corr.cr',updoff:'corr.off',setbp:'newcust',shiftcu:'shift',seterase:'erase',setlog:'actlog',setusers:'users',setwa:'wa',setnotif:'notif',settheme:'theme.look',sethdr:'theme.hdr',setfont:'theme.look',setfsize:'theme.look',setfdesign:'theme.look'};
-const PAGEANY={setdb:['dcr','dbup','backup'],setcu:['corr','newcust','shift','erase'],setupd:['corr.out','corr.cr','corr.off','newcust','shift','erase'],bcu:['corr.cr','corr.off','newcust','shift']};
+const PAGEANY={setdb:['dbup','backup','corr.edit','corr.del','corr.out','corr.cr','corr.off','newcust','shift','erase'],setupd:['corr.out','corr.cr','corr.off','newcust','shift','erase'],bcu:['corr.cr','corr.off','newcust','shift']};
 const accOK=id=>{const A=window.RDLACC;if(!A)return window.RDL_ROLE!=='user';
   if(window.RDL_ROLE==='user'&&(id==='setsec'||id==='setusers'))return false;
   if(PAGEMOD[id])return A.can(PAGEMOD[id]);if(PAGEANY[id])return A.any(PAGEANY[id]);return true};
@@ -4792,14 +4792,15 @@ const pUp=page('setup','Database Upload','setdb'),pDcr=page('setdcr','Daily Coll
 if(upCard){upCard.querySelector('.hint').textContent='Upload either file or both. Credit limit data replaces only the credit limits. Outstanding data replaces the bills; bills and collections you posted in the app are reconciled by date.';
   const bd=upCard.querySelector('#bDb');if(bd)bd.textContent='Upload Database';pages.setup.body.appendChild(upCard)}
 if(dcrCard)pages.setdcr.body.appendChild(dcrCard);
+pDcr.querySelector('.st-top button').onclick=()=>{const b=document.querySelector('.nav button[data-p="more"]');if(b)b.click()};
+window.RDL_openSet=open;
 function buildMainList(){
   const A=window.RDLACC,can=k=>A?A.can(k):true,role=window.RDL_ROLE;
   mainList.textContent='';
-  mainList.appendChild(tile(svg('<path d="M20 7h-4V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2H4a2 2 0 00-2 2v10a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2zM10 5h4v2h-4zm10 9h-6v2h-4v-2H4v-3h16z"/>'),G.green,'Daily Work Tools','Posting Hub, TDS / Challan, Schedule, Notes',()=>{const b=document.querySelector('.nav button[data-p="more"]');if(b)b.click()}));
+  mainList.appendChild(tile(svg('<path d="M20 7h-4V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2H4a2 2 0 00-2 2v10a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2zM10 5h4v2h-4zm10 9h-6v2h-4v-2H4v-3h16z"/>'),G.green,'Daily Work Tools','Posting Center, Daily Collection & Order Upload, TDS / Challan, Schedule, Notes, DCR Upload',()=>{const b=document.querySelector('.nav button[data-p="more"]');if(b)b.click()}));
   if(role!=='user')mainList.appendChild(tile(IC.lock,G.red,'App Security','Users, PIN, corrections and activity log',async()=>{if(await unlock())open('setsec')}));
   if(role==='user'){   /* a user has no App Security: the parts the Admin allowed are listed here */
-    if(A&&A.any(['dcr','dbup','backup']))mainList.appendChild(tile(IC.db,G.blue,'Database Settings','Daily Collection & Order upload and other database tools',()=>open('setdb')));
-    if(A&&A.any(['corr','newcust','shift','erase']))mainList.appendChild(tile(IC.pen,G.red,'Database Correction & Update','Correction, update, new customer and erase',()=>open('setcu')));
+    if(A&&A.any(['dbup','backup','corr.edit','corr.del','corr.out','corr.cr','corr.off','newcust','shift','erase']))mainList.appendChild(tile(IC.db,G.blue,'Database Settings','Database upload, update, correction and backup',()=>open('setdb')));
     if(can('actlog'))mainList.appendChild(tile(IC.cal,G.blue,'Activity Log','What was changed, and undo the last change',()=>open('setlog')))}
   if(can('theme.hdr'))mainList.appendChild(tile(IC.pen,G.red,'Header Text','Change the app title and depot name',()=>open('sethdr')));
   if(can('notif'))mainList.appendChild(tile(IC.bell,G.amber,'Notification Settings','Choose which due bills notify you',()=>open('setnotif')));
@@ -4823,9 +4824,10 @@ page('setdb','Database Settings','setsec',b=>{
   const bx=(t,ic,g,bg,bd,sub,fn,hot)=>{const x=tile(ic,g,t,sub,fn);x.style.background=bg;x.style.borderColor=bd;
     if(hot){x.style.boxShadow='0 8px 18px -8px #ff8a3d99,0 0 0 2px #ffe0b8'}
     l.appendChild(x);return x};
-  if(A.can('backup'))bx('Database Backup',IC.backup,G.green,'linear-gradient(135deg,#e3f8ec,#c6f0d9)','#8fd9b0','Save or restore all app data',()=>open('setbackup'));
   if(A.can('dbup'))bx('Database Upload',IC.up,G.blue,'linear-gradient(135deg,#e4f0ff,#c9defa)','#8fb4ee','Outstanding data and Credit limit data',()=>open('setup'));
-  if(A.can('dcr'))bx('Daily Collection & Order Upload',IC.cal,'linear-gradient(135deg,#ff7a18,#ff3d6e)','linear-gradient(135deg,#fffaf0,#ffe9c7 50%,#ffd3dc)','#ffb36b','Every day: upload the Daily Collection and Order file',()=>open('setdcr'),1);
+  if(A.any(['corr.out','corr.cr','corr.off','newcust','shift','erase']))bx('Database Update',IC.edit,G.amber,'linear-gradient(135deg,#fff7e6,#ffe7bd)','#f0c77a','Update Outstanding and Credit limit, create customers, erase data',()=>open('setupd'));
+  if(A.can('corr.edit')||A.can('corr.del'))bx('Database Correction',IC.pen,G.red,'linear-gradient(135deg,#ffeaf0,#ffd0dc)','#f0a0b6','Edit or delete posted sales, collections and drafts',()=>{CV.set=0;CED.clear();CDL.clear();open('setcorr')});
+  if(A.can('backup'))bx('Database Backup',IC.backup,G.green,'linear-gradient(135deg,#e3f8ec,#c6f0d9)','#8fd9b0','Save or restore all app data',()=>open('setbackup'));
   b.appendChild(l)});
 
 /* ---------- Theme ---------- */
@@ -5176,8 +5178,7 @@ async function deleteMany(items){
 page('setsec','App Security','settings',b=>{
   if(!unlocked()){b.appendChild(el('p','hint','Locked. Go back and open App Security again.'));return}
   const l=el('div','set-list'),A=window.RDLACC;
-  if(A.any(['dcr','dbup','backup']))l.appendChild(tile(IC.db,G.blue,'Database Settings','Backup, database upload and daily Collection & Order upload',()=>open('setdb')));
-  if(A.any(['corr','newcust','shift','erase']))l.appendChild(tile(IC.pen,G.red,'Database Correction & Update','Correction, database update, new customer create and erase',()=>open('setcu')));
+  if(A.any(['dbup','backup','corr.edit','corr.del','corr.out','corr.cr','corr.off','newcust','shift','erase']))l.appendChild(tile(IC.db,G.blue,'Database Settings','Database upload, update, correction and backup',()=>open('setdb')));
   if(A.can('users'))l.appendChild(tile(svg('<path d="M16 11a3 3 0 100-6 3 3 0 000 6zM8 11a3 3 0 100-6 3 3 0 000 6zm0 2c-2.3 0-7 1.2-7 3.5V19h14v-2.5C15 14.2 10.3 13 8 13zm8 0c-.4 0-.7 0-1.1.1 1.2.8 2.100 1.900 2.100 3.400V19h6v-2.500c0-2.300-4.700-3.500-7-3.500z"/>'),G.green,'User Manage & Access Control','Create, disable, delete users and set what each can do',()=>open('setusers')));
   if(A.can('actlog'))l.appendChild(tile(IC.cal,G.blue,'Activity Log','What was changed, and undo the last change',()=>open('setlog')));
   l.appendChild(tile(IC.lock,G.purple,secG().on?'Change PIN':'Set PIN',secG().on?'Set a new 4-digit PIN':'PIN lock is OFF. Tap to set a new PIN and recovery code',async()=>{if(await setPin('Change PIN',true)){open('setsec')}}));
@@ -5329,20 +5330,12 @@ page('setusers','User Manage & Access Control','setsec',b=>{
     j.rows.forEach(r=>{const d=el('div','ua-lr'+(r.result==='FAIL'?' bad':''));let t=r.at;try{t=new Date(r.at).toLocaleString()}catch(e){}d.textContent=t+' • '+(r.email||'?')+' • '+r.action+' • '+r.result+(r.note?' • '+r.note:'');lg.appendChild(d)})}catch(e){lg.textContent=msg(e)}};
   load()});
 
-/* ---------- Database Correction & Update menu ---------- */
-page('setcu','Database Correction & Update','setsec',b=>{
-  if(!unlocked()){b.appendChild(el('p','hint','Locked. Go back and open App Security again.'));return}
-  const l=el('div','set-list'),A=window.RDLACC;
-  if(A.can('corr.edit')||A.can('corr.del'))l.appendChild(tile(IC.pen,G.red,'Database Correction','Edit or delete posted sales, collections and drafts',()=>{CV.set=0;CED.clear();CDL.clear();open('setcorr')}));
-  if(A.any(['corr.out','corr.cr','corr.off','newcust','shift','erase']))l.appendChild(tile(IC.edit,G.amber,'Database Update','Update Outstanding and Credit limit, create customers, erase data',()=>open('setupd')));
-  b.appendChild(l)});
-
 const CV={tab:'dz',q:'',d1:'',d2:'',set:0,sel:null,lit:false};
 const CED=new Set(),CDL=new Set();
 const enteredOf=(t,o)=>o.pt?ymd(new Date(o.pt)):(t==='dr'&&o.at?ymd(new Date(o.at)):null);
 /* a record is "today's" when it was entered today (stamp) or, for older records without a stamp, when its posting date is today */
 const inRange=(t,o,d1,d2,lit)=>{if(!d1&&!d2)return true;const ok=x=>x&&(!d1||x>=d1)&&(!d2||x<=d2),e=enteredOf(t,o),dv=t==='dz'?o.date:t==='rv'?o.post:(o.dcr||'');return lit?ok(dv):(ok(e)||ok(dv))};   /* lit = dates typed by hand: posting date only */
-page('setcorr','Database Correction','setcu',b=>{
+page('setcorr','Database Correction','setdb',b=>{
   if(!unlocked()){b.appendChild(el('p','hint','Locked. Go back and open App Security again.'));return}
   /* Today = the day of the entry; for Sales it is the sales day (the day before; Thursday on a Saturday) */
   const sdy=()=>{const x=new Date();x.setDate(x.getDate()-(x.getDay()===6?2:1));return ymd(x)},defDay=k=>k==='rv'?sdy():tdy();
@@ -5449,7 +5442,7 @@ const customers=()=>{const m=R.master,mp=new Map();if(!m)return[];m.cr.forEach(r
   return[...mp].map(([code,name])=>({code,name:name||('Customer '+code),dp:RDLDEPOT.nameOf(code)||''})).sort((a,b)=>a.name.localeCompare(b.name))};
 
 /* ---------- Database Update ---------- */
-page('setupd','Database Update','setcu',b=>{
+page('setupd','Database Update','setdb',b=>{
   const l=el('div','set-list'),A=window.RDLACC;
   if(A.can('corr.out'))l.appendChild(tile(IC.edit,G.blue,'Outstanding Update','Edit bills of one customer, business and date',()=>open('updout')));
   if(A.any(['corr.cr','corr.off','newcust','shift']))l.appendChild(tile(IC.edit,G.purple,'Business & Credit Update','Credit line update, credit line on / off and add new customer',()=>open('bcu')));
@@ -7270,7 +7263,7 @@ function openS(){drawS();show('sched')}
 /* =====================================================  DCR (Daily Call Report)  ===================================================== */
 const PUR=['Collection','Order','Meeting','Courtesy visit','Complaint / issue','TDS challan','Other'];
 const DV={date:today(),days:15};
-const DP=mkPage('dcrp','DCR',goMore),DF=mkPage('dcrf','Add visit',()=>{show('dcrp');drawD()});
+const DP=mkPage('dcrp','DCR Upload',goMore),DF=mkPage('dcrf','Add visit',()=>{show('dcrp');drawD()});
 const vOf=d=>getV().visits.filter(v=>v.date===d&&dpShow(v)).sort((a,b)=>(a.tin||'99')>(b.tin||'99')?1:-1);
 const key=v=>v.cu||String(v.nm||'').toLowerCase();
 function stats(L){return{n:L.length,c:new Set(L.map(key)).size,m:L.reduce((s,v)=>s+(mins(v.tin,v.tout)>0?mins(v.tin,v.tout):0),0)}}
@@ -7361,12 +7354,13 @@ function refreshMore(){if(!tS)return;if(tN){const nn=getN().items.filter(dpShow)
   tD.textContent=s.n?'Today: '+s.n+' visit'+(s.n===1?'':'s')+' • '+s.c+' customer'+(s.c===1?'':'s')+' • '+dur(s.m):'Daily Call Report — customers visited, time spent, purpose'}
 if(mp){mp.textContent='';mp.className='pg st';const l=el('div','set-list');
   const mk=(bg,svg,title,fn)=>{const b=el('button','set-item');b.type='button';b.innerHTML='<span class="set-ic" style="background:'+bg+'"><svg viewBox="0 0 24 24" width="22" height="22" fill="#fff" aria-hidden="true">'+svg+'</svg></span><span class="set-tx"><b></b><small></small></span><span class="chev">›</span>';b.querySelector('b').textContent=title;b.onclick=fn;l.appendChild(b);return b.querySelector('small')};
-  mk('linear-gradient(135deg,#60a5fa,#1a56db)','<path d="M19.35 10.04A7.49 7.49 0 0 0 12 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 0 0 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/>','Posting Hub',()=>{if(R.openUpload)R.openUpload()}).textContent='Post the Daily Collection & Order file, manual entry, drafts';
+  mk('linear-gradient(135deg,#60a5fa,#1a56db)','<path d="M19.35 10.04A7.49 7.49 0 0 0 12 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 0 0 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/>','Posting Center',()=>{if(R.openUpload)R.openUpload()}).textContent='Post the Daily Collection & Order file, manual entry, drafts';
+  mk('linear-gradient(135deg,#ff7a18,#ff3d6e)','<path d="M7 2v2H5a2 2 0 00-2 2v13a2 2 0 002 2h14a2 2 0 002-2V6a2 2 0 00-2-2h-2V2h-2v2H9V2zm12 8v9H5v-9z"/>','Daily Collection & Order Upload',()=>{if(window.RDL_openSet)window.RDL_openSet('setdcr')}).textContent='Every day: upload the Daily Collection and Order file';
   tT=mk('linear-gradient(135deg,#2dd4bf,#0d8f86)','<path d="M18 2H6a2 2 0 0 0-2 2v18l3-2 2 2 3-2 3 2 2-2 3 2V4a2 2 0 0 0-2-2z"/>','TDS Ledger',()=>{if(R.tds)R.tds.open()});
   tS=mk('linear-gradient(135deg,#7a8cff,#4a3fd6)','<path d="M19 4h-1V2h-2v2H8V2H6v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zm0 16H5V9h14v11zM7 11h5v5H7z"/>','Schedule',openS);
   tN=mk('linear-gradient(135deg,#fbbf24,#d98200)','<path d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm8 1.5V8h4.5L14 3.5zM8 12h8v1.5H8V12zm0 3.5h8V17H8v-1.5z"/>','Notes',openN);
-  tD=mk('linear-gradient(135deg,#34d399,#0b9a62)','<path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm0 2c-2.7 0-8 1.3-8 4v2h16v-2c0-2.7-5.3-4-8-4z"/>','DCR',openD);
-  [['#fff','#dbeafe','#a9c9f5','#1a56db'],['#fff','#d6f5f0','#a5e3da','#0d8f86'],['#fff','#e6e1fb','#c8bdf2','#5a43d6'],['#fff','#fff0cf','#f3d794','#d98200'],['#fff','#d6f5e8','#a5e6cb','#0b9a62']].forEach((c,i)=>{const b=l.children[i];if(!b)return;b.style.background='linear-gradient(135deg,'+c[0]+','+c[1]+')';b.style.borderColor=c[2];b.style.boxShadow='0 3px 10px '+c[3]+'22';b.querySelector('.chev').style.color=c[3];b.querySelector('b').style.color='#12306b'});
+  tD=mk('linear-gradient(135deg,#34d399,#0b9a62)','<path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm0 2c-2.7 0-8 1.3-8 4v2h16v-2c0-2.7-5.3-4-8-4z"/>','DCR Upload',openD);
+  [['#fff','#dbeafe','#a9c9f5','#1a56db'],['#fff','#ffe9c7','#ffb36b','#ea580c'],['#fff','#d6f5f0','#a5e3da','#0d8f86'],['#fff','#e6e1fb','#c8bdf2','#5a43d6'],['#fff','#fff0cf','#f3d794','#d98200'],['#fff','#d6f5e8','#a5e6cb','#0b9a62']].forEach((c,i)=>{const b=l.children[i];if(!b)return;b.style.background='linear-gradient(135deg,'+c[0]+','+c[1]+')';b.style.borderColor=c[2];b.style.boxShadow='0 3px 10px '+c[3]+'22';b.querySelector('.chev').style.color=c[3];b.querySelector('b').style.color='#12306b'});
   const mtop=mp.appendChild(el('div','st-top')),mbk=el('button');mbk.type='button';mbk.innerHTML=BK;mbk.setAttribute('aria-label','Back');mbk.onclick=()=>{const g=document.querySelectorAll('.hdr > .ib')[1];if(g)g.click()};mtop.appendChild(mbk);mtop.appendChild(el('h2',null,'Daily Work Tools'));mp.appendChild(l);refreshMore()}
 ['visibilitychange'].forEach(ev=>document.addEventListener(ev,()=>setTimeout(refreshMore,50)));
 document.addEventListener('click',()=>setTimeout(()=>{if(mp&&mp.classList.contains('on'))refreshMore()},80),true);
