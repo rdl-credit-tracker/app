@@ -4335,7 +4335,9 @@ function buildUpload(){
   [['Smart Post','Post the Daily Collection & Order file','n','i-doc',()=>window.RDL.openTab('s','post'),1],
    ['Quick Collection','Type a collection in by hand','b','i-wal',()=>openManual('c')],
    ['Quick Sales','Type a sales bill in by hand','g','i-sales',()=>openManual('s')],
-   ['Drafts ('+(dr.length+sdN)+')',dr.length+sdN?dr.length+' collection'+(dr.length===1?'':'s')+' \u2022 '+sdN+' sales waiting to be posted':'Collections and sales waiting to be posted','a','i-stmt',()=>window.RDL.openDrafts(),1]].forEach(([t,sub,k,ic,fn,wide])=>{
+   ['Drafts ('+(dr.length+sdN)+')',dr.length+sdN?dr.length+' collection'+(dr.length===1?'':'s')+' \u2022 '+sdN+' sales waiting to be posted':'Collections and sales waiting to be posted','a','i-stmt',()=>window.RDL.openDrafts(),1],
+   ['Daily Collection & Order Upload','Every day: upload the Daily Collection and Order file','v','i-upl',()=>{if(window.RDL_openSet)window.RDL_openSet('setdcr')},1],
+   ['DCR Upload','Daily Call Report \u2014 customers visited, time spent, purpose','g','i-clock',()=>{if(window.RDL.openVisitsPC)window.RDL.openVisitsPC()},1]].forEach(([t,sub,k,ic,fn,wide])=>{
     const K=C[k],b=el('button','up-b'+(wide?' wide':''));b.type='button';
     b.style.cssText='color:'+K[5]+';background:linear-gradient(135deg,'+K[0]+','+K[1]+');border-color:'+K[2]+';box-shadow:0 8px 14px -9px '+K[6]+',inset 0 2px 0 #ffffffcc';
     const i=el('span','up-i');i.style.cssText='background:linear-gradient(135deg,'+K[3]+','+K[4]+');box-shadow:0 3px 0 '+K[4]+'66';i.innerHTML='<svg viewBox="0 0 24 24"><use href="#'+ic+'"/></svg>';
@@ -4792,12 +4794,12 @@ const pUp=page('setup','Database Upload','setdb'),pDcr=page('setdcr','Daily Coll
 if(upCard){upCard.querySelector('.hint').textContent='Upload either file or both. Credit limit data replaces only the credit limits. Outstanding data replaces the bills; bills and collections you posted in the app are reconciled by date.';
   const bd=upCard.querySelector('#bDb');if(bd)bd.textContent='Upload Database';pages.setup.body.appendChild(upCard)}
 if(dcrCard)pages.setdcr.body.appendChild(dcrCard);
-pDcr.querySelector('.st-top button').onclick=()=>{const b=document.querySelector('.nav button[data-p="more"]');if(b)b.click()};
+pDcr.querySelector('.st-top button').onclick=()=>{if(window.RDL.openUpload)window.RDL.openUpload()};
 window.RDL_openSet=open;
 function buildMainList(){
   const A=window.RDLACC,can=k=>A?A.can(k):true,role=window.RDL_ROLE;
   mainList.textContent='';
-  mainList.appendChild(tile(svg('<path d="M20 7h-4V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2H4a2 2 0 00-2 2v10a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2zM10 5h4v2h-4zm10 9h-6v2h-4v-2H4v-3h16z"/>'),G.green,'Daily Work Tools','Posting Center, Daily Collection & Order Upload, TDS / Challan, Schedule, Notes, DCR Upload',()=>{const b=document.querySelector('.nav button[data-p="more"]');if(b)b.click()}));
+  mainList.appendChild(tile(svg('<path d="M20 7h-4V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2H4a2 2 0 00-2 2v10a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2zM10 5h4v2h-4zm10 9h-6v2h-4v-2H4v-3h16z"/>'),G.green,'Daily Work Tools','Posting Center, TDS / Challan, Schedule, Notes',()=>{const b=document.querySelector('.nav button[data-p="more"]');if(b)b.click()}));
   if(role!=='user')mainList.appendChild(tile(IC.lock,G.red,'App Security','Users, PIN, corrections and activity log',async()=>{if(await unlock())open('setsec')}));
   if(role==='user'){   /* a user has no App Security: the parts the Admin allowed are listed here */
     if(A&&A.any(['dbup','backup','corr.edit','corr.del','corr.out','corr.cr','corr.off','newcust','shift','erase']))mainList.appendChild(tile(IC.db,G.blue,'Database Settings','Database upload, update, correction and backup',()=>open('setdb')));
@@ -7263,7 +7265,8 @@ function openS(){drawS();show('sched')}
 /* =====================================================  DCR (Daily Call Report)  ===================================================== */
 const PUR=['Collection','Order','Meeting','Courtesy visit','Complaint / issue','TDS challan','Other'];
 const DV={date:today(),days:15};
-const DP=mkPage('dcrp','DCR Upload',goMore),DF=mkPage('dcrf','Add visit',()=>{show('dcrp');drawD()});
+let dcrPC=0;
+const DP=mkPage('dcrp','DCR Upload',()=>{if(dcrPC){dcrPC=0;if(R.openUpload)R.openUpload()}else goMore()}),DF=mkPage('dcrf','Add visit',()=>{show('dcrp');drawD()});
 const vOf=d=>getV().visits.filter(v=>v.date===d&&dpShow(v)).sort((a,b)=>(a.tin||'99')>(b.tin||'99')?1:-1);
 const key=v=>v.cu||String(v.nm||'').toLowerCase();
 function stats(L){return{n:L.length,c:new Set(L.map(key)).size,m:L.reduce((s,v)=>s+(mins(v.tin,v.tout)>0?mins(v.tin,v.tout):0),0)}}
@@ -7306,7 +7309,7 @@ function openDF(v,edit){v=v||{};const B=DF.body;B.textContent='';DF.h.textConten
     if(edit)V.visits=V.visits.map(x=>x.id===v.id?o:x);else V.visits.push(o);
     if(!saveV(V))return bad('Could not save on this device');DV.date=o.date;show('dcrp');drawD();refreshMore()};
   show('dcrf')}
-function openD(){DV.date=today();drawD();show('dcrp')}
+function openD(){dcrPC=0;DV.date=today();drawD();show('dcrp')}
 
 /* =====================================================  MORE page  ===================================================== */
 /* =====================================================  NOTES  (Tools > Notes, under Schedule). Key rdl.notes.v1 is inside Backup / Restore. Notes are never deleted automatically. ===================================================== */
@@ -7355,16 +7358,16 @@ function refreshMore(){if(!tS)return;if(tN){const nn=getN().items.filter(dpShow)
 if(mp){mp.textContent='';mp.className='pg st';const l=el('div','set-list');
   const mk=(bg,svg,title,fn)=>{const b=el('button','set-item');b.type='button';b.innerHTML='<span class="set-ic" style="background:'+bg+'"><svg viewBox="0 0 24 24" width="22" height="22" fill="#fff" aria-hidden="true">'+svg+'</svg></span><span class="set-tx"><b></b><small></small></span><span class="chev">›</span>';b.querySelector('b').textContent=title;b.onclick=fn;l.appendChild(b);return b.querySelector('small')};
   mk('linear-gradient(135deg,#60a5fa,#1a56db)','<path d="M19.35 10.04A7.49 7.49 0 0 0 12 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 0 0 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/>','Posting Center',()=>{if(R.openUpload)R.openUpload()}).textContent='Post the Daily Collection & Order file, manual entry, drafts';
-  mk('linear-gradient(135deg,#ff7a18,#ff3d6e)','<path d="M7 2v2H5a2 2 0 00-2 2v13a2 2 0 002 2h14a2 2 0 002-2V6a2 2 0 00-2-2h-2V2h-2v2H9V2zm12 8v9H5v-9z"/>','Daily Collection & Order Upload',()=>{if(window.RDL_openSet)window.RDL_openSet('setdcr')}).textContent='Every day: upload the Daily Collection and Order file';
   tT=mk('linear-gradient(135deg,#2dd4bf,#0d8f86)','<path d="M18 2H6a2 2 0 0 0-2 2v18l3-2 2 2 3-2 3 2 2-2 3 2V4a2 2 0 0 0-2-2z"/>','TDS Ledger',()=>{if(R.tds)R.tds.open()});
   tS=mk('linear-gradient(135deg,#7a8cff,#4a3fd6)','<path d="M19 4h-1V2h-2v2H8V2H6v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zm0 16H5V9h14v11zM7 11h5v5H7z"/>','Schedule',openS);
   tN=mk('linear-gradient(135deg,#fbbf24,#d98200)','<path d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm8 1.5V8h4.5L14 3.5zM8 12h8v1.5H8V12zm0 3.5h8V17H8v-1.5z"/>','Notes',openN);
   tD=mk('linear-gradient(135deg,#34d399,#0b9a62)','<path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm0 2c-2.7 0-8 1.3-8 4v2h16v-2c0-2.7-5.3-4-8-4z"/>','DCR Upload',openD);
-  [['#fff','#dbeafe','#a9c9f5','#1a56db'],['#fff','#ffe9c7','#ffb36b','#ea580c'],['#fff','#d6f5f0','#a5e3da','#0d8f86'],['#fff','#e6e1fb','#c8bdf2','#5a43d6'],['#fff','#fff0cf','#f3d794','#d98200'],['#fff','#d6f5e8','#a5e6cb','#0b9a62']].forEach((c,i)=>{const b=l.children[i];if(!b)return;b.style.background='linear-gradient(135deg,'+c[0]+','+c[1]+')';b.style.borderColor=c[2];b.style.boxShadow='0 3px 10px '+c[3]+'22';b.querySelector('.chev').style.color=c[3];b.querySelector('b').style.color='#12306b'});
+  [['#fff','#dbeafe','#a9c9f5','#1a56db'],['#fff','#d6f5f0','#a5e3da','#0d8f86'],['#fff','#e6e1fb','#c8bdf2','#5a43d6'],['#fff','#fff0cf','#f3d794','#d98200'],['#fff','#d6f5e8','#a5e6cb','#0b9a62']].forEach((c,i)=>{const b=l.children[i];if(!b)return;b.style.background='linear-gradient(135deg,'+c[0]+','+c[1]+')';b.style.borderColor=c[2];b.style.boxShadow='0 3px 10px '+c[3]+'22';b.querySelector('.chev').style.color=c[3];b.querySelector('b').style.color='#12306b'});
+  if(tD){const hb=tD.closest('.set-item');if(hb)hb.style.display='none'}
   const mtop=mp.appendChild(el('div','st-top')),mbk=el('button');mbk.type='button';mbk.innerHTML=BK;mbk.setAttribute('aria-label','Back');mbk.onclick=()=>{const g=document.querySelectorAll('.hdr > .ib')[1];if(g)g.click()};mtop.appendChild(mbk);mtop.appendChild(el('h2',null,'Daily Work Tools'));mp.appendChild(l);refreshMore()}
 ['visibilitychange'].forEach(ev=>document.addEventListener(ev,()=>setTimeout(refreshMore,50)));
 document.addEventListener('click',()=>setTimeout(()=>{if(mp&&mp.classList.contains('on'))refreshMore()},80),true);
-R.openSchedule=openS;R.openVisits=openD;
+R.openSchedule=openS;R.openVisits=openD;R.openVisitsPC=()=>{openD();dcrPC=1};
 
 /* ---------- reminders: a schedule shows in the bell list (and the red badge) from 2 hours before its time, and stays until it is marked Done ---------- */
 const LEAD=120;
