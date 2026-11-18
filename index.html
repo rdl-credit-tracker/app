@@ -1468,6 +1468,7 @@ function find(k){for(var i=0;i<MODS.length;i++)if(MODS[i].k===k)return MODS[i];r
 function parentOf(k){var i=String(k).indexOf('.');return i<0?null:k.slice(0,i)}
 function findSub(k){var m=find(parentOf(k));if(!m||!m.sub)return null;for(var i=0;i<m.sub.length;i++)if(m.sub[i].k===k)return m.sub[i];return null}
 var A={MODS:MODS};
+var ADMCLOSED={dbup:1,dcr:1,entry:1,corr:1,newcust:1,shift:1,erase:1};   /* Main Admin is never limited (A.level returns Full for root) */
 A.modsFor=function(role){return MODS.filter(function(m){return role==='admin'||!m.adminOnly})};
 /* level of module k for an account of this role holding these saved limits */
 A.lvl=function(p,role,k){
@@ -1479,7 +1480,8 @@ A.lvl=function(p,role,k){
     return A.lvl(p,role,pk)}
   var m=find(k);if(!m)return 2;if(m.adminOnly&&role!=='admin')return 0;
   var v=p&&p[k];if(v===0||v===1||v===2)return(v===1&&!m.ro)?0:v;
-  return role==='admin'?2:m.def};
+  if(role==='admin')return ADMCLOSED[k]?0:2;   /* a new (non-main) admin starts with these closed; the Main Admin opens them in Access limits */
+  return m.def};
 A.level=function(k){var s=J('rdlgate.session');if(s.root)return 2;return A.lvl(J('rdlgate.perms'),s.role==='admin'?'admin':'user',k)};
 A.can=function(k){if(A.level(k)>0)return true;var m=find(k);if(m&&m.sub)for(var i=0;i<m.sub.length;i++)if(A.level(m.sub[i].k)>0)return true;return false};   /* a group is open when the group or any one of its options is open */
 A.any=function(ks){for(var i=0;i<ks.length;i++)if(A.can(ks[i]))return true;return false};
@@ -1625,7 +1627,12 @@ function firstLogin(){
     if(u.role==='user'){setLogin('Downloading your depot data…');
       return stashAdmin().then(function(){wipeUserData();return mergeOwn(true,false)}).then(function(){return pullData(true)}).then(function(){LS.setItem('rdlgate.owner','user');setDepotLabel();jset(SK,S);location.reload()})}
     if(u.role==='admin'){setLogin('Loading your data…');
-      return restoreAdmin().then(function(){jset(SK,S);location.reload()})}
+      return restoreAdmin().then(function(){
+        if(u.root||LS.getItem('rdl.master.v1'))return;
+        /* a new (non-main) admin: nothing saved yet, so take the database the Main Admin published, once */
+        setLogin('Downloading the database from the Main Admin…');
+        return pullData(false).catch(function(){}).then(function(){if(LS.getItem('rdl.master.v1'))LS.setItem('rdlgate.owner','admin')})
+      }).then(function(){jset(SK,S);location.reload()})}
     jset(SK,S);location.reload()
   }).catch(function(e){S=null;tok=null;setLogin(msgOf(e),true)})}
 function forcedOut(msg){
@@ -2022,15 +2029,21 @@ function autoMerge(){
     var pend=j.users.some(function(u){var t=u.last?Date.parse(u.last):0;return t&&t>Math.max(+mg[u.email]||0,+tr[u.email]||0)});
     if(!pend)return;
     return mergeBackups().then(function(r){var t2=jget('rdlgate.mtried')||{};r.done.concat(r.late).forEach(function(b){t2[b.email]=+new Date(b.at)||0});jset('rdlgate.mtried',t2);
-      if(r.done.length){toast('New data from users merged');setTimeout(function(){if(onHomePage()&&!panelOn)location.reload()},1500)}})
+      if(!r.done.length)return;
+      var go=function(){toast('New data from users merged');setTimeout(function(){if(onHomePage()&&!panelOn)location.reload()},1500)};
+      return S.root?pushData().then(function(){toast('Published to all admins and depots')},function(e){status(msgOf(e),'warn')}).then(go):go()})
   }).catch(function(){}).then(function(){amBusy=0})}
 /* any person: work saved from my OTHER device is added to this one when I come back to it */
 function syncOther(){
   if(!S||sxBusy||!hasAuth())return Promise.resolve();
   sxBusy=1;
   return mergeOwn(false,true).then(function(ch){if(ch){toast('Data from your other device was added');setTimeout(function(){if(onHomePage()&&!panelOn)location.reload()},1500)}}).catch(function(){}).then(function(){sxBusy=0})}
-setInterval(function(){pullBkStatus().then(autoMerge)},300000);
-document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible')setTimeout(function(){syncOther().then(autoMerge)},2500)});
+function adminPull(){
+  if(!S||S.role!=='admin'||S.root||apBusy||!onHomePage()||panelOn||document.visibilityState!=='visible'||!LS.getItem('rdl.master.v1'))return Promise.resolve();
+  apBusy=1;return pullData(false).then(function(c){if(c){toast('New data from the Main Admin — reloading…');setTimeout(function(){location.reload()},900)}}).catch(function(){}).then(function(){apBusy=0})}
+var apBusy=0;
+setInterval(function(){pullBkStatus().then(autoMerge).then(adminPull)},300000);
+document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible')setTimeout(function(){syncOther().then(autoMerge).then(adminPull)},2500)});
 try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist()}catch(e){}   /* asks the browser not to clear this app's saved data by itself */
 document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible')setTimeout(pullBkStatus,1200)});
 /* ---------- after sign-in (every app start) ---------- */
@@ -2040,9 +2053,11 @@ function afterLogin(){
     var u=j.user,ch=u.role!==S.role||u.depot!==S.depot||u.seq!==S.seq;
     S={email:u.email,name:u.name,role:u.role,depot:u.depot,seq:u.seq,root:!!u.root};jset(SK,S);
     setDepotLabel();if(ch){location.reload();return}
-    if(S.role==='admin'){if(!LS.getItem('rdl.master.v1'))return restoreAdmin().then(function(ok){if(ok){location.reload();throw new Error('__reload')}});LS.setItem('rdlgate.owner','admin')}
+    if(S.role==='admin'){if(!LS.getItem('rdl.master.v1'))return restoreAdmin().then(function(ok){if(ok){location.reload();throw new Error('__reload')}
+      if(!S.root)return pullData(false).then(function(c){if(c){LS.setItem('rdlgate.owner','admin');location.reload();throw new Error('__reload')}})});LS.setItem('rdlgate.owner','admin')}
     if(S.role==='user')LS.setItem('rdlgate.owner','user');
     if(S.role==='user')return mergeOwn(false,true).then(function(){return pullData(false)}).then(function(changed){if(changed){toast('New data received — reloading…');setTimeout(function(){location.reload()},900);throw new Error('__reload')}});
+    if(S.role==='admin'&&!S.root)return mergeOwn(false,true).then(function(){return pullData(false)}).then(function(changed){if(changed){toast('New data from the Main Admin — reloading…');setTimeout(function(){location.reload()},900);throw new Error('__reload')}});
     if(S.role==='admin')return mergeOwn(false,true).then(function(){if(sigNow()&&LS.getItem('rdlgate.sig')!==sigNow())return pushData().then(function(t){toast('Database published to depots')}).catch(function(e){status(msgOf(e),'warn')})})
   }).then(loadPerms).then(function(){return backupIfDue()}).then(function(){return pullAlerts()}).then(function(){return pullBkStatus()}).then(function(){return autoMerge()}).catch(function(e){
     if(e.message==='__reload')return;
@@ -2287,9 +2302,13 @@ function buildHub(){
   function go(pg2){try{window.RDL.admin.open(pg2)}catch(e){status('Could not open the page','bad')}}
   var dpSec=sec('ডিপো ডেটা','wh','linear-gradient(#3b8cf0,#0a56c8)');
   if(S.role==='admin'){
-    card('নতুন ডাটাবেস ডিপোতে পাঠান','hero','up',function(b){run(b,'পাঠানো হচ্ছে…',function(){return pushData()})},'শুধু তখন চাপুন, যখন আপনি নতুন Database Upload করেছেন। ডিপোর ইউজাররা তখন নতুন তথ্য পাবে। প্রতিদিন চাপার দরকার নেই।');
+    if(!S.root)card('Main Admin-এর সর্বশেষ তথ্য নিন','hero','ref',function(b){run(b,'দেখা হচ্ছে…',function(){return pullData(false).then(function(c){if(c){setTimeout(function(){location.reload()},800);return 'নতুন তথ্য এসেছে। রিলোড হচ্ছে…'}return 'আপনার কাছে সর্বশেষ তথ্যই আছে।'})})},'Main Admin নতুন তথ্য পাঠালে এটা চেপে নিন। সাধারণত নিজে থেকেই আসে।');
+    if(S.root)card('নতুন ডাটাবেস ডিপোতে পাঠান','hero','up',function(b){run(b,'পাঠানো হচ্ছে…',function(){return pushData()})},'শুধু তখন চাপুন, যখন আপনি নতুন Database Upload করেছেন। ডিপোর ইউজাররা তখন নতুন তথ্য পাবে। প্রতিদিন চাপার দরকার নেই।');
     card('ইউজারদের কাজ আমার অ্যাপে আনুন','blue','dl',function(b){run(b,'আনা হচ্ছে…',function(){return mergeBackups().then(function(r){
-      buildHub();showMergeReport(r);return r.done.length?'✓ মার্জ হয়েছে':'কিছু মার্জ হয়নি'})})},'ইউজাররা যা পোস্ট করেছে তা আপনার অ্যাপে যোগ হয়। সাধারণত নিজে থেকেই হয়। উপরের কার্ডে "এখনো আপনার অ্যাপে আনা হয়নি" দেখালে এটা চাপুন।');
+      buildHub();showMergeReport(r);
+      if(!r.done.length)return 'কিছু মার্জ হয়নি';
+      if(!S.root)return '✓ মার্জ হয়েছে';
+      return pushData().then(function(){return '✓ মার্জ হয়েছে এবং সব এডমিন ও ডিপোতে পাঠানো হয়েছে'},function(e){return '✓ মার্জ হয়েছে, কিন্তু পাঠানো যায়নি: '+msgOf(e)})})})},'ইউজাররা যা পোস্ট করেছে তা আপনার অ্যাপে যোগ হয়। সাধারণত নিজে থেকেই হয়। উপরের কার্ডে "এখনো আপনার অ্যাপে আনা হয়নি" দেখালে এটা চাপুন।');
     fold(dpSec,'dp');
   }else{
     card('সর্বশেষ তথ্য নিন','hero','ref',function(b){run(b,'দেখা হচ্ছে…',function(){return pullData(false).then(function(c){if(c){setTimeout(function(){location.reload()},800);return 'নতুন তথ্য এসেছে। রিলোড হচ্ছে…'}return 'আপনার কাছে সর্বশেষ তথ্যই আছে।'})})},'অ্যাডমিন নতুন ডাটাবেস পাঠালে এটা চেপে নিন।');
