@@ -1468,8 +1468,13 @@ function find(k){for(var i=0;i<MODS.length;i++)if(MODS[i].k===k)return MODS[i];r
 function parentOf(k){var i=String(k).indexOf('.');return i<0?null:k.slice(0,i)}
 function findSub(k){var m=find(parentOf(k));if(!m||!m.sub)return null;for(var i=0;i<m.sub.length;i++)if(m.sub[i].k===k)return m.sub[i];return null}
 var A={MODS:MODS};
-var ADMCLOSED={dbup:1,dcr:1,entry:1,corr:1,newcust:1,shift:1,erase:1};   /* Main Admin is never limited (A.level returns Full for root) */
-A.modsFor=function(role){return MODS.filter(function(m){return role==='admin'||!m.adminOnly})};
+var ADMCLOSED={dcr:1,entry:1,erase:1};
+/* Work split by role (fixed, not an Access limit):
+   Admins (Main Admin and the others) never post or enter: no Posting Center, Smart Post, Drafts, Quick Sales / Collection, DCR or Collection & Order entry. They do Database Upload, Update, Correction, Backup and see the Activity Log.
+   Database Erase: Main Admin only.  Users: no Database Upload / Update / Correction / Backup / Erase / Activity Log / Header Text / User Manage. */
+var ADMFIX={dcr:0,entry:0,dbup:2,corr:2,newcust:2,shift:2,backup:2,actlog:2};
+var USRNO={dbup:1,corr:1,newcust:1,shift:1,erase:1,backup:1,actlog:1,'theme.hdr':1,users:1};
+A.modsFor=function(role){return MODS.filter(function(m){if(role==='admin')return !(m.k in ADMFIX)&&m.k!=='erase';return !m.adminOnly&&!USRNO[m.k]})};   /* only the limits that can really differ are listed */
 /* level of module k for an account of this role holding these saved limits */
 A.lvl=function(p,role,k){
   var pk=parentOf(k);
@@ -1482,7 +1487,13 @@ A.lvl=function(p,role,k){
   var v=p&&p[k];if(v===0||v===1||v===2)return(v===1&&!m.ro)?0:v;
   if(role==='admin')return ADMCLOSED[k]?0:2;   /* a new (non-main) admin starts with these closed; the Main Admin opens them in Access limits */
   return m.def};
-A.level=function(k){var s=J('rdlgate.session');if(s.root)return 2;return A.lvl(J('rdlgate.perms'),s.role==='admin'?'admin':'user',k)};
+A.isAdm=function(){return J('rdlgate.session').role==='admin'};
+A.level=function(k){var s=J('rdlgate.session'),ad=s.role==='admin',b=parentOf(k)||k;
+  if(b==='erase')return s.root?2:0;                          /* Database Erase: Main Admin only */
+  if(ad){if(Object.prototype.hasOwnProperty.call(ADMFIX,b))return ADMFIX[b]}   /* admins: fixed by role */
+  else if(USRNO[k]||USRNO[b])return 0;                       /* users: closed */
+  if(s.root)return 2;
+  return A.lvl(J('rdlgate.perms'),ad?'admin':'user',k)};
 A.can=function(k){if(A.level(k)>0)return true;var m=find(k);if(m&&m.sub)for(var i=0;i<m.sub.length;i++)if(A.level(m.sub[i].k)>0)return true;return false};   /* a group is open when the group or any one of its options is open */
 A.any=function(ks){for(var i=0;i<ks.length;i++)if(A.can(ks[i]))return true;return false};
 A.apply=function(){try{if(window.RDL_ACC_REFRESH)window.RDL_ACC_REFRESH()}catch(e){}};
@@ -1687,12 +1698,14 @@ function mergeOwn(strict,onlyIfOther){
     }finally{sysW=0}
     return before!==LS.getItem('rdl.ledger.v1')}).catch(function(e){if(/Unknown action/.test(String(e&&e.message)))return false;   /* server not updated yet: carry on as before */
     if(strict)throw new Error('Could not bring back your saved data ('+msgOf(e)+'). Check the internet and sign in again.');return false})}
-function pullData(force){
+function pullData(force,safe){
+  if(safe&&S&&S.role==='admin'&&hasUnpublished())return Promise.resolve(false);   /* this admin has changes not sent yet: never replace them by a pull */
   return api('getData').then(function(p){
     if(p.empty){if(force)throw new Error('No data has been published for "'+S.depot+'" yet. Ask the admin.');return false}
     var dataAt=+LS.getItem('rdlgate.dataAt')||0,dcrAt=Math.max(+LS.getItem('rdlgate.dcrAt')||0,(function(){var d=jget('rdl.dcr.v1');return d&&+d.at||0})()),ledAt=+LS.getItem('rdlgate.ledAt')||0,part={},asg=p.asg||'';
     if(asg&&asg!==(LS.getItem('rdlgate.asg')||'')){dataAt=0;dcrAt=0;ledAt=0}   /* the admin changed this user's depots / customers: download everything again */
-    if(p.at>dataAt){part.out=p.out;part.cr=p.cr;part.at=p.at;part.cut=p.cut||''}
+    var vsig=p.vers?vsigOf(p.vers):'',vchg=!!p.vers&&vsig!==(LS.getItem('rdlgate.vsig')||'');   /* an admin changed a depot (correction, update ...) */
+    if(p.at>dataAt||vchg){part.out=p.out;part.cr=p.cr;part.at=p.at;part.cut=p.cut||''}
     if(p.dcr&&p.dcr.at>dcrAt)part.dcr=p.dcr;
     if(p.led&&p.led.at>ledAt)part.led=p.led;
     if(!part.out&&!part.dcr&&!part.led)return false;
@@ -1703,6 +1716,8 @@ function pullData(force){
     if(part.dcr)LS.setItem('rdlgate.dcrAt',String(part.dcr.at));
     if(part.led)LS.setItem('rdlgate.ledAt',String(part.led.at));
     if(asg)LS.setItem('rdlgate.asg',asg);
+    if(p.vers){jset('rdlgate.ver',p.vers);LS.setItem('rdlgate.vsig',vsig)}
+    if(S&&S.role==='admin'&&part.out){var b2=buildPkgs();if(!b2.err){var c2=curSigs(b2),d2=jget('rdlgate.dsig')||{};d2.db=c2.db;if(!d2.led)d2.led=c2.led;jset('rdlgate.dsig',d2)}}   /* what was just received is now "already published" */
     return true})}
 
 /* ---------- backup (user and admin) ---------- */
@@ -1732,7 +1747,7 @@ var P=Storage.prototype,_s=P.setItem;
    Every change to the posted data on this phone (a record added, edited or deleted, an upload ...) is noted in a short list.
    The list travels to the Google Sheet (tab "Changes") together with the backup. The Admin reads it in User Manage. */
 var CHG='rdlgate.chg',sysW=0;
-var KIND={'rdl.ledger.v1':'Posted data','rdl.tds.v1':'TDS','rdl.notes.v1':'Notes','rdl.promise.v1':'Promise','rdl.sched.v1':'Schedule','rdl.visit.v1':'Visit','rdl.croff.v1':'Credit line On/Off','rdl.master.v1':'Database','rdl.dcr.v1':'Daily Collection & Order'};
+var KIND={'rdl.ledger.v1':'Posted data','rdl.tds.v1':'TDS','rdl.notes.v1':'Notes','rdl.promise.v1':'Promise','rdl.sched.v1':'Schedule','rdl.visit.v1':'Visit','rdl.coe.v1':'Collection & Order entry','rdl.croff.v1':'Credit line On/Off','rdl.master.v1':'Database','rdl.dcr.v1':'Daily Collection & Order'};
 var SUB={dz:'Collection (DZ)',rv:'Sales (RV)',dr:'Collection draft',sd:'Sales draft'};
 function idOf(x){return isObj(x)?(x.bill||x.id||''):''}
 function brief(x){
@@ -1781,6 +1796,7 @@ P.setItem=function(k,v){
   var ch=(this===LS&&S&&typeof k==='string'&&KIND[k]&&!sysW),old=null;if(ch){try{old=LS.getItem(k)}catch(e){}}
   var r=_s.apply(this,arguments);
   if(ch){try{noteChange(k,old,String(v))}catch(e){}}
+  if(this===LS&&S&&S.role==='admin'&&!sysW&&(k==='rdl.master.v1'||k==='rdl.croff.v1')){clearTimeout(pubT);pubT=setTimeout(function(){publishDirty()},4000)}   /* Upload / Update / Correction / Credit Line On-Off: published a few seconds after the last change */
   if(this===LS&&typeof k==='string'&&k.indexOf('rdl.')===0&&k!=='rdl.bkp.v1'&&S){_s.call(LS,'rdlgate.bkdirty','1');clearTimeout(timer);timer=setTimeout(function(){
     if(Date.now()-lastPrompt<600000&&!hasAuth()){bkAlert('Backup NOT saved \u2014 sign-in expired. Tap here to sign in and save.');return}lastPrompt=Date.now();sendBackup().catch(function(){})},3000)}
   return r};
@@ -1808,11 +1824,48 @@ function buildPkgs(){
   names.forEach(function(k){var b=by[k];
     b.dcr=(d&&d.rows)?{rows:d.rows.filter(function(x){return b._n[String(x.n||'').toLowerCase()]}),lastSheet:d.lastSheet,lastDate:d.lastDate,fileName:d.fileName,at:d.at}:null;delete b._n});
   return{by:by,un:un,names:names}}
-function pushData(){
+/* ---------- publish: automatic, only the depots that changed, never over another admin's newer work ----------
+   rdlgate.ver  = version of every depot this phone last received or published (the server refuses a publish that is not based on the latest)
+   rdlgate.dsig = what each depot looked like at that moment, so "changed since" can be found without any button */
+function hsh(t){var x=5381;for(var i=0;i<t.length;i++)x=((x<<5)+x+t.charCodeAt(i))|0;return (x>>>0).toString(36)+t.length.toString(36)}
+function curSigs(b){var db={},led={};b.names.forEach(function(k){var q=b.by[k];db[k]=hsh(JSON.stringify([q.out,q.cr,q.cut]));led[k]=hsh(JSON.stringify([q.led.rv,q.led.dz]))});return{db:db,led:led}}
+function verMap(){return jget('rdlgate.ver')||{}}
+function vsigOf(v){return Object.keys(v||{}).sort().map(function(k){return k+'='+v[k]}).join(';')}
+/* the Admin has database changes that are not on the server yet (a pull would wipe them) */
+function hasUnpublished(){
+  var old=jget('rdlgate.dsig'),b=buildPkgs();
+  if(b.err)return false;
+  if(b.un)return true;   /* rows without a Depot are not published: a pull would lose them */
+  if(!old)return !!S&&S.root&&LS.getItem('rdlgate.sig')!==sigNow();
+  var cur=curSigs(b);return b.names.some(function(k){return old.db&&old.db[k]!==cur.db[k]})}
+function pushData(o){o=o||{};
   var b=buildPkgs();if(b.err){status(b.err,'warn');return Promise.reject(new Error(b.err))}
-  return api('putData',{depots:b.by}).then(function(){LS.setItem('rdlgate.sig',sigNow());
-    var t='Published to '+b.names.length+' depot(s): '+b.names.map(function(n){return n+' ('+b.by[n].out.length+' bills, '+b.by[n].cr.length+' credit lines)'}).join('; ')+(b.un?'. ⚠ '+b.un+' row(s) without Depot were NOT published.':'');
+  var cur=curSigs(b),old=jget('rdlgate.dsig'),pick=[];
+  b.names.forEach(function(k){
+    var chg=o.all||!old||!old.db||old.db[k]!==cur.db[k]||(S&&S.root&&(!old.led||old.led[k]!==cur.led[k]));
+    if(chg)pick.push(k)});
+  if(!pick.length){status('Nothing new to publish','ok');return Promise.resolve('কোনো ডিপোতে নতুন কিছু নেই, তাই কিছু পাঠানো হয়নি।')}
+  var send={};pick.forEach(function(k){send[k]=b.by[k]});
+  return api('putData',{depots:send,base:verMap(),force:!!(o.force&&S&&S.root)},!!o.quiet).then(function(j){
+    var v=verMap();Object.keys(j.vers||{}).forEach(function(k){v[k]=j.vers[k]});jset('rdlgate.ver',v);LS.setItem('rdlgate.vsig',vsigOf(v));
+    var d=jget('rdlgate.dsig')||{db:{},led:{}};d.db=d.db||{};d.led=d.led||{};
+    pick.forEach(function(k){d.db[k]=cur.db[k];d.led[k]=cur.led[k]});
+    b.names.forEach(function(k){if(d.db[k]===undefined)d.db[k]=cur.db[k];if(d.led[k]===undefined)d.led[k]=cur.led[k]});
+    jset('rdlgate.dsig',d);LS.setItem('rdlgate.sig',sigNow());
+    var t='Published to '+pick.length+' depot(s): '+pick.map(function(n){return n+' ('+b.by[n].out.length+' bills, '+b.by[n].cr.length+' credit lines)'}).join('; ')+(b.un?'. ⚠ '+b.un+' row(s) without Depot were NOT published.':'');
     status('Published '+hhmm(),b.un?'warn':'ok');return t})}
+var pubBusy=0,pubT=null,lastPubMsg='';
+function pubFail(e){var m=msgOf(e);status('Not published: '+m,'warn');
+  if(/^CONFLICT/.test(m)&&m!==lastPubMsg)toast('অন্য এডমিন আগে আপডেট করেছেন। আপনার বদল পাঠানো হয়নি। Data Hub থেকে "সর্বশেষ তথ্য নিন" চাপুন।');
+  lastPubMsg=m}
+/* automatic: called a few seconds after a database change, when the app opens and when it comes back to the front */
+function publishDirty(){
+  if(!S||S.role!=='admin'||pubBusy||!LS.getItem('rdl.master.v1')||!hasAuth())return Promise.resolve();
+  var b=buildPkgs();if(b.err)return Promise.resolve();
+  var old=jget('rdlgate.dsig');
+  if(!old&&!(S.root&&LS.getItem('rdlgate.sig')!==sigNow())){jset('rdlgate.dsig',curSigs(b));return Promise.resolve()}   /* nothing was ever changed here: this is the starting point */
+  pubBusy=1;
+  return pushData({quiet:true}).then(function(t){if(t&&/^Published/.test(t)){lastPubMsg='';toast('Published to depots')}}).catch(pubFail).then(function(){pubBusy=0})}
 
 /* ---------- admin: merge users' backups into this app ---------- */
 function isObj(x){return x&&typeof x==='object'&&!Array.isArray(x)}
@@ -1838,6 +1891,7 @@ function mergeUserDcr(email,ud){
   LS.setItem('rdl.dcr.v1',JSON.stringify({rows:rows,lastSheet:newer?(ud.lastSheet||(a&&a.lastSheet)):(a&&a.lastSheet)||ud.lastSheet,lastDate:last,fileName:newer?(ud.fileName||(a&&a.fileName)):(a&&a.fileName)||ud.fileName,at:newer?uat:Date.now()}))}
 /* only the NEWEST backup of each person is merged (an older file of the same person must never replace newer posts) */
 function newestPerEmail(list){var best={};(list||[]).forEach(function(b){var k=String(b.email||'').toLowerCase(),t=+new Date(b.at)||0;if(!best[k]||t>(+new Date(best[k].at)||0))best[k]=b});return Object.keys(best).map(function(k){return best[k]})}
+function cntU(v,em){var n=0;(function w(x){if(Array.isArray(x))x.forEach(function(y){if(isObj(y)&&y._u===em)n++;else w(y)});else if(isObj(x))Object.keys(x).forEach(function(k){w(x[k])})})(v);return n}   /* entries a user made, found in the merged data */
 function mergeBackups(over){
   return (over?Promise.resolve({backups:over}):api('listBackups')).then(function(j){
     var m=jget('rdl.master.v1'),mAt=m?m.at:0,done=[],late=[];
@@ -1856,7 +1910,7 @@ function mergeBackups(over){
       return '• '+(b.name||b.email)+': Sales '+rv.length+' = '+fn(rv.reduce(function(s,x){return s+(+x.amt||0)},0))+' | Collections '+dz.length+' = '+fn(dz.reduce(function(s,x){return s+(+x.col||0)+(+x.tds||0)},0))}
     function stat(b){var f=function(a,amt){var cu={},co={},bl={},sum=0;a.forEach(function(x){cu[x.cu]=1;co[x.co]=1;bl[x.bill]=1;sum+=amt(x)});return{cust:Object.keys(cu).length,comp:Object.keys(co).length,bills:Object.keys(bl).length,total:sum}};
       var rv=(LG.rv||[]).filter(function(x){return x._u===b.email}),dz=(LG.dz||[]).filter(function(x){return x._u===b.email});
-      return{depot:b.depot,name:b.name||b.email,email:b.email,at:b.at,part:b._part||'',rv:f(rv,function(x){return +x.amt||0}),dz:f(dz,function(x){return (+x.col||0)+(+x.tds||0)})}}
+      return{depot:b.depot,name:b.name||b.email,email:b.email,at:b.at,part:b._part||'',coe:cntU(jget('rdl.coe.v1'),b.email),vis:cntU(jget('rdl.visit.v1'),b.email),rv:f(rv,function(x){return +x.amt||0}),dz:f(dz,function(x){return (+x.col||0)+(+x.tds||0)})}}
     return{done:done,late:late,rows:done.map(stat),text:(done.length?'Merged:\n'+done.map(line).join('\n')+'\n\nPosted by each user (Sales and Collection, all dates):\n'+done.map(tally).join('\n')+'\n\nIf a user posted more than this, ask them to press Save backup now, then merge again.':'Nothing was merged.')+(late.length?'\n\nSkipped — these users have an older database than yours ('+(m&&m.at?new Date(m.at).toLocaleString('en-GB'):'')+'). Press "Publish database", ask them to open the app (so it downloads the new data) and press Save backup now, then merge again:\n'+late.map(line).join('\n'):'')}})}
 
 /* ---------- user access limits (set by the admin in App Security > User Manage & Access Control) ---------- */
@@ -2011,6 +2065,7 @@ function showMergeReport(r,reloadFn){
     var bs=h('div','','Backup Status: '+(isNaN(d)?'—':d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+', '+pad(hh)+':'+pad(d.getMinutes())+' '+ap));bs.style.cssText='margin-top:2px;font-size:13px;color:#34495e';q.appendChild(bs);
     var hr=h('div');hr.style.cssText='border-top:1px solid #dde5f2;margin:8px 0 2px';q.appendChild(hr);
     q.appendChild(blk('Sales (RV):',x.rv,'#0a4fd0','#eaf2ff'));q.appendChild(blk('Collection (DZ):',x.dz,'#15803d','#e8f7ee'));
+    if(x.coe||x.vis){var ex=h('div',null,'Collection & Order entries: '+x.coe+'  •  DCR visits: '+x.vis);ex.style.cssText='margin-top:8px;font-size:13px;font-weight:700;color:#34495e';q.appendChild(ex)}
     if(x.part){var pn=h('div',null,'⚠ This user has an older database, so only posts after '+x.part+' were merged.');pn.style.cssText='margin-top:8px;font-size:12px;color:#b86e00';q.appendChild(pn)}
     bd.appendChild(q)});
   if(r.late.length){var lt=h('div');lt.style.cssText='margin-top:8px;padding:8px;border-radius:10px;background:#fff4e0;font-size:12.5px;color:#7a4b00;white-space:pre-line';lt.textContent='Skipped (older database):\n'+r.late.map(function(b){return '• '+(b.name||b.email)+' ('+b.depot+')'}).join('\n')+'\nPress "Publish database", ask them to open the app, Save backup now, then merge again.';bd.appendChild(lt)}
@@ -2031,7 +2086,7 @@ function autoMerge(){
     return mergeBackups().then(function(r){var t2=jget('rdlgate.mtried')||{};r.done.concat(r.late).forEach(function(b){t2[b.email]=+new Date(b.at)||0});jset('rdlgate.mtried',t2);
       if(!r.done.length)return;
       var go=function(){toast('New data from users merged');setTimeout(function(){if(onHomePage()&&!panelOn)location.reload()},1500)};
-      return S.root?pushData().then(function(){toast('Published to all admins and depots')},function(e){status(msgOf(e),'warn')}).then(go):go()})
+      return S.root?pushData({quiet:true}).then(function(t){if(t&&/^Published/.test(t))toast('Published to all admins and depots')},pubFail).then(go):go()})
   }).catch(function(){}).then(function(){amBusy=0})}
 /* any person: work saved from my OTHER device is added to this one when I come back to it */
 function syncOther(){
@@ -2039,8 +2094,8 @@ function syncOther(){
   sxBusy=1;
   return mergeOwn(false,true).then(function(ch){if(ch){toast('Data from your other device was added');setTimeout(function(){if(onHomePage()&&!panelOn)location.reload()},1500)}}).catch(function(){}).then(function(){sxBusy=0})}
 function adminPull(){
-  if(!S||S.role!=='admin'||S.root||apBusy||!onHomePage()||panelOn||document.visibilityState!=='visible'||!LS.getItem('rdl.master.v1'))return Promise.resolve();
-  apBusy=1;return pullData(false).then(function(c){if(c){toast('New data from the Main Admin — reloading…');setTimeout(function(){location.reload()},900)}}).catch(function(){}).then(function(){apBusy=0})}
+  if(!S||S.role!=='admin'||apBusy||!onHomePage()||panelOn||document.visibilityState!=='visible'||!LS.getItem('rdl.master.v1'))return Promise.resolve();
+  apBusy=1;return pullData(false,true).then(function(c){if(c){toast('New data from another admin — reloading…');setTimeout(function(){location.reload()},900)}else return publishDirty()}).catch(function(){}).then(function(){apBusy=0})}
 var apBusy=0;
 setInterval(function(){pullBkStatus().then(autoMerge).then(adminPull)},300000);
 document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible')setTimeout(function(){syncOther().then(autoMerge).then(adminPull)},2500)});
@@ -2057,8 +2112,7 @@ function afterLogin(){
       if(!S.root)return pullData(false).then(function(c){if(c){LS.setItem('rdlgate.owner','admin');location.reload();throw new Error('__reload')}})});LS.setItem('rdlgate.owner','admin')}
     if(S.role==='user')LS.setItem('rdlgate.owner','user');
     if(S.role==='user')return mergeOwn(false,true).then(function(){return pullData(false)}).then(function(changed){if(changed){toast('New data received — reloading…');setTimeout(function(){location.reload()},900);throw new Error('__reload')}});
-    if(S.role==='admin'&&!S.root)return mergeOwn(false,true).then(function(){return pullData(false)}).then(function(changed){if(changed){toast('New data from the Main Admin — reloading…');setTimeout(function(){location.reload()},900);throw new Error('__reload')}});
-    if(S.role==='admin')return mergeOwn(false,true).then(function(){if(sigNow()&&LS.getItem('rdlgate.sig')!==sigNow())return pushData().then(function(t){toast('Database published to depots')}).catch(function(e){status(msgOf(e),'warn')})})
+    if(S.role==='admin')return mergeOwn(false,true).then(function(){return pullData(false,true)}).then(function(changed){if(changed){toast('New data from another admin — reloading…');setTimeout(function(){location.reload()},900);throw new Error('__reload')}}).then(function(){return publishDirty()})
   }).then(loadPerms).then(function(){return backupIfDue()}).then(function(){return pullAlerts()}).then(function(){return pullBkStatus()}).then(function(){return autoMerge()}).catch(function(e){
     if(e.message==='__reload')return;
     if(/ACCESS_DENIED/.test(e.message)&&/is not allowed/.test(e.message))return forcedOut(msgOf(e));   /* ONLY when the admin really removed this person; a Google check that merely failed or expired never signs anyone out or wipes data */
@@ -2302,13 +2356,17 @@ function buildHub(){
   function go(pg2){try{window.RDL.admin.open(pg2)}catch(e){status('Could not open the page','bad')}}
   var dpSec=sec('ডিপো ডেটা','wh','linear-gradient(#3b8cf0,#0a56c8)');
   if(S.role==='admin'){
-    if(!S.root)card('Main Admin-এর সর্বশেষ তথ্য নিন','hero','ref',function(b){run(b,'দেখা হচ্ছে…',function(){return pullData(false).then(function(c){if(c){setTimeout(function(){location.reload()},800);return 'নতুন তথ্য এসেছে। রিলোড হচ্ছে…'}return 'আপনার কাছে সর্বশেষ তথ্যই আছে।'})})},'Main Admin নতুন তথ্য পাঠালে এটা চেপে নিন। সাধারণত নিজে থেকেই আসে।');
-    if(S.root)card('নতুন ডাটাবেস ডিপোতে পাঠান','hero','up',function(b){run(b,'পাঠানো হচ্ছে…',function(){return pushData()})},'শুধু তখন চাপুন, যখন আপনি নতুন Database Upload করেছেন। ডিপোর ইউজাররা তখন নতুন তথ্য পাবে। প্রতিদিন চাপার দরকার নেই।');
+    card('সর্বশেষ তথ্য নিন','hero','ref',function(b){run(b,'দেখা হচ্ছে…',function(){
+      if(hasUnpublished()&&!confirm('আপনার কিছু বদল এখনো সার্ভারে যায়নি। সর্বশেষ তথ্য নিলে সেগুলো বাদ যাবে। চালিয়ে যাবেন?'))return Promise.resolve('বাতিল করা হয়েছে। আপনার বদল এই ফোনেই আছে।');
+      return pullData(false).then(function(c){if(c){setTimeout(function(){location.reload()},800);return 'নতুন তথ্য এসেছে। রিলোড হচ্ছে…'}return 'আপনার কাছে সর্বশেষ তথ্যই আছে।'})})},'অন্য এডমিন Upload, Update বা Correction করলে সাধারণত নিজে থেকেই আসে। "অন্য এডমিন আগে আপডেট করেছেন" লেখা এলে এটা চাপুন।');
+    if(S.root)card('আবার পাঠান (সব ডিপো)','am','up',function(b){run(b,'পাঠানো হচ্ছে…',function(){
+      if(!confirm('সব ডিপোর ডাটা সার্ভারে জোর করে বদলে দেওয়া হবে। অন্য এডমিনের নতুন কাজও বাদ যেতে পারে। শুধু কিছু আটকে গেলে করুন। চালিয়ে যাবেন?'))return Promise.resolve('বাতিল করা হয়েছে।');
+      return pushData({all:true,force:true})})},'সাধারণত লাগে না। Upload, Update বা Correction শেষ হলে ডাটা নিজে থেকেই যায়। শুধু কিছু আটকে গেলে চাপুন।');
     card('ইউজারদের কাজ আমার অ্যাপে আনুন','blue','dl',function(b){run(b,'আনা হচ্ছে…',function(){return mergeBackups().then(function(r){
       buildHub();showMergeReport(r);
       if(!r.done.length)return 'কিছু মার্জ হয়নি';
       if(!S.root)return '✓ মার্জ হয়েছে';
-      return pushData().then(function(){return '✓ মার্জ হয়েছে এবং সব এডমিন ও ডিপোতে পাঠানো হয়েছে'},function(e){return '✓ মার্জ হয়েছে, কিন্তু পাঠানো যায়নি: '+msgOf(e)})})})},'ইউজাররা যা পোস্ট করেছে তা আপনার অ্যাপে যোগ হয়। সাধারণত নিজে থেকেই হয়। উপরের কার্ডে "এখনো আপনার অ্যাপে আনা হয়নি" দেখালে এটা চাপুন।');
+      return pushData({}).then(function(){return '✓ মার্জ হয়েছে এবং সব এডমিন ও ডিপোতে পাঠানো হয়েছে'},function(e){return '✓ মার্জ হয়েছে, কিন্তু পাঠানো যায়নি: '+msgOf(e)})})})},'ইউজাররা যা পোস্ট করেছে তা আপনার অ্যাপে যোগ হয়। সাধারণত নিজে থেকেই হয়। উপরের কার্ডে "এখনো আপনার অ্যাপে আনা হয়নি" দেখালে এটা চাপুন।');
     fold(dpSec,'dp');
   }else{
     card('সর্বশেষ তথ্য নিন','hero','ref',function(b){run(b,'দেখা হচ্ছে…',function(){return pullData(false).then(function(c){if(c){setTimeout(function(){location.reload()},800);return 'নতুন তথ্য এসেছে। রিলোড হচ্ছে…'}return 'আপনার কাছে সর্বশেষ তথ্যই আছে।'})})},'অ্যাডমিন নতুন ডাটাবেস পাঠালে এটা চেপে নিন।');
@@ -4126,7 +4184,7 @@ function draftHub(P,all0){
     const i=el('span');i.style.cssText='flex:none;width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,'+C[3]+','+C[4]+');box-shadow:0 3px 0 '+C[4]+'66';i.innerHTML='<svg viewBox="0 0 24 24" style="width:21px;height:21px;fill:#fff"><use href="#'+ic+'"/></svg>';
     const l=el('span');l.style.cssText='flex:1;min-width:0';l.appendChild(el('div',null,t));const sm=el('small',null,list.length+' draft'+(list.length===1?'':'s')+' • '+money0(tot));sm.style.cssText='display:block;font-size:12.5px;font-weight:600;opacity:.85;margin-top:2px';l.appendChild(sm);
     b.appendChild(i);b.appendChild(l);b.onclick=()=>{buildDrafts(t);window.scrollTo(0,0)};(t==='Sales'?gr2:gr).appendChild(b)})}
-window.RDL.openDrafts=()=>{buildDrafts();document.querySelectorAll('.pg').forEach(x=>x.classList.remove('on'));document.querySelectorAll('.nav button').forEach(x=>x.classList.remove('on'));$('#drf').classList.add('on');const nb=$('.nav button[data-p="more"]');if(nb)nb.classList.add('on');window.scrollTo(0,0)};
+window.RDL.openDrafts=()=>{if(window.RDL_ROLE==='admin')return;buildDrafts();document.querySelectorAll('.pg').forEach(x=>x.classList.remove('on'));document.querySelectorAll('.nav button').forEach(x=>x.classList.remove('on'));$('#drf').classList.add('on');const nb=$('.nav button[data-p="more"]');if(nb)nb.classList.add('on');window.scrollTo(0,0)};
 function review(w,P,L,ttl,bk){const dates=[...sel[w]].sort(),secs=[],t0=today(),m=R.master,EPS=0.005;
   const byDue=(a,b)=>(a.post||'')<(b.post||'')?-1:(a.post||'')>(b.post||'')?1:(a.due||'')<(b.due||'')?-1:(a.due||'')>(b.due||'')?1:String(a.bill)<String(b.bill)?-1:1;  /* oldest Posting date first, same as the date shown in the list */
   const openBills=(bp,co,lim)=>m.out.filter(b=>b.cu==bp&&b.co==co&&bal(b)>0&&(!lim||!b.post||b.post<=lim)).sort(byDue);
@@ -4358,7 +4416,8 @@ window.RDL.openReg=openReg;
 document.querySelectorAll('.nav button').forEach(b=>{if(b.dataset.p==='scr')b.addEventListener('click',()=>{msg.a='';openReg(['RV','DZ'])})});
 {const rc=document.getElementById('regCard');if(rc){const go=k=>openReg(k==='RV'?['RV']:k==='DZ'?['DZ']:['RV','DZ']);
   rc.querySelectorAll('[data-k]').forEach(e=>{e.addEventListener('click',ev=>{ev.stopPropagation();go(e.dataset.k)});e.addEventListener('keydown',ev=>{if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();go(e.dataset.k)}})})}}
-window.RDL.openTab=(w,t,q)=>{if(t==='search'&&w!=='a')return openReg(w==='s'?['RV']:['DZ'],q);tab[w]=t;msg[w]='';R.historyPre=q?{w,q}:null;render(w);const id={s:'sales',c:'collection',a:'scr'}[w];goPage(id,id==='scr'?'scr':id)};
+window.RDL.openTab=(w,t,q)=>{if(window.RDL_ROLE==='admin'&&t!=='search')return;   /* admins do not post */
+  if(t==='search'&&w!=='a')return openReg(w==='s'?['RV']:['DZ'],q);tab[w]=t;msg[w]='';R.historyPre=q?{w,q}:null;render(w);const id={s:'sales',c:'collection',a:'scr'}[w];goPage(id,id==='scr'?'scr':id)};
 /* after the reload that follows a Daily Collection & Order upload: open Sales & Collection Posting */
 {let go=0;try{go=sessionStorage.getItem('rdl.openPosting');if(go)sessionStorage.removeItem('rdl.openPosting')}catch(e){}if(go){const run=()=>{try{window.RDL.openTab('s','post')}catch(e){}};if(document.readyState==='complete')setTimeout(run,300);else window.addEventListener('load',()=>setTimeout(run,300))}}
 /* after saving a manual Sales / Collection draft: reload the app and come back to Posting Center */
@@ -4475,7 +4534,7 @@ function manualSales(P,ttl,bk){
 
 /* ---------- Quick Actions: Sales Upload / Collection Upload now offer an option sheet ---------- */
 function showPage(id){document.querySelectorAll('.pg').forEach(x=>x.classList.remove('on'));document.querySelectorAll('.nav button').forEach(x=>x.classList.remove('on'));$('#'+id).classList.add('on');const nb=$('.nav button[data-p=\"'+id+'\"]');if(nb)nb.classList.add('on');window.scrollTo(0,0)}
-function openManual(w){tab[w]='search';msg[w]='';render(w,'manual');showPage(w==='s'?'sales':'collection')}
+function openManual(w){if(window.RDL_ROLE==='admin')return;tab[w]='search';msg[w]='';render(w,'manual');showPage(w==='s'?'sales':'collection')}
 window.RDL.openManual=openManual;
 document.querySelectorAll('.nav button').forEach(b=>{if(b.dataset.p==='sales')b.addEventListener('click',()=>{tab.s='search';msg.s='';render('s')});if(b.dataset.p==='collection')b.addEventListener('click',()=>{tab.c='search';msg.c='';render('c')})});
 function chooser(title,opts){
@@ -4487,7 +4546,7 @@ function chooser(title,opts){
   opts.forEach(([t,sub,fn,bg])=>{const b=el('button','st-btn');if(bg){b.style.background=bg;b.style.color='#fff'}b.type='button';b.style.textAlign='left';b.appendChild(document.createTextNode(t));if(sub){const sm=el('div',null,sub);sm.style.cssText='font-size:11.5px;font-weight:500;opacity:.9;margin-top:2px';b.appendChild(sm)}b.onclick=()=>{close();fn()};sh.appendChild(b)});
   const cn=el('button','st-btn od-clear','Cancel');cn.type='button';cn.onclick=close;sh.appendChild(cn);
   ov.onclick=e=>{if(e.target===ov)close()};ov.appendChild(sh);document.body.appendChild(ov)}
-window.RDL.openUpload=()=>{buildUpload();document.querySelectorAll('.pg').forEach(x=>x.classList.remove('on'));document.querySelectorAll('.nav button').forEach(x=>x.classList.remove('on'));$('#upl').classList.add('on');const nb=$('.nav button[data-p="more"]');if(nb)nb.classList.add('on');window.scrollTo(0,0)};
+window.RDL.openUpload=()=>{if(window.RDL_ROLE==='admin'){const hb=document.querySelector('.nav button[data-p="home"]');if(hb)hb.click();return}buildUpload();document.querySelectorAll('.pg').forEach(x=>x.classList.remove('on'));document.querySelectorAll('.nav button').forEach(x=>x.classList.remove('on'));$('#upl').classList.add('on');const nb=$('.nav button[data-p="more"]');if(nb)nb.classList.add('on');window.scrollTo(0,0)};
 /* after midnight the previous day's data leaves the posting pages (also while the app stays open) */
 let lastDay=today();
 const midnight=()=>{const t=today();if(t===lastDay)return;lastDay=t;if(window.RDL.histRun)window.RDL.histRun();sel.s.clear();sel.c.clear();['s','c'].forEach(w=>{const P=$('#'+KIND[w].id);if(P&&P.classList.contains('on')&&tab[w]==='post')render(w)})};
@@ -4840,7 +4899,7 @@ window.RDL_openSet=open;
 function buildMainList(){
   const A=window.RDLACC,can=k=>A?A.can(k):true,role=window.RDL_ROLE;
   mainList.textContent='';
-  mainList.appendChild(tile(svg('<path d="M20 7h-4V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2H4a2 2 0 00-2 2v10a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2zM10 5h4v2h-4zm10 9h-6v2h-4v-2H4v-3h16z"/>'),G.green,'Daily Work Tools','Posting Center, TDS / Challan, Schedule, Notes',()=>{const b=document.querySelector('.nav button[data-p="more"]');if(b)b.click()}));
+  mainList.appendChild(tile(svg('<path d="M20 7h-4V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2H4a2 2 0 00-2 2v10a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2zM10 5h4v2h-4zm10 9h-6v2h-4v-2H4v-3h16z"/>'),G.green,'Daily Work Tools',(role==='admin'?'TDS Ledger (view only), Schedule, Notes':'Posting Center, TDS / Challan, Schedule, Notes'),()=>{const b=document.querySelector('.nav button[data-p="more"]');if(b)b.click()}));
   if(role!=='user')mainList.appendChild(tile(IC.lock,G.red,'App Security','Users, PIN, corrections and activity log',async()=>{if(await unlock())open('setsec')}));
   if(role==='user'){   /* a user has no App Security: the parts the Admin allowed are listed here */
     if(A&&A.any(['dbup','backup','corr.edit','corr.del','corr.out','corr.cr','corr.off','newcust','shift','erase']))mainList.appendChild(tile(IC.db,G.blue,'Database Settings','Database upload, update, correction and backup',()=>open('setdb')));
@@ -4854,9 +4913,9 @@ function buildMainList(){
 /* the Admin's limits changed (or arrived): rebuild the menu, the bottom tabs and leave a page that is now closed */
 function accRefresh(){
   const A=window.RDLACC;buildMainList();
-  $$('.nav button').forEach(b=>{const p=b.dataset.p;if(p==='sales'||p==='collection')b.style.display=(A&&!A.can(p==='sales'?'entry.sales':'entry.coll'))?'none':''});
+  $$('.nav button').forEach(b=>{const p=b.dataset.p;if(p==='sales'||p==='collection')b.style.display=(A&&window.RDL_ROLE!=='admin'&&!A.can(p==='sales'?'entry.sales':'entry.coll'))?'none':''});
   const on=document.querySelector('.pg.on');
-  if(on&&((on.id&&!accOK(on.id))||((on.id==='sales'||on.id==='collection')&&A&&!A.can(on.id==='sales'?'entry.sales':'entry.coll'))))show('home')}
+  if(on&&((on.id&&!accOK(on.id))||((on.id==='sales'||on.id==='collection')&&A&&window.RDL_ROLE!=='admin'&&!A.can(on.id==='sales'?'entry.sales':'entry.coll'))))show('home')}
 window.RDL_ACC_REFRESH=accRefresh;buildMainList();
 setTimeout(accRefresh,0);
 
@@ -4970,7 +5029,7 @@ window.RDLBKP_EXTRA=function(b,bok){
       if(!em){if(!us.value){say(m3,'✗ First select whose backup this file is','bad');f3.value='';return}em=us.value;nm=opt.dataset.n;dp=opt.dataset.d}
       else if(us.value&&us.value.toLowerCase()!==em){say(m3,'✗ This file belongs to '+em+', but you selected '+us.value,'bad');f3.value='';return}
       const raw=o.data;if(!raw||typeof raw!=='object'){say(m3,'✗ This file has no data','bad');f3.value='';return}
-      const KEYS=['rdl.ledger.v1','rdl.tds.v1','rdl.notes.v1','rdl.promise.v1','rdl.sched.v1','rdl.visit.v1','rdl.croff.v1','rdl.cdnew.v1'],data={};
+      const KEYS=['rdl.ledger.v1','rdl.tds.v1','rdl.notes.v1','rdl.promise.v1','rdl.sched.v1','rdl.visit.v1','rdl.coe.v1','rdl.croff.v1','rdl.cdnew.v1'],data={};
       KEYS.forEach(k=>{if(raw[k]!=null)data[k]=typeof raw[k]==='string'?raw[k]:JSON.stringify(raw[k])});
       if(!data['rdl.ledger.v1']){say(m3,'✗ No Sales / Collection data in this file','bad');f3.value='';return}
       const mm=JSON.parse(localStorage.getItem('rdl.master.v1')||'null'),dcr=raw['rdl.dcr.v1'];
@@ -6964,6 +7023,7 @@ function show(id){$$('.pg').forEach(x=>x.classList.remove('on'));$$('.nav button
 function mkPage(id,title,back){const p=el('div','pg st');p.id=id;app.appendChild(p);const top=el('div','st-top'),b=el('button');b.type='button';b.innerHTML='<svg class="bk-ar" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 12h-15M10.5 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="4.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';b.setAttribute('aria-label','Back');b.onclick=back;top.appendChild(b);top.appendChild(el('h2',null,title));p.appendChild(top);const body=el('div','sbody');p.appendChild(body);return body}
 const home=()=>$('.nav button[data-p="home"]').click();
 const PM=mkPage('tdsl','TDS Ledger',()=>{const b=$('.nav button[data-p="more"]');if(b)b.click()}),PF=mkPage('tdsf','Challan',()=>go());
+if(window.RDL_ROLE==='admin'&&window.RDLACC){RDLACC.lock(PM,true);RDLACC.lock(PF,true)}   /* admins only look at TDS / Challan */
 const V={tab:'e',co:'',st:'open',q:'',dp:''};
 {const dst=document.createElement('style');dst.textContent='#tdsl .cs-dpt td.c-dp{position:sticky;left:0;z-index:2;background:#fff;white-space:normal;border-left:1px solid #e6eef9;min-width:96px;max-width:96px;width:96px;box-shadow:4px 0 6px -4px #0a3a9a30;vertical-align:middle}#tdsl .cs-dpt tbody tr:nth-child(even) td.c-dp{background:#f4f8ff}#tdsl .cs-dpt td.c-dp .chip-g{font-size:12px;word-break:break-word}html body #tdsl .cs-dpt th:first-child{position:sticky;left:0;z-index:4;min-width:96px!important;max-width:96px!important;width:96px}html body #tdsl .cs-dpt td.c-n2{left:96px!important}html body #tdsl .cs-dpt thead th:nth-child(2){position:sticky;left:96px;z-index:3}html body #tdsl .cs-dpt tr.cs-tot>td.c-dp{background:#0b2a8a!important}';document.head.appendChild(dst)}
 const dpOf=c=>RDLDEPOT.nameOf(c)||'';
@@ -7354,7 +7414,7 @@ function drawD(){const B=DP.body;B.textContent='';
   let T={n:0,m:0},uc=new Set();
   for(let i=0;i<DV.days;i++){const d=addD(t,-i),l=V.filter(v=>v.date===d),x=stats(l);T.n+=x.n;T.m+=x.m;l.forEach(v=>uc.add(key(v)));
     const r=el('tr','tap'+(d===DV.date?' sel':''));[dow(d)+' '+dd(d).slice(0,6),x.n||'—',x.c||'—',x.m?dur(x.m):'—'].forEach(c=>r.appendChild(el('td',null,String(c))));r.onclick=()=>{DV.date=d;drawD();window.scrollTo(0,0)};tb.appendChild(r)}
-  const tr=el('tr','tot');['Total',T.n,uc.size,dur(T.m)].forEach(c=>tr.appendChild(el('td',null,String(c))));tb.appendChild(tr);B.appendChild(tb)}
+  const tr=el('tr','tot');['Total',T.n,uc.size,dur(T.m)].forEach(c=>tr.appendChild(el('td',null,String(c))));tb.appendChild(tr);B.appendChild(tb);dcrTable(B)}
 function openDF(v,edit){v=v||{};const B=DF.body;B.textContent='';DF.h.textContent=edit?'Edit visit':'Add visit';const box=el('div','st-card');B.appendChild(box);
   const dt=el('input','list-search');dt.type='date';dt.value=v.date||today();dt.max=today();field(box,'Date',dt);
   box.appendChild(el('label','od-label','Customer visited'));const pk=picker(box,v);
@@ -7543,6 +7603,44 @@ function coSave(date,E){const d=jget('rdl.dcr.v1',null)||{rows:[]},cl=o=>{const 
   const rows=(d.rows||[]).filter(r=>!(r.d===date&&E.some(e=>nk(e.nm)===nk(r.n))));
   E.forEach(e=>rows.push({d:date,n:e.nm,o:cl(e.o),c:cl(e.c),...(e.rm?{rm:e.rm}:{})}));
   jset('rdl.dcr.v1',{...d,rows,lastDate:rows.reduce((m,r)=>r.d>m?r.d:m,''),at:Date.now()})}
+/* ---- Step 3: the user's own entry tables. All dates in one table, filtered by date (and business), with an Excel of the filtered table. Each user sees only the data stored on this phone (their own). ---- */
+async function xlsxTable(sheet,head,rows){
+  const zip=new JSZip(),cl=i=>String.fromCharCode(65+i);
+  const cell=(v,r,i)=>typeof v==='number'?'<c r="'+cl(i)+r+'"><v>'+v+'</v></c>':'<c r="'+cl(i)+r+'" t="inlineStr"><is><t xml:space="preserve">'+XE(v)+'</t></is></c>';
+  const sd=[head].concat(rows).map((r,n)=>'<row r="'+(n+1)+'">'+r.map((v,i)=>cell(v,n+1,i)).join('')+'</row>').join('');
+  zip.file('[Content_Types].xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>');
+  zip.file('_rels/.rels','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>');
+  zip.file('xl/workbook.xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="'+XE(sheet)+'" sheetId="1" r:id="rId1"/></sheets></workbook>');
+  zip.file('xl/_rels/workbook.xml.rels','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>');
+  zip.file('xl/worksheets/sheet1.xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><cols><col min="1" max="'+head.length+'" width="22" customWidth="1"/></cols><sheetData>'+sd+'</sheetData></worksheet>');
+  return zip.generateAsync({type:'blob',compression:'DEFLATE',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})}
+/* o: {title, st:{from,to,biz}, bizList, head, rows(st)->arrays (numbers stay numbers), total(rows)->array|null, file} */
+function entTable(B,o){
+  const S=o.st,card=el('div','st-card');B.appendChild(el('div','mv-day',o.title));B.appendChild(card);
+  const f1=el('input','list-search'),f2=el('input','list-search');f1.type=f2.type='date';f1.value=S.from||'';f2.value=S.to||'';f1.max=f2.max=today();
+  const r=el('div','coe-grid'),w1=el('div','coe-c'),w2=el('div','coe-c');w1.appendChild(el('small',null,'From'));w1.appendChild(f1);w2.appendChild(el('small',null,'To'));w2.appendChild(f2);r.appendChild(w1);r.appendChild(w2);card.appendChild(r);
+  let bs=null;if(o.bizList){bs=el('select','list-search');bs.appendChild(new Option('All businesses',''));o.bizList.forEach(b=>bs.appendChild(new Option(b,b)));bs.value=S.biz||'';card.appendChild(bs)}
+  const host=el('div'),msg=el('div','stt'),wrap=el('div');wrap.style.cssText='overflow-x:auto;margin:8px 0';host.appendChild(wrap);
+  const cur=()=>o.rows(S);
+  const draw=()=>{wrap.textContent='';const rows=cur(),tb=el('table','mv-tbl'),th=el('tr');o.head.forEach(h=>th.appendChild(el('th',null,h)));tb.appendChild(th);
+    if(!rows.length){wrap.appendChild(el('div','mv-empty','No entry for this filter.'));return}
+    rows.forEach(rw=>{const tr=el('tr');rw.forEach(v=>{const td=el('td',null,typeof v==='number'?fm2(v):String(v));if(typeof v==='number')td.style.textAlign='right';tr.appendChild(td)});tb.appendChild(tr)});
+    const t=o.total&&o.total(rows);if(t){const tr=el('tr','tot');t.forEach(v=>{const td=el('td',null,typeof v==='number'?fm2(v):String(v));if(typeof v==='number')td.style.textAlign='right';tr.appendChild(td)});tb.appendChild(tr)}
+    wrap.appendChild(tb)};
+  const ch=()=>{S.from=f1.value;S.to=f2.value;if(bs)S.biz=bs.value;msg.textContent='';draw()};f1.onchange=f2.onchange=ch;if(bs)bs.onchange=ch;
+  card.appendChild(host);
+  const dl=el('button','st-btn','Download this table (Excel)');dl.type='button';
+  dl.onclick=async()=>{const rows=cur();if(!rows.length){msg.className='stt bad';msg.textContent='Nothing to download for this filter';return}
+    try{const t=o.total&&o.total(rows),blob=await xlsxTable(o.sheet,o.head,t?rows.concat([t]):rows),a=el('a');a.href=URL.createObjectURL(blob);a.download=o.file+'_'+today()+'.xlsx';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);msg.className='stt ok';msg.textContent='\u2713 Downloaded'}
+    catch(x){msg.className='stt bad';msg.textContent='\u2717 Could not make the file'}};
+  card.appendChild(dl);card.appendChild(msg);draw()}
+const COT={from:addD(today(),-30),to:today(),biz:''},DCT={from:addD(today(),-30),to:today()};
+function coTable(B){entTable(B,{title:'My Collection & Order table',sheet:'Collection & Order',file:'Collection_Order_table',st:COT,bizList:COL7,head:['Date','Business','Customer','Order','Collection'],
+  rows:S=>{const X=coGet(),out=[];Object.keys(X).sort().reverse().forEach(d=>{if((S.from&&d<S.from)||(S.to&&d>S.to))return;(X[d]||[]).forEach(e=>COL7.forEach(k=>{if(S.biz&&S.biz!==k)return;const o=+(e.o||{})[k]||0,c=+(e.c||{})[k]||0;if(o||c)out.push([dd(d),k,e.nm,o,c])}))});return out},
+  total:rows=>['Total','','',rows.reduce((a,r)=>a+r[3],0),rows.reduce((a,r)=>a+r[4],0)]})}
+function dcrTable(B){entTable(B,{title:'My DCR table',sheet:'DCR',file:'DCR_table',st:DCT,head:['Date','Customer','Time','Purpose'],
+  rows:S=>getV().visits.filter(dpShow).filter(v=>!((S.from&&v.date<S.from)||(S.to&&v.date>S.to))).sort((a,b)=>a.date===b.date?((a.tin||'99')>(b.tin||'99')?1:-1):(a.date<b.date?1:-1)).map(v=>[dd(v.date),v.nm||'',(v.tin?hm(v.tin):'\u2014')+(v.tout?' \u2013 '+hm(v.tout):''),v.vp||v.purpose||'Visit']),
+  total:rows=>['Total',rows.length+' visit'+(rows.length===1?'':'s'),'','']})}
 const CP=mkPage('coep','Collection & Order',()=>{if(R.openUpload)R.openUpload()});
 function drawCO(){const B=CP.body;B.textContent='';
   /* two ways to do the daily work: type business-wise entries (this page) or upload the Excel file (old page, unchanged) */
@@ -7592,9 +7690,9 @@ function drawCO(){const B=CP.body;B.textContent='';
   const mb=(t,k,cls)=>{const b=el('button','st-btn co-b '+cls);b.type='button';b.innerHTML='<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+IC[k]+'</svg><span>'+t+'</span>';return b};
   const dl=mb('Download Excel','dl','co-p'),sh=mb('Share to Outlook','sh','co-p'),sp=mb('Save to app only','sv','co-s'),op=mb('Open Smart Post','op','co-s');dl.onclick=()=>run('dl');sh.onclick=()=>run('share');sp.onclick=()=>run('app');op.onclick=()=>{if(R.openTab)R.openTab('s','post')};
   [dl,sh,sp,op].forEach(b=>row.appendChild(b));
-  c.appendChild(pf);c.appendChild(fi);c.appendChild(row);c.appendChild(st);B.appendChild(c)}
-R.openCOE=()=>{CX.date=R.salesDay?R.salesDay():today();drawCO();show('coep')};   /* the file made today is for the sales day (yesterday; Thursday on Saturday), same as Today Sales and the uploaded file */
-function openD(){dcrPC=0;DV.date=R.salesDay?R.salesDay():today();drawD();show('dcrp')}
+  c.appendChild(pf);c.appendChild(fi);c.appendChild(row);c.appendChild(st);B.appendChild(c);coTable(B)}
+R.openCOE=()=>{if(window.RDL_ROLE==='admin')return;CX.date=R.salesDay?R.salesDay():today();drawCO();show('coep')};   /* the file made today is for the sales day (yesterday; Thursday on Saturday), same as Today Sales and the uploaded file */
+function openD(){if(window.RDL_ROLE==='admin')return;dcrPC=0;DV.date=R.salesDay?R.salesDay():today();drawD();show('dcrp')}
 
 /* =====================================================  MORE page  ===================================================== */
 /* =====================================================  NOTES  (Tools > Notes, under Schedule). Key rdl.notes.v1 is inside Backup / Restore. Notes are never deleted automatically. ===================================================== */
@@ -7649,6 +7747,7 @@ if(mp){mp.textContent='';mp.className='pg st';const l=el('div','set-list');
   tD=mk('linear-gradient(135deg,#34d399,#0b9a62)','<path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm0 2c-2.7 0-8 1.3-8 4v2h16v-2c0-2.7-5.3-4-8-4z"/>','DCR Entry',openD);
   [['#fff','#dbeafe','#a9c9f5','#1a56db'],['#fff','#d6f5f0','#a5e3da','#0d8f86'],['#fff','#e6e1fb','#c8bdf2','#5a43d6'],['#fff','#fff0cf','#f3d794','#d98200'],['#fff','#d6f5e8','#a5e6cb','#0b9a62']].forEach((c,i)=>{const b=l.children[i];if(!b)return;b.style.background='linear-gradient(135deg,'+c[0]+','+c[1]+')';b.style.borderColor=c[2];b.style.boxShadow='0 3px 10px '+c[3]+'22';b.querySelector('.chev').style.color=c[3];b.querySelector('b').style.color='#12306b'});
   if(tD){const hb=tD.closest('.set-item');if(hb)hb.style.display='none'}
+  if(window.RDL_ROLE==='admin'&&l.children[0])l.children[0].style.display='none';   /* Posting Center is for users only */
   const mtop=mp.appendChild(el('div','st-top')),mbk=el('button');mbk.type='button';mbk.innerHTML=BK;mbk.setAttribute('aria-label','Back');mbk.onclick=()=>{const g=document.querySelectorAll('.hdr > .ib')[1];if(g)g.click()};mtop.appendChild(mbk);mtop.appendChild(el('h2',null,'Daily Work Tools'));mp.appendChild(l);refreshMore()}
 ['visibilitychange'].forEach(ev=>document.addEventListener(ev,()=>setTimeout(refreshMore,50)));
 document.addEventListener('click',()=>setTimeout(()=>{if(mp&&mp.classList.contains('on'))refreshMore()},80),true);
