@@ -9476,13 +9476,22 @@ var COL7=['RPL','RNL','PCL','REXIME','RBCL','Jenphar','NLS'];
 function umap(){return J('rdlgate.umap',{})}
 function who(u){var m=umap(),x=m[u]||m[String(u||'').toLowerCase()]||{};return{name:x.name||u||'—',depot:x.depot||'—'}}
 /* ---- rows (one array per table row; numbers stay numbers) ---- */
-function coRows(){var X=J('rdl.coe.v1',{}),out=[];
-  Object.keys(X).forEach(function(d){(X[d]||[]).forEach(function(e){var w=who(e._u);
-    COL7.forEach(function(k){var o=+(e.o||{})[k]||0,c=+(e.c||{})[k]||0;if(o||c)out.push({d:d,dp:w.depot,u:w.name,b:k,nm:e.nm||'',rm:e.rm||'',o:o,c:c,r:[fd(d),w.depot,w.name,k,e.nm||'',o,c]})})})});
+/* entries the admin deleted from this table: remembered (rdl.etdel.v1) so that the next merge of the user's backup cannot bring them back */
+function tomb(){var a=J('rdl.etdel.v1',[]),o={};(Array.isArray(a)?a:[]).forEach(function(k){o[k]=1});return o}
+function ckey(d,e){return 'c|'+d+'|'+(e._u||'')+'|'+(e.id||JSON.stringify(e.o||{})+JSON.stringify(e.c||{})+(e.nm||''))}
+function vkey(e){return 'v|'+(e._u||'')+'|'+(e.id||[e.date,e.cu,e.tin,e.tout].join('~'))}
+function delKeys(keys){
+  var a=J('rdl.etdel.v1',[]);if(!Array.isArray(a))a=[];var set={};keys.forEach(function(k){set[k]=1;if(a.indexOf(k)<0)a.push(k)});
+  LS.setItem('rdl.etdel.v1',JSON.stringify(a));
+  var X=J('rdl.coe.v1',{}),ch=0;Object.keys(X).forEach(function(d){var n=(X[d]||[]).filter(function(e){return !set[ckey(d,e)]});if(n.length!==(X[d]||[]).length){X[d]=n;ch=1}});if(ch)LS.setItem('rdl.coe.v1',JSON.stringify(X));
+  var V=J('rdl.visit.v1',{});if(Array.isArray(V.visits)){var n2=V.visits.filter(function(e){return !set[vkey(e)]});if(n2.length!==V.visits.length){V.visits=n2;LS.setItem('rdl.visit.v1',JSON.stringify(V))}}}
+function coRows(){var X=J('rdl.coe.v1',{}),out=[],T=tomb();
+  Object.keys(X).forEach(function(d){(X[d]||[]).forEach(function(e){if(T[ckey(d,e)])return;var w=who(e._u);
+    COL7.forEach(function(k){var o=+(e.o||{})[k]||0,c=+(e.c||{})[k]||0;if(o||c)out.push({d:d,k:ckey(d,e),dp:w.depot,u:w.name,b:k,nm:e.nm||'',rm:e.rm||'',o:o,c:c,r:[fd(d),w.depot,w.name,k,e.nm||'',o,c]})})})});
   return out}
-function dcrRows(){var x=J('rdl.visit.v1',{}),v=Array.isArray(x.visits)?x.visits:[];
-  return v.map(function(e){var w=who(e._u),t=(e.tin||'—')+(e.tout?' – '+e.tout:'');
-    return{d:e.date,dp:w.depot,u:w.name,b:'',t:e.tin||'99',r:[fd(e.date),w.depot,w.name,e.nm||'',t,e.vp||'Visit',e.vw||'',e.note||'']}})}
+function dcrRows(){var x=J('rdl.visit.v1',{}),v=Array.isArray(x.visits)?x.visits:[],T=tomb();
+  return v.filter(function(e){return !T[vkey(e)]}).map(function(e){var w=who(e._u),t=(e.tin||'—')+(e.tout?' – '+e.tout:'');
+    return{d:e.date,k:vkey(e),dp:w.depot,u:w.name,b:'',t:e.tin||'99',r:[fd(e.date),w.depot,w.name,e.nm||'',t,e.vp||'Visit',e.vw||'',e.note||'']}})}
 /* ---- one-sheet xlsx ---- */
 function xlsx(sheet,head,rows){
   var zip=new JSZip(),cl=function(i){return String.fromCharCode(65+i)};
@@ -9527,9 +9536,14 @@ function open(){
     var info=el('div','stt',rows.length+' row'+(rows.length===1?'':'s')+' • '+(umap()&&Object.keys(umap()).length?Object.keys(umap()).length+' user(s) merged':'no user merged yet'));info.style.margin='6px 0';box.appendChild(info);
     var wrap=el('div');wrap.style.cssText='overflow-x:auto;margin:8px 0';box.appendChild(wrap);
     if(!rows.length){wrap.appendChild(el('div','mv-empty','No entry for this filter. Users’ entries come here after their backup is merged (it happens by itself on the Home page, or use Data Hub).'))}
-    else{var tb=el('table','mv-tbl'),th=el('tr');head.forEach(function(x){th.appendChild(el('th',null,x))});tb.appendChild(th);
-      data.concat([tot]).forEach(function(rw,i){var tr=el('tr',i===data.length?'tot':null);rw.forEach(function(v){var c=el('td',null,typeof v==='number'?fm(v):String(v));if(typeof v==='number')c.style.textAlign='right';tr.appendChild(c)});tb.appendChild(tr)});wrap.appendChild(tb)}
+    else{var tb=el('table','mv-tbl'),th=el('tr');head.forEach(function(x){th.appendChild(el('th',null,x))});th.appendChild(el('th',null,''));tb.appendChild(th);
+      data.concat([tot]).forEach(function(rw,i){var tr=el('tr',i===data.length?'tot':null);rw.forEach(function(v){var c=el('td',null,typeof v==='number'?fm(v):String(v));if(typeof v==='number')c.style.textAlign='right';tr.appendChild(c)});
+        var dc=el('td');if(i<data.length){var rx=rows[i],xb=el('button',null,'\u00d7');xb.type='button';xb.setAttribute('aria-label','Delete this entry');xb.style.cssText='border:0;background:#fde8e6;color:#c0392b;font-size:20px;line-height:1;width:34px;height:34px;border-radius:10px;font-weight:700';
+          xb.onclick=function(){if(!confirm('Delete this entry?\n\n'+rx.u+' \u2022 '+rx.r[0]+(ST.tab==='co'?' \u2022 '+rx.r[4]+'\n(all businesses of this customer entry are removed)':'')+'\n\nIt is also removed when the user\u2019s backup is merged again.'))return;delKeys([rx.k]);draw()};dc.appendChild(xb)}
+        tr.appendChild(dc);tb.appendChild(tr)});wrap.appendChild(tb)}
     var dl=el('button','st-btn','Download Excel');dl.type='button';var msg=el('div','stt');
+    if(rows.length){var da=el('button','st-btn','Delete all '+rows.length+' shown row'+(rows.length===1?'':'s'));da.type='button';da.style.cssText='background:#fde8e6;color:#c0392b;margin-top:10px';
+      da.onclick=function(){if(!confirm('Delete all '+rows.length+' shown row(s)?\n\nOnly what is shown with the current filter (depot / user / dates) is deleted. This cannot be undone.'))return;var ks={};rows.forEach(function(x){ks[x.k]=1});delKeys(Object.keys(ks));draw()};box.appendChild(da)}
     if(ST.tab==='co'){
       /* default-format Excel: your own Collection & Order file (kept on Drive) + the dates and customers of the filtered rows */
       var fi=document.createElement('input');fi.type='file';fi.accept='.xlsx';fi.hidden=true;
