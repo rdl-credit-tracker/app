@@ -1,5 +1,5 @@
 /* RDL service worker: network-first, so users always get the newest app; cache is only an offline fallback. */
-var C='rdl-shell-v1';
+var C='rdl-shell-v2';
 self.addEventListener('install',function(e){self.skipWaiting()});
 self.addEventListener('activate',function(e){e.waitUntil(caches.keys().then(function(k){return Promise.all(k.filter(function(x){return x!==C}).map(function(x){return caches.delete(x)}))}).then(function(){return self.clients.claim()}))});
 self.addEventListener('fetch',function(e){
