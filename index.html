@@ -1819,10 +1819,25 @@ document.addEventListener('visibilitychange',function(){if(document.visibilitySt
 /* ---------- admin: push database to depots ---------- */
 function ledSig(){var L=jget('rdl.ledger.v1');if(!L)return '0';var s='';try{s=JSON.stringify({rv:L.rv||[],dz:L.dz||[]})}catch(e){}return (L.rv||[]).length+'/'+(L.dz||[]).length+'/'+s.length}
 function sigNow(){var m=jget('rdl.master.v1'),d=jget('rdl.dcr.v1');return m?(m.at+'|'+(d?d.at:0)+'|'+(LS.getItem('rdlgate.cut')||'')+'|'+ledSig()):''}
+/* Removed test depots (exact spelling; CTG. West Depot is the real one and stays). Their rows leave this phone when the same customer also exists under a real depot, and are never published. */
+var DEL_DP=['Dhaka Depot','Ctg. West Depot'];
+function purgeDeleted(){
+  var raw=LS.getItem('rdl.master.v1');if(!raw||!DEL_DP.some(function(d){return raw.indexOf('"'+d+'"')>=0}))return;
+  var m;try{m=JSON.parse(raw)}catch(e){return}
+  var isDel=function(r){return DEL_DP.indexOf(String(r.dp||'').trim())>=0},keep={};
+  (m.cr||[]).forEach(function(r){if(!isDel(r))keep[String(r.bp)]=1});(m.out||[]).forEach(function(r){if(!isDel(r))keep[String(r.cu)]=1});
+  var n0=(m.cr||[]).length+(m.out||[]).length;
+  m.cr=(m.cr||[]).filter(function(r){return !isDel(r)||!keep[String(r.bp)]});m.out=(m.out||[]).filter(function(r){return !isDel(r)||!keep[String(r.cu)]});
+  var gone=n0-(m.cr.length+m.out.length),left={};m.cr.concat(m.out).forEach(function(r){if(isDel(r))left[String(r.bp!=null?r.bp:r.cu)]=1});
+  if(gone){var was=sysW;sysW=1;try{LS.setItem('rdl.master.v1',JSON.stringify(m))}finally{sysW=was}}
+  var nl=Object.keys(left).length;
+  try{if(gone||nl){var k=(gone||0)+'/'+nl;if(sessionStorage.getItem('rdlgate.dpn')!==k){sessionStorage.setItem('rdlgate.dpn',k);
+    toast((gone?'Test depots removed from this phone ('+gone+' rows). ':'')+(nl?nl+' customer'+(nl===1?'':'s')+' exist only under a removed depot name, so they were kept here and are not published.':''))}}}catch(e){}}
 function buildPkgs(){
+  purgeDeleted();
   var m=jget('rdl.master.v1');if(!m)return{err:'No database in this app yet. Upload the Outstanding and Credit Limit files first.'};
   var d=jget('rdl.dcr.v1'),by={},un=0,cut=LS.getItem('rdlgate.cut')||'';
-  function add(r,kind){var k=String(r.dp||'').trim();if(!k){un++;return}
+  function add(r,kind){var k=String(r.dp||'').trim();if(!k){un++;return}if(DEL_DP.indexOf(k)>=0)return;
     var b=by[k]||(by[k]={depot:k,at:m.at,cut:cut,out:[],cr:[],_n:{}});b[kind].push(r);b._n[String(r.nm||'').toLowerCase()]=1}
   (m.out||[]).forEach(function(r){add(r,'out')});(m.cr||[]).forEach(function(r){add(r,'cr')});
   var names=Object.keys(by);if(!names.length)return{err:'No Depot found. Add a "Depot" column to both Excel files and upload again.'};
@@ -7545,11 +7560,15 @@ function dcrExcelCard(B){
 /* ---- Collection & Order Entry: the day's orders and collections are typed here, then (1) added to the end of the user's latest Collection & Order Excel, copying the last block's look exactly, and (2) saved into the app as the Daily Collection & Order data, so Smart Post can send them to Drafts. Nothing is posted from here. ---- */
 const COL7=['RPL','RNL','PCL','REXIME','RBCL','Jenphar','NLS'],OCL='DEFGHIJ'.split(''),CCL='MNOPQRS'.split('');
 const CX={name:'',buf:null,date:today()},coGet=()=>jget('rdl.coe.v1',{}),coSet=x=>jset('rdl.coe.v1',x),coList=d=>coGet()[d]||[];
+/* final posting: an entry is final once any of its Sales / Collection lines is posted in the ledger (same key as Smart Post). Drafts and Smart Post saves are not final. */
+const coNorm=x=>String(x||'').toLowerCase().replace(/\s+/g,' ').trim(),
+coPosted=(d,e)=>{try{const L=JSON.parse(localStorage.getItem('rdl.ledger.v1')||'null'),pl=(L&&L.pl)||{},n=coNorm(e.nm);return COL7.some(k=>(+(e.o||{})[k]>0&&pl['o|'+d+'|'+n+'|'+k.toLowerCase()])||(+(e.c||{})[k]>0&&pl['c|'+d+'|'+n+'|'+k.toLowerCase()]))}catch(x){return false}};
 /* the app remembers the Collection & Order Excel: chosen once, then every new Excel it makes is kept for the next day */
 const coDb=(m,fn)=>new Promise((res,rej)=>{try{const q=indexedDB.open('rdl-coefile',1);q.onupgradeneeded=()=>q.result.createObjectStore('f');q.onerror=()=>rej(q.error);q.onsuccess=()=>{const d=q.result,t=d.transaction('f',m),r=fn(t.objectStore('f'));t.oncomplete=()=>{d.close();res(r&&r.result)};t.onerror=t.onabort=()=>{d.close();rej(t.error)}}}catch(e){rej(e)}}),
-coFileGet=()=>coDb('readonly',s=>s.get('latest')).catch(()=>null),coFileSet=o=>coDb('readwrite',s=>s.put(o,'latest'));
+coFileGet=k=>coDb('readonly',s=>s.get(k||'latest')).catch(()=>null),coFileSet=(o,k)=>coDb('readwrite',s=>s.put(o,k||'latest'));
 const rnd2=x=>Math.round(x*100)/100,fm2=n=>Number(n).toLocaleString('en-US',{maximumFractionDigits:2});
 (function(){const s=document.createElement('style');s.textContent='.coe-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:6px 0 10px}.coe-c small{display:block;font-weight:700;margin:0 0 3px;opacity:.8}.coe-c input{width:100%;box-sizing:border-box}';document.head.appendChild(s)})();
+(function(){const s=document.createElement('style');s.textContent='.co-tcard{padding:0!important;overflow:hidden}.co-th{padding:11px 14px;font-weight:800;font-size:15px;color:#fff;text-align:center;background:linear-gradient(100deg,#0a49b5,#0a86d0 70%,#16b8c0)}.co-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}.co-tbl{border-collapse:separate;border-spacing:0;table-layout:fixed;width:100%;min-width:1010px}.co-k0{width:150px}.co-kb{width:104px}.co-kr{width:130px}.co-kx{width:44px}.co-tbl th{background:#eaf2ff;color:#0a3fa8;font-size:12px;font-weight:800;padding:8px 6px;border-bottom:1px solid #cfe0f6;white-space:nowrap}.co-tbl th small{display:block;font-size:9.5px;font-weight:700;opacity:.75}.co-tbl td{padding:6px;border-bottom:1px solid #e6eefb;vertical-align:top}.co-tbl .co-c0{position:sticky;left:0;z-index:2;background:#fff;border-right:2px solid #cfe0f6;text-align:left}.co-tbl th.co-c0{z-index:3;background:#eaf2ff}.co-n{width:100%;min-width:0;box-sizing:border-box;padding:6px 7px;border-radius:8px;border:1px solid #cfe0f6;font-size:13.5px;text-align:right;background:#fff;color:#0b2a5b;margin:0;-moz-appearance:textfield;appearance:textfield}.co-n.o{border-color:#b9d4f6;background:#f4f9ff;margin-bottom:4px}.co-n.c{border-color:#a9e0c6;background:#f2fbf6}.co-n.co-rm{text-align:left}.co-cu{width:100%;box-sizing:border-box;padding:7px;border-radius:8px;border:1px solid #cfe0f6;font-size:13.5px;margin:0}.co-cu.bad{border-color:#d4183d;background:#fff0f3}.co-cn{font-size:11.5px;color:#35507d;margin-top:3px;line-height:1.25;word-break:break-word}.co-x{border:0;background:#ffe9ee;color:#d4183d;border-radius:8px;width:28px;height:28px;font-size:17px;font-weight:800;line-height:1;cursor:pointer}.co-tbl tr.co-sv td.co-c0{box-shadow:inset 3px 0 0 #0b9a62}.co-sg{position:static}.co-tbl tr.co-pst td{background:#f3f6fa}.co-tbl tr.co-pst td.co-c0{box-shadow:inset 3px 0 0 #6b7686}.co-tbl tr.co-pst input:disabled{background:#eef2f7;color:#4a5668;cursor:not-allowed}.co-pb{display:inline-block;margin-top:3px;padding:1px 7px;border-radius:9px;background:#e1e7ef;color:#3b475a;font-size:10.5px;font-weight:800}.co-submit{margin:10px 12px 12px!important;width:calc(100% - 24px)!important}.co-tcard .stt{margin:8px 12px 0}@media(min-width:1000px){.co-tbl{min-width:0}.co-k0{width:25%}.co-kb{width:9.4%}.co-kr{width:5.5%}.co-kx{width:3%}.co-tbl .co-c0{max-width:none}}';document.head.appendChild(s)})();
 async function buildCoXlsx(buf,date,E){
   const zip=await JSZip.loadAsync(buf),rd=async p=>{const f=zip.file(p);return f?f.async('string'):null};
   let wb=await rd('xl/workbook.xml'),rel=await rd('xl/_rels/workbook.xml.rels'),ct=await rd('[Content_Types].xml');
@@ -7561,9 +7580,8 @@ async function buildCoXlsx(buf,date,E){
   if(!/<c r="K7"[^>]*><f>/.test(sx))throw new Error('This does not look like the Collection & Order file');
   const rows=[...sx.matchAll(/<row r="(\d+)"[^>]*?(?:\/>|>[\s\S]*?<\/row>)/g)];
   let lastRow=0,lastTop=0,lastDate=0;
-  for(const m of rows){const n=+m[1];if(n>lastRow)lastRow=n;const b=new RegExp('<c r="B'+n+'"[^>]*>\\s*<v>([^<]+)</v>').exec(m[0]);if(b&&n>7){const v=+b[1];if(v>lastDate)lastDate=v;lastTop=n}}
+  for(const m of rows){const n=+m[1];if(n>lastRow)lastRow=n;const b=new RegExp('<c r="B'+n+'"[^>]*>\\s*<v>([^<]+)</v>').exec(m[0]);if(b&&n>7){lastDate=+b[1];lastTop=n}}
   const ts=serialOf(date);
-  if(lastTop&&ts<=lastDate)throw new Error('This date is already in the file (last date: '+dateOfSerial(lastDate).toISOString().slice(0,10)+')');
   const sa=s=>s?' s="'+s+'"':'',cs=(r,s,t)=>t===''||t==null?'<c r="'+r+'"'+sa(s)+'/>':'<c r="'+r+'"'+sa(s)+' t="inlineStr"><is><t xml:space="preserve">'+XE(t)+'</t></is></c>';
   const rowOf=(x,n)=>{const m=new RegExp('<row r="'+n+'"[^>]*?(?:/>|>[\\s\\S]*?</row>)').exec(x);if(!m)throw new Error('Unexpected sheet layout');return m[0]};
   const tpl=(x,top)=>{const mg=new RegExp('<mergeCell ref="B'+top+':B(\\d+)"').exec(x),end=mg?+mg[1]:top;
@@ -7613,13 +7631,31 @@ async function buildCoXlsx(buf,date,E){
     let mr=0;for(const m of rel.matchAll(/Id="rId(\d+)"/g))mr=Math.max(mr,+m[1]);const nr='rId'+(mr+1);
     rel=rel.replace('</Relationships>','<Relationship Id="'+nr+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet'+nn+'.xml"/></Relationships>');
     let ms=0;for(const s of shs)ms=Math.max(ms,+(/sheetId="(\d+)"/.exec(s)||[0,0])[1]);
-    const bn=/name="([^"]*)"/.exec(lastSh)[1],nme=/[A-Za-z]+-\d{4}\s*$/.test(bn)?bn.replace(/[A-Za-z]+-\d{4}\s*$/,mon):bn.trim()+'-'+mon;
+    const bn=/name="([^"]*)"/.exec(lastSh)[1];let nme=/[A-Za-z]+-\d{4}\s*$/.test(bn)?bn.replace(/[A-Za-z]+-\d{4}\s*$/,mon):bn.trim()+'-'+mon;
+    {const used=shs.map(z=>(/name="([^"]*)"/.exec(z)||[0,''])[1]);let q=2;const b0=nme;while(used.includes(nme))nme=b0+' '+(q++)}
     wb=wb.replace(lastSh,lastSh+'<sheet name="'+nme+'" sheetId="'+(ms+1)+'" r:id="'+nr+'"/>').replace(/activeTab="\d+"/,'activeTab="'+shs.length+'"');
     ct=ct.replace('</Types>','<Override PartName="/'+np2+'" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>');
     zip.file('xl/workbook.xml',wb);zip.file('xl/_rels/workbook.xml.rels',rel);zip.file('[Content_Types].xml',ct);msg='New sheet: '+nme;
   }
   const blob=await zip.generateAsync({type:'blob',compression:'DEFLATE',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
   return{blob,msg,n}}
+/* every saved date goes into the Excel in the order it was first entered (19 then 17 stays 19 then 17); the order is kept in rdl.coe.ord.v1 */
+const coOrd=()=>{const o=jget('rdl.coe.ord.v1',[]);return Array.isArray(o)?o:[]},
+coDates=()=>{const X=coGet(),o=coOrd().filter((d,i,a)=>a.indexOf(d)===i&&(X[d]||[]).length),rest=Object.keys(X).filter(d=>(X[d]||[]).length&&!o.includes(d)).sort();return o.concat(rest)},
+coOrdAdd=d=>{const o=coOrd();if(!o.includes(d)){o.push(d);jset('rdl.coe.ord.v1',o)}};
+async function coFileDates(buf){const zip=await JSZip.loadAsync(buf),set=new Set(),ps=[];zip.forEach(p=>{if(/^xl\/worksheets\/sheet\d+\.xml$/.test(p))ps.push(p)});
+  for(const p of ps){const x=await zip.file(p).async('string');for(const m of x.matchAll(/<c r="B(\d+)"[^>]*>\s*<v>([^<]+)<\/v>/g)){if(+m[1]>7)set.add(+m[2])}}return set}
+/* master file + every saved date (the dates already inside the master file are not added twice) */
+async function buildCoAll(base,X0,ds0){const X=X0||coGet(),ds=ds0||coDates(),have=await coFileDates(base);let buf=base,blob=null,days=0,n=0,last='';
+  for(const d of ds){if(have.has(serialOf(d)))continue;const E=X[d];const r=await buildCoXlsx(buf,d,E);blob=r.blob;buf=await blob.arrayBuffer();days++;n+=E.length;last=r.msg}
+  if(!blob)blob=new Blob([base],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  return{blob,days,n,last,all:ds.length}}
+/* the master file is kept on Drive (one per user) so any phone or computer builds from the same file */
+const b64of=buf=>{let s='';const u=new Uint8Array(buf),k=0x8000;for(let i=0;i<u.length;i+=k)s+=String.fromCharCode.apply(null,u.subarray(i,i+k));return btoa(s)},
+bufOf=b=>{const s=atob(b),u=new Uint8Array(s.length);for(let i=0;i<s.length;i++)u[i]=s.charCodeAt(i);return u.buffer};
+window.RDL_CO={buildCoAll:(b,X,d)=>buildCoAll(b,X,d),fileGet:coFileGet,fileSet:coFileSet,srvGet:()=>coSrvGet(),srvPut:(n,b)=>coSrvPut(n,b)};   /* used by the admin Entry Tables page */
+const coSrvPut=(name,buf)=>window.RDLGATE&&RDLGATE.api?RDLGATE.api('coPutBase',{name,b64:b64of(buf)},true):Promise.reject(new Error('offline'));
+const coSrvGet=()=>window.RDLGATE&&RDLGATE.api?RDLGATE.api('coGetBase',null,true).then(j=>j&&j.b64?{name:j.name||'Collection and Order.xlsx',buf:bufOf(j.b64)}:null):Promise.resolve(null);
 /* the day's entries become the app's Daily Collection & Order data (same shape as the uploaded file), so Smart Post can send them to Drafts */
 function coSave(date,E){const d=jget('rdl.dcr.v1',null)||{rows:[]},cl=o=>{const r={};COL7.forEach(k=>{const v=+(o||{})[k];if(v)r[k]=v});return r},nk=s=>String(s||'').toLowerCase();
   const rows=(d.rows||[]).filter(r=>!(r.d===date&&E.some(e=>nk(e.nm)===nk(r.n))));
@@ -7655,9 +7691,9 @@ function entTable(B,o){
   dl.onclick=async()=>{const rows=cur();if(!rows.length){msg.className='stt bad';msg.textContent='Nothing to download for this filter';return}
     try{const t=o.total&&o.total(rows),blob=await xlsxTable(o.sheet,o.head,t?rows.concat([t]):rows),a=el('a');a.href=URL.createObjectURL(blob);a.download=o.file+'_'+today()+'.xlsx';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);msg.className='stt ok';msg.textContent='\u2713 Downloaded'}
     catch(x){msg.className='stt bad';msg.textContent='\u2717 Could not make the file'}};
-  card.appendChild(dl);card.appendChild(msg);draw()}
+  if(!o.noDl){card.appendChild(dl);card.appendChild(msg)}draw()}
 const COT={from:addD(today(),-30),to:today(),biz:''},DCT={from:addD(today(),-30),to:today()};
-function coTable(B){entTable(B,{title:'My Collection & Order table',sheet:'Collection & Order',file:'Collection_Order_table',st:COT,bizList:COL7,head:['Date','Business','Customer','Order','Collection'],
+function coTable(B){entTable(B,{noDl:true,title:'My Collection & Order table',sheet:'Collection & Order',file:'Collection_Order_table',st:COT,bizList:COL7,head:['Date','Business','Customer','Order','Collection'],
   rows:S=>{const X=coGet(),out=[];Object.keys(X).sort().reverse().forEach(d=>{if((S.from&&d<S.from)||(S.to&&d>S.to))return;(X[d]||[]).forEach(e=>COL7.forEach(k=>{if(S.biz&&S.biz!==k)return;const o=+(e.o||{})[k]||0,c=+(e.c||{})[k]||0;if(o||c)out.push([dd(d),k,e.nm,o,c])}))});return out},
   total:rows=>['Total','','',rows.reduce((a,r)=>a+r[3],0),rows.reduce((a,r)=>a+r[4],0)]})}
 function dcrTable(B){entTable(B,{title:'My DCR table',sheet:'DCR',file:'DCR_table',st:DCT,head:['Date','Customer','Time','Purpose'],
@@ -7668,51 +7704,89 @@ function drawCO(){const B=CP.body;B.textContent='';
   /* two ways to do the daily work: type business-wise entries (this page) or upload the Excel file (old page, unchanged) */
   {const sw=el('div','od-actions'),a=el('button','st-btn','Entry'),u=el('button','st-btn od-clear','Upload');a.type=u.type='button';
    u.onclick=()=>{if(window.RDL_openSet)window.RDL_openSet('setdcr')};sw.appendChild(a);sw.appendChild(u);B.appendChild(sw)}
-  const di=el('input','list-search');di.type='date';di.value=CX.date;di.max=today();di.onchange=()=>{if(di.value){CX.date=di.value;drawCO()}};B.appendChild(di);
-  const E=coList(CX.date),box=el('div','st-card');B.appendChild(box);
-  box.appendChild(el('label','od-label','Customer Name'));const pk=picker(box,{});
-  const grid=(title,kind)=>{const h=el('div','co-sec co-'+kind);h.innerHTML='<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+(kind==='o'?'<path d="M6 3h12l2 4v14H4V7zM4 7h16M9 11a3 3 0 0 0 6 0"/>':'<rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 9v.01M18 15v.01"/>')+'</svg><span></span>';h.lastChild.textContent=title;box.appendChild(h);const g=el('div','coe-grid co-g-'+kind),ins={};COL7.forEach(k=>{const w=el('div','coe-c');w.appendChild(el('small',null,k));const i=el('input','list-search');i.type='number';i.inputMode='decimal';i.min='0';i.step='any';w.appendChild(i);g.appendChild(w);ins[k]=i});box.appendChild(g);return ins};
-  const oi=grid('Business Wise Order','o'),ci=grid('Business Wise Collection','c');
-  const nt=el('textarea','mv-ta');nt.placeholder='Remarks';field(box,'Remarks',nt);
-  const msg=el('div','stt');box.appendChild(msg);
-  const ab=el('button','st-btn','+ Add entry');ab.type='button';box.appendChild(ab);
-  ab.onclick=()=>{const bad=x=>{msg.className='stt bad';msg.textContent=x};if(!pk.cu)return bad('Choose the customer from the list');if(!CX.date||CX.date>today())return bad('Choose a valid date (not in the future)');
-    const rd=ins=>{const r={};COL7.forEach(k=>{const v=+ins[k].value;if(v>0)r[k]=v;else if(v<0)r.__bad=1});return r},o=rd(oi),c=rd(ci);if(o.__bad||c.__bad)return bad('Amounts cannot be negative');
-    if(!Object.keys(o).length&&!Object.keys(c).length)return bad('Enter at least one order or collection amount');
-    if(E.some(e=>e.cu===pk.cu))return bad('This customer is already added for this day. Delete it first to change it.');
-    const X=coGet();X[CX.date]=E.concat([{id:Date.now()+'',cu:pk.cu,nm:pk.nm,o,c,rm:nt.value.trim()}]);coSet(X);drawCO()};
+  const di=el('input','list-search');di.type='date';di.value=CX.date;di.max=today();di.onchange=()=>{if(!di.value)return;if(CX.dirty&&!confirm('The table has changes that are not saved. Change the date and lose them?')){di.value=CX.date;return}CX.date=di.value;CX.rows=null;CX.dirty=false;drawCO()};B.appendChild(di);
+  const E=coList(CX.date);
+  /* ---- Business Wise Order & Collection: ONE input table. A row = one customer; every business has its own column, Order on top, Collection below ---- */
+  if(CX.rowsDate!==CX.date||!CX.rows){CX.rows=E.map(e=>({id:e.id,cu:e.cu,nm:e.nm,o:Object.assign({},e.o||{}),c:Object.assign({},e.c||{}),rm:e.rm||'',saved:true,posted:coPosted(CX.date,e)}));CX.rowsDate=CX.date;CX.dirty=false}
+  const rows=CX.rows,CL=custs();
+  const blank=()=>({id:'',cu:'',nm:'',o:{},c:{},rm:'',txt:'',saved:false}),isBlank=r=>!r.cu&&!r.txt&&!Object.keys(r.o).length&&!Object.keys(r.c).length&&!(r.rm||'').trim();
+  if(!rows.length||!isBlank(rows[rows.length-1]))rows.push(blank());
+  const tcard=el('div','st-card co-tcard');B.appendChild(tcard);tcard.appendChild(el('div','co-th','Business Wise Order & Collection'));
+  const wrap=el('div','co-wrap'),tbl=el('table','co-tbl'),thd=el('thead'),hr=el('tr'),tb=el('tbody');
+  {const cg=document.createElement('colgroup');['co-k0'].concat(COL7.map(()=>'co-kb'),['co-kr','co-kx']).forEach(c=>{const x=document.createElement('col');x.className=c;cg.appendChild(x)});tbl.appendChild(cg)}
+  tbl.appendChild(thd);thd.appendChild(hr);tbl.appendChild(tb);wrap.appendChild(tbl);tcard.appendChild(wrap);
+  hr.appendChild(el('th','co-c0','Customer (code or name)'));
+  COL7.forEach(k=>{const h=el('th');h.appendChild(document.createTextNode(k));h.appendChild(el('small',null,'Order / Collection'));hr.appendChild(h)});
+  hr.appendChild(el('th',null,'Remarks'));hr.appendChild(el('th'));
+  const msg=el('div','stt');
+  const flat=()=>[...tb.querySelectorAll('input')].filter(i=>!i.disabled);
+  const nextFrom=el0=>{const f=flat(),i=f.indexOf(el0);if(i>=0&&f[i+1]){f[i+1].focus();try{f[i+1].select()}catch(e){}}};
+  const find=v=>{v=v.trim().toLowerCase();if(!v)return[];const ex=CL.filter(c=>c.code.toLowerCase()===v);if(ex.length)return ex;const nx=CL.filter(c=>c.name.toLowerCase()===v);if(nx.length)return nx;return CL.filter(c=>c.code.toLowerCase().includes(v)||c.name.toLowerCase().includes(v)||(c.dp||'').toLowerCase().includes(v))};
+  const grow=()=>{const last=rows[rows.length-1];if(!isBlank(last)){const r=blank();rows.push(r);tb.appendChild(mkRow(r))}};
+  const setMsg=(t,k)=>{msg.className='stt'+(k?' '+k:'');msg.textContent=t||''};
+  function mkRow(r){
+    const tr=el('tr',r.saved?'co-sv':''),t0=el('td','co-c0'),ci=el('input','co-cu'),cn=el('div','co-cn',r.cu?r.nm:''),sg=el('div','od-suggestions co-sg');
+    ci.type='text';ci.placeholder='Code or name';ci.autocomplete='off';ci.value=r.cu||r.txt||'';t0.appendChild(ci);t0.appendChild(cn);t0.appendChild(sg);tr.appendChild(t0);
+    if(r.posted){tr.classList.add('co-pst');ci.disabled=true;t0.appendChild(el('div','co-pb','Posted \u2022 locked'))}
+    const pick=c=>{if(rows.some(x=>x!==r&&x.cu===c.code)){r.cu='';r.nm='';r.txt='';ci.value='';cn.textContent='';sg.textContent='';setMsg('✗ '+c.name+' is already in the table for this day','bad');return false}
+      r.cu=c.code;r.nm=c.name;r.txt='';ci.value=c.code;cn.textContent=c.name+(c.dp?' • '+c.dp:'');ci.classList.remove('bad');sg.textContent='';setMsg('');CX.dirty=true;grow();return true};
+    const resolve=()=>{const v=ci.value.trim();if(!v){r.cu='';r.nm='';r.txt='';cn.textContent='';ci.classList.remove('bad');return true}
+      if(r.cu&&v===r.cu)return true;const m=find(v);if(m.length===1)return pick(m[0]);
+      if(m.length>1){sg.textContent='';m.slice(0,8).forEach(c=>{const b=el('button','od-sug',c.name+' ');b.type='button';b.appendChild(el('small',null,c.code+(c.dp?' • '+c.dp:'')));b.onpointerdown=e=>e.preventDefault();b.onclick=()=>{if(pick(c))nextFrom(ci)};sg.appendChild(b)});return false}
+      ci.classList.add('bad');cn.textContent='Customer not found';return false};
+    ci.addEventListener('input',()=>{r.cu='';r.nm='';r.txt=ci.value;cn.textContent='';ci.classList.remove('bad');CX.dirty=true;sg.textContent='';const v=ci.value.trim().toLowerCase();grow();if(v.length<2)return;
+      find(v).slice(0,8).forEach(c=>{const b=el('button','od-sug',c.name+' ');b.type='button';b.appendChild(el('small',null,c.code+(c.dp?' • '+c.dp:'')));b.onpointerdown=e=>e.preventDefault();b.onclick=()=>{if(pick(c))nextFrom(ci)};sg.appendChild(b)})});
+    ci.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();if(resolve()&&(r.cu||!ci.value.trim()))nextFrom(ci)}});
+    ci.addEventListener('blur',()=>{if(ci.value.trim()&&!r.cu){const m=find(ci.value);if(m.length===1)pick(m[0]);else if(!m.length){ci.classList.add('bad');cn.textContent='Customer not found'}}});
+    COL7.forEach(k=>{const td=el('td','co-bz');
+      const mk=(kind,cls,ph)=>{const i=el('input','co-n '+cls);i.type='text';i.inputMode='decimal';i.autocomplete='off';i.placeholder=ph;const v=r[kind][k];i.value=v?String(v):'';
+        i.addEventListener('input',()=>{let t=i.value.replace(/[^0-9.]/g,'');const p=t.indexOf('.');if(p>=0)t=t.slice(0,p+1)+t.slice(p+1).replace(/\./g,'');if(t!==i.value)i.value=t;const n=parseFloat(t);if(n>0)r[kind][k]=n;else delete r[kind][k];CX.dirty=true;grow()});
+        i.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();nextFrom(i)}});return i};
+      const io=mk('o','o','Order'),ic=mk('c','c','Collection');if(r.posted)io.disabled=ic.disabled=true;td.appendChild(io);td.appendChild(ic);tr.appendChild(td)});
+    const tr0=el('td'),rm=el('input','co-n co-rm');rm.type='text';rm.placeholder='Remarks';rm.value=r.rm||'';if(r.posted)rm.disabled=true;rm.addEventListener('input',()=>{r.rm=rm.value;CX.dirty=true;grow()});rm.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();nextFrom(rm)}});tr0.appendChild(rm);tr.appendChild(tr0);
+    const tx=el('td'),x=el('button','co-x','×');x.type='button';x.setAttribute('aria-label','Delete row');
+    x.onclick=()=>{if(r.posted)return setMsg('\u2717 This entry is already posted, so it cannot be changed or deleted','bad');if(r.saved){if(!confirm('Delete this saved entry?'))return;const X=coGet();X[CX.date]=coList(CX.date).filter(z=>z.id!==r.id);coSet(X);CX.rows=rows.filter(z=>z!==r);drawCO();return}
+      const i=rows.indexOf(r);if(i>=0)rows.splice(i,1);tr.remove();if(!rows.length||!isBlank(rows[rows.length-1])){const nb=blank();rows.push(nb);tb.appendChild(mkRow(nb))}CX.dirty=true};
+    if(r.posted){x.style.display='none'}tx.appendChild(x);tr.appendChild(tx);return tr}
+  rows.forEach(r=>tb.appendChild(mkRow(r)));
+  const sb=el('button','st-btn co-submit','Submit');sb.type='button';tcard.appendChild(msg);tcard.appendChild(sb);
+  sb.onclick=()=>{if(!CX.date||CX.date>today())return setMsg('✗ Choose a valid date (not in the future)','bad');
+    const use=rows.filter(r=>!isBlank(r));if(!use.length)return setMsg('✗ Enter at least one customer with an order or collection amount','bad');
+    for(let i=0;i<use.length;i++){const r=use[i],n=i+1;
+      if(!r.cu)return setMsg('✗ Row '+n+': choose the customer from the list (type the code or name, then press Enter)','bad');
+      if(!Object.keys(r.o).length&&!Object.keys(r.c).length)return setMsg('✗ Row '+n+' ('+r.nm+'): enter an order or collection amount','bad')}
+    const out=use.map((r,i)=>({id:r.id||(Date.now()+'-'+i),cu:r.cu,nm:r.nm,o:Object.assign({},r.o),c:Object.assign({},r.c),rm:(r.rm||'').trim()}));
+    const X=coGet();X[CX.date]=out;coSet(X);coOrdAdd(CX.date);CX.rows=null;CX.dirty=false;CX.flash='✓ '+out.length+' entr'+(out.length===1?'y':'ies')+' saved for '+dd(CX.date);drawCO()};
+  if(CX.flash){setMsg(CX.flash,'ok');CX.flash=''}
+  coTable(B);   /* My Collection & Order table sits right under Submit */
   /* the day's list */
   const sum=(k)=>E.reduce((s,e)=>s+COL7.reduce((a,x)=>a+(+(e[k]||{})[x]||0),0),0);
   B.appendChild(el('div','mv-day',dow(CX.date)+', '+dd(CX.date)+' • '+E.length+' entr'+(E.length===1?'y':'ies')+' • Order '+fm2(sum('o'))+' • Collection '+fm2(sum('c'))));
-  E.forEach(e=>{const card=el('div','mv-item');card.style.setProperty('--c','#1d6fe8');card.appendChild(el('div','mv-nm',e.nm));
-    const t=k=>COL7.filter(x=>+(e[k]||{})[x]).map(x=>x+' '+fm2(e[k][x])).join(', ');
-    if(t('o'))card.appendChild(el('div','mv-nt','Order: '+t('o')));if(t('c'))card.appendChild(el('div','mv-nt','Collection: '+t('c')));if(e.rm)card.appendChild(el('div','mv-nt',e.rm));
-    const ac=el('div','mv-act'),b=el('button','del','Delete');b.type='button';b.onclick=()=>{if(confirm('Delete this entry?')){const X=coGet();X[CX.date]=E.filter(x=>x.id!==e.id);coSet(X);drawCO()}};ac.appendChild(b);card.appendChild(ac);B.appendChild(card)});
   /* Excel + app */
   const c=el('div','st-card');
   const fi=el('input');fi.type='file';fi.accept='.xlsx';fi.hidden=true;
   const lab=()=>CX.buf?CX.name+' (new file chosen)':CX.saved?'\u2713 Saved file: '+CX.saved.name+' \u2014 tap to change':'Choose your Collection & Order Excel file (first time only)';
   const pf=el('button','st-btn od-clear',lab());pf.type='button';pf.onclick=()=>fi.click();
-  coFileGet().then(o=>{CX.saved=o&&o.buf?o:null;if(CX.saved&&!CX.buf)CX.name=CX.saved.name;pf.textContent=lab()});
+  coFileGet().then(async o=>{if(!(o&&o.buf)){try{o=await coSrvGet();if(o&&o.buf){o.srv=1;await coFileSet({name:o.name,buf:o.buf,at:Date.now(),srv:1})}}catch(e){o=null}}CX.saved=o&&o.buf?o:null;if(CX.saved&&!CX.buf)CX.name=CX.saved.name;pf.textContent=lab()});
   const st=el('div','stt'),say=(t,k)=>{st.className='stt'+(k?' '+k:'');st.textContent=t};
-  fi.onchange=async()=>{const f=fi.files[0];fi.value='';if(!f)return;try{CX.buf=await f.arrayBuffer();CX.name=f.name;pf.textContent=lab();say('✓ File ready. The app will remember it after you make the Excel.','ok')}catch(x){say('✗ Could not read this file','bad')}};
-  const run=async mode=>{if(!E.length)return say('Add at least one entry for this day','bad');
-    if(mode==='app'){try{coSave(CX.date,E);say('✓ Saved in the app. Open Smart Post, pick '+dd(CX.date)+' and press Save to Draft. Then review and post from Drafts.','ok')}catch(x){say('✗ Could not save on this device','bad')}return}
-    const picked=!!CX.buf,sv=CX.saved,base=picked?CX.buf:(sv?((sv.bases||{})[CX.date]||sv.buf):null);
-    if(!base)return say('Choose the Collection & Order Excel file once (first time only)','bad');say('Making the file…');
-    try{const r=await buildCoXlsx(base,CX.date,E),f=new File([r.blob],CX.name,{type:r.blob.type});coSave(CX.date,E);
-      try{const nb=await r.blob.arrayBuffer(),bs=picked?{}:Object.assign({},sv.bases||{});bs[CX.date]=base;const ks=Object.keys(bs).sort();while(ks.length>3)delete bs[ks.shift()];
-        const o={name:CX.name,buf:nb,bases:bs,at:Date.now()};await coFileSet(o);CX.saved=o;CX.buf=null;pf.textContent=lab()}catch(e){}   /* this new file is the base for tomorrow; the file before today is kept too, so today can be made again */
-      const tail=' • saved in the app for Smart Post';
-      if(mode==='share'&&navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f],title:'Collection & Order '+dd(CX.date),text:'Daily Sales Order & Collection Statements — '+dd(CX.date)});say('✓ '+r.msg+' • '+r.n+' entr'+(r.n===1?'y':'ies')+' • shared'+tail,'ok')}
-      else{const a=el('a');a.href=URL.createObjectURL(r.blob);a.download=CX.name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);say('✓ '+r.msg+' • '+r.n+' entr'+(r.n===1?'y':'ies')+(mode==='share'?' • sharing is not available here, so the file was downloaded':' • downloaded')+tail,'ok')}
+  fi.onchange=async()=>{const f=fi.files[0];fi.value='';if(!f)return;try{CX.buf=await f.arrayBuffer();CX.name=f.name;await coFileSet({name:f.name,buf:CX.buf,at:Date.now()});CX.saved={name:f.name,buf:CX.buf};CX.buf=null;pf.textContent=lab();say('✓ File saved in the app. Saving it on Drive…');coSrvPut(f.name,CX.saved.buf).then(()=>{coFileSet({name:f.name,buf:CX.saved.buf,at:Date.now(),srv:1}).catch(()=>{});say('✓ File saved in the app and on Drive. It stays the same file on every phone and computer.','ok')},()=>say('✓ File saved in the app. Could not save it on Drive now (no internet?). It will be saved on Drive the next time you make the Excel.','warn'))}catch(x){say('✗ Could not read this file','bad')}};
+  const run=async mode=>{if(CX.dirty)return say('Press Submit first: the table has changes that are not saved yet','bad');if(!coDates().length)return say('Add at least one entry first','bad');
+    if(mode==='app'){if(!E.length)return say('Add at least one entry for this day','bad');try{coSave(CX.date,E);say('✓ Saved in the app. Open Smart Post, pick '+dd(CX.date)+' and press Save to Draft. Then review and post from Drafts.','ok')}catch(x){say('✗ Could not save on this device','bad')}return}
+    say('Making the file…');
+    try{let sv=CX.saved;if(!(sv&&sv.buf)){try{sv=await coSrvGet();if(sv&&sv.buf){sv.srv=1;await coFileSet({name:sv.name,buf:sv.buf,at:Date.now(),srv:1});CX.saved=sv}}catch(e){sv=null}}
+      if(!(sv&&sv.buf))return say('Choose the Collection & Order Excel file once (first time only)','bad');
+      CX.name=sv.name;if(!sv.srv){coSrvPut(sv.name,sv.buf).then(()=>coFileSet({name:sv.name,buf:sv.buf,at:Date.now(),srv:1}).then(()=>{CX.saved.srv=1}).catch(()=>{}),()=>{})}
+      const r=await buildCoAll(sv.buf),f=new File([r.blob],sv.name,{type:r.blob.type});if(E.length)coSave(CX.date,E);
+      const tail=' • saved in the app for Smart Post',info=r.days?r.days+' day'+(r.days===1?'':'s')+' • '+r.n+' entr'+(r.n===1?'y':'ies')+' added to your file':'no new date to add';
+      if(mode==='share'&&navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f],title:'Collection & Order '+dd(CX.date),text:'Daily Sales Order & Collection Statements — '+dd(CX.date)});say('✓ '+info+' • shared'+tail,'ok')}
+      else{const a=el('a');a.href=URL.createObjectURL(r.blob);a.download=sv.name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);say('✓ '+info+(mode==='share'?' • sharing is not available here, so the file was downloaded':' • downloaded')+tail,'ok')}
     }catch(x){if(x&&x.name==='AbortError')say('');else say('✗ '+(x&&x.message||'Could not make the file'),'bad')}};
   const row=el('div','co-acts');
   const IC={dl:'<path d="M12 3v11m0 0l-4-4m4 4l4-4M5 19h14"/>',sh:'<path d="M4 6h16v12H4zM4 7l8 6 8-6"/>',sv:'<path d="M5 4h11l3 3v13H5zM8 4v5h7M8 20v-6h8v6"/>',op:'<path d="M5 12h14m0 0l-5-5m5 5l-5 5"/>'};
   const mb=(t,k,cls)=>{const b=el('button','st-btn co-b '+cls);b.type='button';b.innerHTML='<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+IC[k]+'</svg><span>'+t+'</span>';return b};
   const dl=mb('Download Excel','dl','co-p'),sh=mb('Share to Outlook','sh','co-p'),sp=mb('Save to app only','sv','co-s'),op=mb('Open Smart Post','op','co-s');dl.onclick=()=>run('dl');sh.onclick=()=>run('share');sp.onclick=()=>run('app');op.onclick=()=>{if(R.openTab)R.openTab('s','post')};
-  [dl,sh,sp,op].forEach(b=>row.appendChild(b));
-  c.appendChild(pf);c.appendChild(fi);c.appendChild(row);c.appendChild(st);B.appendChild(c);coTable(B)}
+  [sp,op,dl,sh].forEach(b=>row.appendChild(b));
+  c.appendChild(pf);c.appendChild(fi);c.appendChild(row);c.appendChild(st);B.appendChild(c)}
 R.openCOE=()=>{if(window.RDL_ROLE==='admin')return;CX.date=R.salesDay?R.salesDay():today();drawCO();show('coep')};   /* the file made today is for the sales day (yesterday; Thursday on Saturday), same as Today Sales and the uploaded file */
 function openD(){if(window.RDL_ROLE==='admin')return;dcrPC=0;DV.date=R.salesDay?R.salesDay():today();drawD();show('dcrp')}
 
@@ -8899,20 +8973,24 @@ html.rdl-fit,html.rdl-fit body{height:100%;overflow:hidden;overscroll-behavior:n
 (function(){
   var MIN=.5,app=document.querySelector('.app'),home=document.getElementById('home'),root=document.documentElement,t=0;
   if(!app||!home)return;
-  function navTop(){var n=document.querySelector('.nav > div');return n?n.getBoundingClientRect().top:innerHeight-80}
+  function navTop(){if(innerWidth>=1000)return innerHeight-14;var n=document.querySelector('.nav > div');return n?n.getBoundingClientRect().top:innerHeight-80}
   function bottom(){var m=0;for(var i=0;i<home.children.length;i++){var r=home.children[i].getBoundingClientRect();if(r.height>0&&r.bottom>m)m=r.bottom}return m}
   function hdrBottom(){var h=document.querySelector('.hdr');return h?h.getBoundingClientRect().bottom:0}
   function reset(){app.style.zoom='';root.classList.remove('rdl-fit')}   /* keep home's last zoom so Home never flashes full-size when you come back */
+  var desk=function(){return innerWidth>=1000};
   function fit(){
-    if(!home.classList.contains('on')){reset();return}
+    if(!home.classList.contains('on')){home.style.height='';reset();return}
     var a=document.activeElement;if(a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName))return;
     root.classList.add('rdl-fit');window.scrollTo(0,0);
-    var avail=navTop()-8,z=1;app.style.zoom='';home.style.zoom=1;
+    var avail=navTop()-8,z=1;app.style.zoom='';home.style.zoom=1;home.style.height='';
     for(var i=0;i<7;i++){
       var b=bottom(),hb=hdrBottom();if(b<=avail&&(avail-b<8||z>=1))break;
       z=Math.max(MIN,Math.min(1,z*((avail-hb)/Math.max(1,b-hb))*(b>avail?.996:1)));home.style.zoom=z;
       if(z<=MIN)break}
     if(bottom()>avail+2&&z<=MIN)root.classList.remove('rdl-fit')   /* extremely small screen: allow scrolling instead of clipping */
+    if(desk()&&root.classList.contains('rdl-fit')){   /* DESKTOP: after fitting, the cards stretch to use the whole free height down to the bottom of the screen */
+      var bz=parseFloat(document.body.style.zoom)||1,hz=parseFloat(home.style.zoom)||1,tp=home.getBoundingClientRect().top;
+      home.style.height=Math.max(300,(innerHeight-tp-22)/(bz*hz))+'px'}
   }
   function later(ms){clearTimeout(t);t=setTimeout(fit,ms||80)}
   window.__rdlFitNow=function(){try{fit()}catch(e){}};
@@ -9388,7 +9466,7 @@ function who(u){var m=umap(),x=m[u]||m[String(u||'').toLowerCase()]||{};return{n
 /* ---- rows (one array per table row; numbers stay numbers) ---- */
 function coRows(){var X=J('rdl.coe.v1',{}),out=[];
   Object.keys(X).forEach(function(d){(X[d]||[]).forEach(function(e){var w=who(e._u);
-    COL7.forEach(function(k){var o=+(e.o||{})[k]||0,c=+(e.c||{})[k]||0;if(o||c)out.push({d:d,dp:w.depot,u:w.name,b:k,r:[fd(d),w.depot,w.name,k,e.nm||'',o,c]})})})});
+    COL7.forEach(function(k){var o=+(e.o||{})[k]||0,c=+(e.c||{})[k]||0;if(o||c)out.push({d:d,dp:w.depot,u:w.name,b:k,nm:e.nm||'',rm:e.rm||'',o:o,c:c,r:[fd(d),w.depot,w.name,k,e.nm||'',o,c]})})})});
   return out}
 function dcrRows(){var x=J('rdl.visit.v1',{}),v=Array.isArray(x.visits)?x.visits:[];
   return v.map(function(e){var w=who(e._u),t=(e.tin||'—')+(e.tout?' – '+e.tout:'');
@@ -9440,6 +9518,24 @@ function open(){
     else{var tb=el('table','mv-tbl'),th=el('tr');head.forEach(function(x){th.appendChild(el('th',null,x))});tb.appendChild(th);
       data.concat([tot]).forEach(function(rw,i){var tr=el('tr',i===data.length?'tot':null);rw.forEach(function(v){var c=el('td',null,typeof v==='number'?fm(v):String(v));if(typeof v==='number')c.style.textAlign='right';tr.appendChild(c)});tb.appendChild(tr)});wrap.appendChild(tb)}
     var dl=el('button','st-btn','Download Excel');dl.type='button';var msg=el('div','stt');
+    if(ST.tab==='co'){
+      /* default-format Excel: your own Collection & Order file (kept on Drive) + the dates and customers of the filtered rows */
+      var fi=document.createElement('input');fi.type='file';fi.accept='.xlsx';fi.hidden=true;
+      var pf=el('button','st-btn','Checking your Excel file…');pf.type='button';pf.style.cssText='background:#e8f0fe;color:#0a49b5;margin-top:10px';pf.onclick=function(){fi.click()};
+      var CO=window.RDL_CO,sv=null;
+      function lab(){pf.textContent=sv?'\u2713 Saved file: '+sv.name+' \u2014 tap to change':'Choose your Collection & Order Excel file (first time only)'}
+      if(CO){CO.fileGet('admin').then(function(o){if(o&&o.buf)return o;return CO.srvGet().then(function(r){if(r&&r.buf){r.srv=1;CO.fileSet({name:r.name,buf:r.buf,at:Date.now(),srv:1},'admin').catch(function(){});return r}return null}).catch(function(){return null})}).then(function(o){sv=o&&o.buf?o:null;lab()})}else lab();
+      fi.onchange=function(){var f=fi.files[0];fi.value='';if(!f||!CO)return;f.arrayBuffer().then(function(buf){sv={name:f.name,buf:buf};return CO.fileSet({name:f.name,buf:buf,at:Date.now()},'admin')}).then(function(){lab();msg.className='stt';msg.textContent='Saving it on Drive\u2026';return CO.srvPut(f.name,sv.buf).then(function(){CO.fileSet({name:f.name,buf:sv.buf,at:Date.now(),srv:1},'admin').catch(function(){});msg.className='stt ok';msg.textContent='\u2713 File saved in the app and on Drive'},function(){msg.className='stt warn';msg.textContent='\u2713 File saved in the app. Could not save it on Drive now; it will be saved the next time you download.'})}).catch(function(){msg.className='stt bad';msg.textContent='\u2717 Could not read this file'})};
+      dl.onclick=function(){if(!rows.length){msg.className='stt bad';msg.textContent='Nothing to download for this filter';return}
+        if(!sv||!CO){msg.className='stt bad';msg.textContent='Choose your Collection & Order Excel file once (first time only)';return}
+        msg.className='stt';msg.textContent='Making the file\u2026';
+        var g={},X={};rows.forEach(function(x){var k=x.d+'\u0001'+x.dp+'\u0001'+x.u+'\u0001'+x.nm;var e=g[k];if(!e){e=g[k]={d:x.d,dp:x.dp,u:x.u,nm:x.nm,o:{},c:{},rm:x.rm};(X[x.d]=X[x.d]||[]).push(e)}if(x.o)e.o[x.b]=x.o;if(x.c)e.c[x.b]=x.c});
+        var ds=Object.keys(X).sort();ds.forEach(function(d){X[d].sort(function(a,b){return (a.dp+a.u+a.nm)>(b.dp+b.u+b.nm)?1:-1})});
+        if(!sv.srv){CO.srvPut(sv.name,sv.buf).then(function(){sv.srv=1;CO.fileSet({name:sv.name,buf:sv.buf,at:Date.now(),srv:1},'admin').catch(function(){})},function(){})}
+        CO.buildCoAll(sv.buf,X,ds).then(function(r){var a=document.createElement('a');a.href=URL.createObjectURL(r.blob);a.download=sv.name.replace(/\.xlsx$/i,'')+'_'+ST.from+'_to_'+ST.to+'.xlsx';document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(a.href)},4000);
+          msg.className='stt ok';msg.textContent='\u2713 '+r.days+' day'+(r.days===1?'':'s')+' \u2022 '+r.n+' customer entr'+(r.n===1?'y':'ies')+' added'+(r.all>r.days?' \u2022 '+(r.all-r.days)+' date'+(r.all-r.days===1?' is':'s are')+' already inside your file, so not added again':'')})
+        .catch(function(e){msg.className='stt bad';msg.textContent='\u2717 '+(e&&e.message||'Could not make the file')})};
+      box.appendChild(pf);box.appendChild(fi);box.appendChild(dl);box.appendChild(msg);return}
     dl.onclick=function(){if(!rows.length){msg.className='stt bad';msg.textContent='Nothing to download for this filter';return}
       xlsx(ST.tab==='co'?'Collection & Order':'DCR',head,data.concat([tot])).then(function(blob){var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=(ST.tab==='co'?'Collection_and_Order_':'DCR_')+ST.from+'_to_'+ST.to+'.xlsx';document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(a.href)},4000);msg.className='stt ok';msg.textContent='✓ Downloaded'}).catch(function(){msg.className='stt bad';msg.textContent='✗ Could not make the file'})};
     box.appendChild(dl);box.appendChild(msg)}
@@ -9453,8 +9549,88 @@ function addTile(){
   b.innerHTML='<span class="set-ic" style="background:linear-gradient(135deg,#34d399,#0b9a62)"><svg viewBox="0 0 24 24" width="22" height="22" fill="#fff" aria-hidden="true"><path d="M3 5h18v3H3zm0 5h18v3H3zm0 5h18v3H3z"/></svg></span><span class="set-tx"><b>Entry Tables</b><small>All users’ Collection &amp; Order and DCR — filter and download Excel</small></span><span class="chev">›</span>';
   b.onclick=open;l.insertBefore(b,l.children[1]||null)}
 setInterval(addTile,800);
+/* ---- Depot Customers (admin): customers of every depot, exact depot spelling (CTG. West Depot is not Ctg. West Depot), Excel ---- */
+function depRows(){var m=J('rdl.master.v1',null)||{},g={};
+  (m.cr||[]).forEach(function(r){var d=String(r.dp||'').trim()||'(no depot)',k=d+'\u0001'+r.bp,x=g[k]||(g[k]={dp:d,cu:String(r.bp),nm:r.nm||'',co:{},bills:0,out:0});x.nm=x.nm||r.nm||'';if(r.cn)x.co[r.cn]=1});
+  (m.out||[]).forEach(function(r){var d=String(r.dp||'').trim()||'(no depot)',k=d+'\u0001'+r.cu,x=g[k]||(g[k]={dp:d,cu:String(r.cu),nm:r.nm||'',co:{},bills:0,out:0});x.nm=x.nm||r.nm||'';x.bills++;x.out+=+r.amt||0});
+  var list=Object.keys(g).map(function(k){return g[k]}),by={};
+  list.forEach(function(x){(by[x.cu]=by[x.cu]||{})[x.dp]=1});
+  list.forEach(function(x){var o=Object.keys(by[x.cu]).filter(function(d){return d!==x.dp});x.also=o.join(' / ')});
+  return list.sort(function(a,b){return a.dp===b.dp?(a.nm>b.nm?1:-1):(a.dp>b.dp?1:-1)})}
+var DC={dp:''};
+function openDepCust(){
+  var old=document.getElementById('dc-pg');if(old)old.remove();
+  var ov=el('div');ov.id='dc-pg';ov.style.cssText='position:fixed;inset:0;z-index:9000;overflow:auto;-webkit-overflow-scrolling:touch;background:'+getComputedStyle(document.body).backgroundColor+';padding:max(12px,env(safe-area-inset-top)) 14px 90px';
+  var top=el('div');top.style.cssText='display:flex;align-items:center;gap:10px;margin-bottom:10px';
+  var bk=el('button',null,'‹');bk.type='button';bk.setAttribute('aria-label','Back');bk.style.cssText='border:0;background:#e8f0fe;color:#0a49b5;font-size:26px;line-height:1;width:40px;height:40px;border-radius:12px;font-weight:700';bk.onclick=function(){ov.remove()};
+  var h=el('h2',null,'Depot Customers');h.style.cssText='margin:0;font-size:20px';top.appendChild(bk);top.appendChild(h);ov.appendChild(top);
+  var box=el('div','st-card');ov.appendChild(box);document.body.appendChild(ov);
+  var all=depRows();
+  if(!all.length){box.appendChild(el('div','mv-empty','No database in this app yet.'));return}
+  var cnt={};all.forEach(function(x){cnt[x.dp]=(cnt[x.dp]||0)+1});
+  box.appendChild(el('small',null,'Depots in this app (exact spelling) and customers in each'));
+  var sm=el('div');sm.style.cssText='margin:6px 0 10px;line-height:1.7';Object.keys(cnt).sort().forEach(function(d){var r=el('div');r.appendChild(el('b',null,d));r.appendChild(document.createTextNode(' — '+cnt[d]+' customer'+(cnt[d]===1?'':'s')));sm.appendChild(r)});box.appendChild(sm);
+  box.appendChild(el('small',null,'Depot'));
+  var sel=el('select','list-search');sel.appendChild(new Option('All depots',''));Object.keys(cnt).sort().forEach(function(d){sel.appendChild(new Option(d+' ('+cnt[d]+')',d))});sel.value=cnt[DC.dp]?DC.dp:'';box.appendChild(sel);
+  var info=el('div','stt'),wrap=el('div');wrap.style.cssText='overflow-x:auto;margin:8px 0';box.appendChild(info);box.appendChild(wrap);
+  var head=['Depot','Customer code','Customer name','Companies','Bills','Outstanding amount','Also under depot name'],cur=[];
+  function draw(){DC.dp=sel.value;cur=all.filter(function(x){return !DC.dp||x.dp===DC.dp});wrap.textContent='';
+    var dup=cur.filter(function(x){return x.also}).length;
+    info.className='stt'+(dup?' warn':'');info.textContent=cur.length+' customer'+(cur.length===1?'':'s')+(dup?' • '+dup+' also appear under another depot name (last column)':'');
+    var tb=el('table','mv-tbl'),th=el('tr');head.forEach(function(x){th.appendChild(el('th',null,x))});tb.appendChild(th);
+    cur.forEach(function(x){var tr=el('tr');[x.dp,x.cu,x.nm,Object.keys(x.co).length,x.bills,x.out,x.also].forEach(function(v,i){var c=el('td',null,typeof v==='number'?fm(v):String(v));if(typeof v==='number')c.style.textAlign='right';if(i===6&&x.also)c.style.color='#c0392b';tr.appendChild(c)});tb.appendChild(tr)});wrap.appendChild(tb)}
+  sel.onchange=draw;draw();
+  var dl=el('button','st-btn','Download Excel');dl.type='button';var msg=el('div','stt');
+  dl.onclick=function(){if(!cur.length){msg.className='stt bad';msg.textContent='Nothing to download';return}
+    xlsx('Customers',head,cur.map(function(x){return [x.dp,x.cu,x.nm,Object.keys(x.co).length,x.bills,Math.round(x.out*100)/100,x.also]})).then(function(blob){var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='Depot_customers_'+(DC.dp?DC.dp.replace(/[^A-Za-z0-9]+/g,'_')+'_':'')+td()+'.xlsx';document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(a.href)},4000);msg.className='stt ok';msg.textContent='✓ Downloaded'}).catch(function(){msg.className='stt bad';msg.textContent='✗ Could not make the file'})};
+  box.appendChild(dl);box.appendChild(msg)}
+window.RDL_DEPCUST=openDepCust;
+function addTile2(){
+  if(role()!=='admin')return;
+  var l=document.querySelector('#more .set-list');if(!l||l.querySelector('[data-dc]'))return;
+  var b=document.createElement('button');b.type='button';b.className='set-item';b.setAttribute('data-dc','1');
+  b.innerHTML='<span class="set-ic" style="background:linear-gradient(135deg,#60a5fa,#1d6fe8)"><svg viewBox="0 0 24 24" width="22" height="22" fill="#fff" aria-hidden="true"><path d="M12 12a4 4 0 100-8 4 4 0 000 8zm0 2c-3.3 0-8 1.7-8 5v1h16v-1c0-3.3-4.7-5-8-5z"/></svg></span><span class="set-tx"><b>Depot Customers</b><small>Customers of each depot (exact depot name) — view and download Excel</small></span><span class="chev">›</span>';
+  b.onclick=openDepCust;l.insertBefore(b,l.children[2]||null)}
+setInterval(addTile2,800);
 })();
 
+</script>
+<style id="rdl-desk-hdrnav">
+/* DESKTOP ONLY (>=1000px): no left sidebar. The menu buttons sit inside the header, Settings next to Data Hub, bell + profile at the far right.
+   Header is full width and sticky; Home cards stretch to the bottom of the screen; table pages use the full width. Phone is untouched. */
+@media (min-width:1000px){
+:root{--sbw:0px;--dhh:104px}
+html body .app{max-width:none!important;margin:0!important;padding:0 24px 24px!important;min-height:100vh;display:flex;flex-direction:column}
+html body .hdr{position:sticky!important;top:0;z-index:45;margin:0 -24px 12px!important;border-radius:0 0 22px 22px!important;padding:14px 30px 10px!important}
+html body .nav{position:fixed!important;top:14px!important;left:300px!important;right:150px!important;bottom:auto!important;width:auto!important;height:62px!important;padding:0!important;display:flex!important;flex-direction:row!important;align-items:center!important;justify-content:flex-start!important;background:none!important;border:0!important;box-shadow:none!important;z-index:60}
+html body .nav div{display:flex!important;flex-direction:row!important;align-items:center;width:auto!important;max-width:none!important;height:auto!important;gap:6px!important;background:none!important;border:0!important;box-shadow:none!important;border-radius:0!important}
+html body .nav button,html body .nav button.dsk-set{position:relative!important;left:auto!important;right:auto!important;bottom:auto!important;flex:none!important;display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important;gap:2px!important;width:auto!important;min-width:76px;height:60px;padding:4px 10px!important;border:0!important;border-radius:14px!important;background:none!important;color:#fff!important;font-size:11.5px!important;font-weight:600;text-align:center!important;white-space:nowrap}
+html body .nav button:hover{background:#ffffff26!important}
+html body .nav button.on{background:#ffffff3a!important;color:#fff!important;box-shadow:inset 0 0 0 1px #ffffff55}
+html body .nav button.on::after{display:none!important}
+html body .nav button span{width:32px!important;height:32px!important;border-radius:11px!important}
+html body .nav button svg{width:20px!important;height:20px!important}
+html body .nav button .dot,html body .nav button i{font-size:0}
+html body .hdr > .ib.dsk-gear{display:none!important}
+html body .nav button[style*="display:none"],html body .nav button[style*="display: none"]{display:none!important}
+html body .hdr{grid-template-rows:66px auto!important;row-gap:8px!important}
+/* Home: cards grow so the dashboard fills the screen down to the bottom */
+html body #home.pg.on{flex:none;display:flex!important;flex-direction:column;gap:8px}
+html body #home>.total{flex:1.1 1 auto}
+html body #home>.grid{flex:3 1 auto}
+html body #home>#regCard{flex:3.4 1 auto;display:flex;flex-direction:column}
+html body #home>#regCard>.rc-b{flex:1 1 auto}
+html body #home>.qa{flex:1.1 1 auto}
+/* table pages: full width; form pages: centred with a limited width */
+html body .pg.st{max-width:none}
+html body #settings.pg.st,html body [id^="set"].pg.st,html body #bcu.pg.st,html body #updoff.pg.st,html body #updout.pg.st,html body #updcr.pg.st,html body #seterase.pg.st,html body #shiftcu.pg.st,html body #notef.pg.st,html body #schedf.pg.st,html body #tdsf.pg.st{max-width:820px;margin-left:auto;margin-right:auto}
+}
+</style>
+<script>
+/* desktop: the Settings button in the header is highlighted while a Settings page is open */
+(function(){function sync(){var b=document.querySelector('.nav button.dsk-set');if(!b)return;var on=!!document.querySelector('#settings.on,#setdb.on,.pg.st.on[id^="set"]');if(b.classList.contains('on')!==on)b.classList.toggle('on',on)}
+function go(){var a=document.querySelector('.app');if(!a)return;new MutationObserver(sync).observe(a,{subtree:true,attributes:true,attributeFilter:['class']});sync()}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',go);else go()})();
 </script>
 </body>
 </html>
