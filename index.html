@@ -7699,12 +7699,12 @@ function coTable(B){entTable(B,{noDl:true,title:'My Collection & Order table',sh
 function dcrTable(B){entTable(B,{title:'My DCR table',sheet:'DCR',file:'DCR_table',st:DCT,head:['Date','Customer','Time','Purpose'],
   rows:S=>getV().visits.filter(dpShow).filter(v=>!((S.from&&v.date<S.from)||(S.to&&v.date>S.to))).sort((a,b)=>a.date===b.date?((a.tin||'99')>(b.tin||'99')?1:-1):(a.date<b.date?1:-1)).map(v=>[dd(v.date),v.nm||'',(v.tin?hm(v.tin):'\u2014')+(v.tout?' \u2013 '+hm(v.tout):''),v.vp||v.purpose||'Visit']),
   total:rows=>['Total',rows.length+' visit'+(rows.length===1?'':'s'),'','']})}
-const CP=mkPage('coep','Collection & Order',()=>{if(R.openUpload)R.openUpload()});
+const CP=mkPage('coep','Collection & Order',()=>{if(CX.commit)try{CX.commit()}catch(e){}if(R.openUpload)R.openUpload()});
 function drawCO(){const B=CP.body;B.textContent='';
   /* two ways to do the daily work: type business-wise entries (this page) or upload the Excel file (old page, unchanged) */
   {const sw=el('div','od-actions'),a=el('button','st-btn','Entry'),u=el('button','st-btn od-clear','Upload');a.type=u.type='button';
    u.onclick=()=>{if(window.RDL_openSet)window.RDL_openSet('setdcr')};sw.appendChild(a);sw.appendChild(u);B.appendChild(sw)}
-  const di=el('input','list-search');di.type='date';di.value=CX.date;di.max=today();di.onchange=()=>{if(!di.value)return;if(CX.dirty&&!confirm('The table has changes that are not saved. Change the date and lose them?')){di.value=CX.date;return}CX.date=di.value;CX.rows=null;CX.dirty=false;drawCO()};B.appendChild(di);
+  const di=el('input','list-search');di.type='date';di.value=CX.date;di.max=today();di.onchange=()=>{if(!di.value)return;if(CX.commit)try{CX.commit()}catch(e){}CX.date=di.value;CX.rows=null;CX.dirty=false;drawCO()};B.appendChild(di);
   const E=coList(CX.date);
   /* ---- Business Wise Order & Collection: ONE input table. A row = one customer; every business has its own column, Order on top, Collection below ---- */
   if(CX.rowsDate!==CX.date||!CX.rows){CX.rows=E.map(e=>({id:e.id,cu:e.cu,nm:e.nm,o:Object.assign({},e.o||{}),c:Object.assign({},e.c||{}),rm:e.rm||'',saved:true,posted:coPosted(CX.date,e)}));CX.rowsDate=CX.date;CX.dirty=false}
@@ -7726,9 +7726,9 @@ function drawCO(){const B=CP.body;B.textContent='';
   const setMsg=(t,k)=>{msg.className='stt'+(k?' '+k:'');msg.textContent=t||''};
   function mkRow(r){
     const tr=el('tr',r.saved?'co-sv':''),t0=el('td','co-c0'),ci=el('input','co-cu'),cn=el('div','co-cn',r.cu?r.nm:''),sg=el('div','od-suggestions co-sg');
-    ci.type='text';ci.placeholder='Code or name';ci.autocomplete='off';ci.value=r.cu||r.txt||'';t0.appendChild(ci);t0.appendChild(cn);t0.appendChild(sg);tr.appendChild(t0);
+    r._tr=tr;ci.type='text';ci.placeholder='Code or name';ci.autocomplete='off';ci.value=r.cu||r.txt||'';t0.appendChild(ci);t0.appendChild(cn);t0.appendChild(sg);tr.appendChild(t0);
     if(r.posted){tr.classList.add('co-pst');ci.disabled=true;t0.appendChild(el('div','co-pb','Posted \u2022 locked'))}
-    const pick=c=>{if(rows.some(x=>x!==r&&x.cu===c.code)){r.cu='';r.nm='';r.txt='';ci.value='';cn.textContent='';sg.textContent='';setMsg('✗ '+c.name+' is already in the table for this day','bad');return false}
+    const pick=c=>{const ex=rows.find(x=>x!==r&&x.cu===c.code);if(ex){r.cu='';r.nm='';r.txt='';ci.value='';cn.textContent='';sg.textContent='';setMsg(ex.posted?'✗ '+c.name+' is already posted for this date. Posted entries are locked — use Quick Sales / Quick Collection for any new amount.':'✗ '+c.name+' is already in the table for this day','bad');return false}
       r.cu=c.code;r.nm=c.name;r.txt='';ci.value=c.code;cn.textContent=c.name+(c.dp?' • '+c.dp:'');ci.classList.remove('bad');sg.textContent='';setMsg('');CX.dirty=true;grow();return true};
     const resolve=()=>{const v=ci.value.trim();if(!v){r.cu='';r.nm='';r.txt='';cn.textContent='';ci.classList.remove('bad');return true}
       if(r.cu&&v===r.cu)return true;const m=find(v);if(m.length===1)return pick(m[0]);
@@ -7745,32 +7745,44 @@ function drawCO(){const B=CP.body;B.textContent='';
       const io=mk('o','o','Order'),ic=mk('c','c','Collection');if(r.posted)io.disabled=ic.disabled=true;td.appendChild(io);td.appendChild(ic);tr.appendChild(td)});
     const tr0=el('td'),rm=el('input','co-n co-rm');rm.type='text';rm.placeholder='Remarks';rm.value=r.rm||'';if(r.posted)rm.disabled=true;rm.addEventListener('input',()=>{r.rm=rm.value;CX.dirty=true;grow()});rm.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();nextFrom(rm)}});tr0.appendChild(rm);tr.appendChild(tr0);
     const tx=el('td'),x=el('button','co-x','×');x.type='button';x.setAttribute('aria-label','Delete row');
-    x.onclick=()=>{if(r.posted)return setMsg('\u2717 This entry is already posted, so it cannot be changed or deleted','bad');if(r.saved){if(!confirm('Delete this saved entry?'))return;const X=coGet();X[CX.date]=coList(CX.date).filter(z=>z.id!==r.id);coSet(X);CX.rows=rows.filter(z=>z!==r);drawCO();return}
+    x.onclick=()=>{if(r.posted){if(!confirm('This entry is already posted. Delete it from this table?\n\nThe Sales / Collection already posted in the app stays as it is (remove it from Database Correction if needed).'))return;const X=coGet();X[CX.date]=coList(CX.date).filter(z=>z.id!==r.id);coSet(X);CX.rows=rows.filter(z=>z!==r);drawCO();return}if(r.saved){if(!confirm('Delete this saved entry?'))return;const X=coGet();X[CX.date]=coList(CX.date).filter(z=>z.id!==r.id);coSet(X);CX.rows=rows.filter(z=>z!==r);drawCO();return}
       const i=rows.indexOf(r);if(i>=0)rows.splice(i,1);tr.remove();if(!rows.length||!isBlank(rows[rows.length-1])){const nb=blank();rows.push(nb);tb.appendChild(mkRow(nb))}CX.dirty=true};
-    if(r.posted){x.style.display='none'}tx.appendChild(x);tr.appendChild(tx);return tr}
+    tx.appendChild(x);tr.appendChild(tx);return tr}
   rows.forEach(r=>tb.appendChild(mkRow(r)));
-  const sb=el('button','st-btn co-submit','Submit');sb.type='button';tcard.appendChild(msg);tcard.appendChild(sb);
-  sb.onclick=()=>{if(!CX.date||CX.date>today())return setMsg('✗ Choose a valid date (not in the future)','bad');
-    const use=rows.filter(r=>!isBlank(r));if(!use.length)return setMsg('✗ Enter at least one customer with an order or collection amount','bad');
-    for(let i=0;i<use.length;i++){const r=use[i],n=i+1;
-      if(!r.cu)return setMsg('✗ Row '+n+': choose the customer from the list (type the code or name, then press Enter)','bad');
-      if(!Object.keys(r.o).length&&!Object.keys(r.c).length)return setMsg('✗ Row '+n+' ('+r.nm+'): enter an order or collection amount','bad')}
-    const out=use.map((r,i)=>({id:r.id||(Date.now()+'-'+i),cu:r.cu,nm:r.nm,o:Object.assign({},r.o),c:Object.assign({},r.c),rm:(r.rm||'').trim()}));
-    const X=coGet();X[CX.date]=out;coSet(X);coOrdAdd(CX.date);CX.rows=null;CX.dirty=false;CX.flash='✓ '+out.length+' entr'+(out.length===1?'y':'ies')+' saved for '+dd(CX.date);drawCO()};
-  if(CX.flash){setMsg(CX.flash,'ok');CX.flash=''}
-  coTable(B);   /* My Collection & Order table sits right under Submit */
+  tcard.appendChild(msg);
+  /* ---- automatic saving (no Submit): a finished customer row is added to the table below as soon as the next row is started, when the table is left, or when the date is changed ---- */
+  const tw=el('div'),sumEl=el('div','mv-day');
+  const paintSum=()=>{const L=coList(CX.date),t=k=>L.reduce((a,e)=>a+COL7.reduce((b,x)=>b+(+(e[k]||{})[x]||0),0),0);sumEl.textContent=dow(CX.date)+', '+dd(CX.date)+' • '+L.length+' entr'+(L.length===1?'y':'ies')+' • Order '+fm2(t('o'))+' • Collection '+fm2(t('c'))};
+  const redraw=()=>{tw.textContent='';coTable(tw);paintSum()};
+  const okRow=r=>!!r.cu&&(Object.keys(r.o).length>0||Object.keys(r.c).length>0);
+  const commit=upto=>{if(upto==null)upto=rows.length;const pgx=document.getElementById('coep');if(!pgx||!pgx.classList.contains('on'))return false;
+    const date=CX.date;if(!date||date>today())return false;
+    const old=coList(date),out=[];
+    rows.forEach((r,i)=>{if(i<upto&&okRow(r)){r.id=r.id||(Date.now()+'-'+Math.random().toString(36).slice(2,7));r.saved=true;if(r._tr)r._tr.classList.add('co-sv');
+        out.push({id:r.id,cu:r.cu,nm:r.nm,o:Object.assign({},r.o),c:Object.assign({},r.c),rm:(r.rm||'').trim()})}
+      else if(r.id){const o=old.find(z=>z.id===r.id);if(o)out.push(o)}});
+    CX.dirty=rows.slice(upto).some(r=>!isBlank(r));
+    if(JSON.stringify(out)===JSON.stringify(old))return false;
+    try{const X=coGet();X[date]=out;coSet(X);if(out.length)coOrdAdd(date)}catch(e){setMsg('\u2717 Could not save on this device','bad');return false}
+    redraw();return true};
+  tb.addEventListener('focusin',e=>{const tr=e.target.closest&&e.target.closest('tr');if(!tr)return;const k=[...tb.children].indexOf(tr);if(k<=0)return;
+    for(let i=0;i<k;i++){const r=rows[i];if(r&&!isBlank(r)&&!okRow(r)){setMsg('\u2717 Row '+(i+1)+': '+(r.cu?'enter an order or collection amount':'choose the customer from the list')+' \u2014 not saved yet','bad');break}}
+    commit(k)});
+  tcard.addEventListener('focusout',e=>{const n=e.relatedTarget;if(n&&tcard.contains(n))return;setTimeout(()=>commit(),0)});
+  CX.commit=()=>commit();
+  if(!CX.vh){CX.vh=1;document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'&&CX.commit)try{CX.commit()}catch(e){}})}
+  B.appendChild(tw);coTable(tw);   /* My Collection & Order table sits right under the entry table */
   /* the day's list */
-  const sum=(k)=>E.reduce((s,e)=>s+COL7.reduce((a,x)=>a+(+(e[k]||{})[x]||0),0),0);
-  B.appendChild(el('div','mv-day',dow(CX.date)+', '+dd(CX.date)+' • '+E.length+' entr'+(E.length===1?'y':'ies')+' • Order '+fm2(sum('o'))+' • Collection '+fm2(sum('c'))));
+  paintSum();B.appendChild(sumEl);
   /* Excel + app */
   const c=el('div','st-card');
   const fi=el('input');fi.type='file';fi.accept='.xlsx';fi.hidden=true;
   const lab=()=>CX.buf?CX.name+' (new file chosen)':CX.saved?'\u2713 Saved file: '+CX.saved.name+' \u2014 tap to change':'Choose your Collection & Order Excel file (first time only)';
-  const pf=el('button','st-btn od-clear',lab());pf.type='button';pf.onclick=()=>fi.click();
-  coFileGet().then(async o=>{if(!(o&&o.buf)){try{o=await coSrvGet();if(o&&o.buf){o.srv=1;await coFileSet({name:o.name,buf:o.buf,at:Date.now(),srv:1})}}catch(e){o=null}}CX.saved=o&&o.buf?o:null;if(CX.saved&&!CX.buf)CX.name=CX.saved.name;pf.textContent=lab()});
+  const pf=el('button','st-btn od-clear',lab());pf.type='button';pf.onclick=()=>fi.click();pf.style.display='none';   /* shown only if no Excel has ever been chosen */
+  coFileGet().then(async o=>{if(!(o&&o.buf)){try{o=await coSrvGet();if(o&&o.buf){o.srv=1;await coFileSet({name:o.name,buf:o.buf,at:Date.now(),srv:1})}}catch(e){o=null}}CX.saved=o&&o.buf?o:null;if(CX.saved&&!CX.buf)CX.name=CX.saved.name;pf.textContent=lab();pf.style.display=CX.saved?'none':''});
   const st=el('div','stt'),say=(t,k)=>{st.className='stt'+(k?' '+k:'');st.textContent=t};
-  fi.onchange=async()=>{const f=fi.files[0];fi.value='';if(!f)return;try{CX.buf=await f.arrayBuffer();CX.name=f.name;await coFileSet({name:f.name,buf:CX.buf,at:Date.now()});CX.saved={name:f.name,buf:CX.buf};CX.buf=null;pf.textContent=lab();say('✓ File saved in the app. Saving it on Drive…');coSrvPut(f.name,CX.saved.buf).then(()=>{coFileSet({name:f.name,buf:CX.saved.buf,at:Date.now(),srv:1}).catch(()=>{});say('✓ File saved in the app and on Drive. It stays the same file on every phone and computer.','ok')},()=>say('✓ File saved in the app. Could not save it on Drive now (no internet?). It will be saved on Drive the next time you make the Excel.','warn'))}catch(x){say('✗ Could not read this file','bad')}};
-  const run=async mode=>{if(CX.dirty)return say('Press Submit first: the table has changes that are not saved yet','bad');if(!coDates().length)return say('Add at least one entry first','bad');
+  fi.onchange=async()=>{const f=fi.files[0];fi.value='';if(!f)return;try{CX.buf=await f.arrayBuffer();CX.name=f.name;await coFileSet({name:f.name,buf:CX.buf,at:Date.now()});CX.saved={name:f.name,buf:CX.buf};CX.buf=null;pf.textContent=lab();pf.style.display='none';say('✓ File saved in the app. Saving it on Drive…');coSrvPut(f.name,CX.saved.buf).then(()=>{coFileSet({name:f.name,buf:CX.saved.buf,at:Date.now(),srv:1}).catch(()=>{});say('✓ File saved in the app and on Drive. It stays the same file on every phone and computer.','ok')},()=>say('✓ File saved in the app. Could not save it on Drive now (no internet?). It will be saved on Drive the next time you make the Excel.','warn'))}catch(x){say('✗ Could not read this file','bad')}};
+  const run=async mode=>{commit();const E=coList(CX.date);if(!coDates().length)return say('Add at least one entry first','bad');
     if(mode==='app'){if(!E.length)return say('Add at least one entry for this day','bad');try{coSave(CX.date,E);say('✓ Saved in the app. Open Smart Post, pick '+dd(CX.date)+' and press Save to Draft. Then review and post from Drafts.','ok')}catch(x){say('✗ Could not save on this device','bad')}return}
     say('Making the file…');
     try{let sv=CX.saved;if(!(sv&&sv.buf)){try{sv=await coSrvGet();if(sv&&sv.buf){sv.srv=1;await coFileSet({name:sv.name,buf:sv.buf,at:Date.now(),srv:1});CX.saved=sv}}catch(e){sv=null}}
@@ -9632,5 +9644,15 @@ html body #settings.pg.st,html body [id^="set"].pg.st,html body #bcu.pg.st,html 
 function go(){var a=document.querySelector('.app');if(!a)return;new MutationObserver(sync).observe(a,{subtree:true,attributes:true,attributeFilter:['class']});sync()}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',go);else go()})();
 </script>
+<style id="rdl-desk-fix2">
+/* Desktop only (>=1000px). Phone is untouched. */
+@media (min-width:1000px){
+/* menu name sits clearly below the icon (the 3D shadow of the icon was touching it) */
+html body .nav button,html body .nav button.dsk-set{gap:9px!important;padding:3px 10px 1px!important}
+/* Data Hub: centred with the same width as the Settings pages */
+html body #dhub.pg.st{max-width:520px;margin-left:auto;margin-right:auto}
+html body #dhub #rgx-hubbody{max-width:none;margin:0}
+}
+</style>
 </body>
 </html>
