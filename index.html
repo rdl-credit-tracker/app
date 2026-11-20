@@ -1906,6 +1906,8 @@ function mergeVal(base,inc,who){
   return base===undefined||base===null?inc:base}
 function mergeUserDcr(email,ud){
   if(!ud||!Array.isArray(ud.rows)||!ud.rows.length)return;
+  /* what this user UPLOADED (Daily Collection & Order file) is also kept per user, so the Admin's Entry Tables can list it (rdl.coup.v1) */
+  try{var up=jget('rdl.coup.v1')||{},em=String(email||'').toLowerCase(),mine=up[em]||{};ud.rows.forEach(function(r){if(r&&r.d&&r.n)mine[r.d+'|'+String(r.n).toLowerCase()]={d:r.d,n:r.n,o:r.o||{},c:r.c||{},rm:r.rm||''}});up[em]=mine;jset('rdl.coup.v1',up)}catch(e){}
   var dm=jget('rdlgate.dcrm')||{},uat=+ud.at||0;if(uat<=(+dm[email]||0))return;
   var a=jget('rdl.dcr.v1'),aat=a?(+a.at||0):0,newer=uat>aat,key=function(r){return String(r.n||'').toLowerCase()+'|'+r.d},have={},rows=(a&&a.rows)?a.rows.slice():[],added=0;
   if(newer){var nu={};ud.rows.forEach(function(r){nu[key(r)]=1});rows=rows.filter(function(r){return !nu[key(r)]}).concat(ud.rows);added=ud.rows.length}
@@ -2789,6 +2791,13 @@ window.RDLGATE={bkRender:bkRender,mergeBackups:mergeBackups,showMergeReport:show
       <input id="fDcr" type="file" accept=".xlsx" hidden><div class="stt" id="sDcr"></div>
       <button class="st-btn" id="bDcr" disabled>Upload Daily Collection &amp; Order</button>
       <div class="cur" id="curDcr"></div>
+      <div id="dcrUpSec" style="margin-top:18px;padding-top:14px;border-top:1px dashed #b9c9e6">
+        <h3 style="margin:0 0 4px">DCR (Daily Call Report)</h3>
+        <p class="hint">Your DCR Excel file. Every visit in it is added to your DCR entries (a visit already entered in the app is not added again), so the Admin can see it too.</p>
+        <label class="fp" for="fVis"><span>DCR file</span><em id="nVis">Choose .xlsx file</em></label>
+        <input id="fVis" type="file" accept=".xlsx" hidden><div class="stt" id="sVis"></div>
+        <button class="st-btn" id="bVis" disabled>Upload DCR</button>
+      </div>
     </div>
   </div>
 
@@ -3374,6 +3383,35 @@ function saveDcr(){
   pendD=null;$('#bDcr').disabled=true;window.dispatchEvent(new Event('rdl:dcr'));curStatus();
   setTimeout(()=>{try{sessionStorage.setItem('rdl.openPosting','1')}catch(e){}location.reload()},1200);   /* reload, then open the Sales & Collection Posting page */
 }
+/* ---- DCR upload: the visits of the user's DCR Excel (every sheet) are added to the DCR entries (rdl.visit.v1), once each ---- */
+let pendV=null;
+async function parseVis(buf){
+  const x=await readXlsx(buf),out=[],t=new Date().toISOString().slice(0,10);let ok=false;
+  for(const sh of x.sheets){const R=await x.rows(sh);let d=null;
+    for(const i of keys(R)){if(i<7)continue;const a=R[i];if(!a||typeof a[0]!=='number')continue;ok=true;
+      if(typeof a[1]==='number'&&a[1]>30000)d=iso(a[1]);
+      const n=str(a[3]);if(!n||!d||d>t||/^total/i.test(n))continue;
+      const tx=String(a[4]==null?'':a[4]),m=/(\d+)/.exec(tx),pd=parseDur(tx);
+      out.push({d,n,mn:pd.mn!=null?pd.mn:(/\./.test(tx)?0:(m?+m[1]:0)),vp:str(a[5]),vw:str(a[6]),note:str(a[7])})}}
+  return ok?out:null}
+async function onVis(file){
+  pendV=null;$('#bVis').disabled=true;if(!file)return;$('#nVis').textContent=file.name;say('#sVis','Reading…');
+  try{const r=await parseVis(await file.arrayBuffer());
+    if(!r){say('#sVis','✗ Wrong file — expected the DCR Excel file','bad');return}
+    if(!r.length){say('#sVis','✗ No visit found in this file','bad');return}
+    pendV=r;say('#sVis','✓ Ready • '+fmt(r.length)+' visits • '+fmt(new Set(r.map(v=>v.d)).size)+' days','ok');$('#bVis').disabled=false}
+  catch(e){say('#sVis','✗ Could not read this file','bad')}}
+function saveVis(){
+  if(!pendV)return;
+  try{const x=JSON.parse(localStorage.getItem('rdl.visit.v1')||'null')||{},V=Array.isArray(x.visits)?x.visits:[],nk=s=>String(s||'').toLowerCase().trim(),
+      own=new Set(V.filter(v=>!String(v.id||'').startsWith('up|')).map(v=>v.date+'|'+nk(v.nm))),have=new Set(V.map(v=>v.id)),seen={};let add=0,skip=0;
+    pendV.forEach(r=>{const b=r.d+'|'+nk(r.n);seen[b]=(seen[b]||0)+1;const id='up|'+b+'|'+seen[b];
+      if(own.has(b)||have.has(id)){skip++;return}
+      V.push({id,date:r.d,cu:'',nm:r.n,tin:'',tout:'',mn:r.mn,vp:r.vp||'Accounts & Pharmacy',vw:r.vw||'Self',note:r.note});have.add(id);add++});
+    localStorage.setItem('rdl.visit.v1',JSON.stringify({...x,visits:V}));
+    say('#sVis','✓ '+add+' visit'+(add===1?'':'s')+' added'+(skip?' • '+skip+' already there':'')+'.','ok')}
+  catch(e){say('#sVis','✗ Could not save on this device','bad');return}
+  pendV=null;$('#bVis').disabled=true}
 function openSettings(){
   document.querySelectorAll('.pg').forEach(x=>x.classList.remove('on'));
   document.querySelectorAll('.nav button').forEach(x=>x.classList.remove('on'));
@@ -3386,6 +3424,8 @@ $('#fCr').addEventListener('change',e=>onDb('cr',e.target.files[0]));
 $('#bDb').addEventListener('click',applyDb);
 $('#fDcr').addEventListener('change',e=>{onDcr(e.target.files[0]);e.target.value=''});
 $('#bDcr').addEventListener('click',saveDcr);
+$('#fVis').addEventListener('change',e=>{onVis(e.target.files[0]);e.target.value=''});
+$('#bVis').addEventListener('click',saveVis);
 /* after the reload that follows an upload, open the main Settings page */
 const backToSettings=()=>{try{if(sessionStorage.getItem('rdl.openSettings')){sessionStorage.removeItem('rdl.openSettings');openSettings()}}catch(e){}};
 if(document.readyState==='complete')setTimeout(backToSettings,0);else window.addEventListener('load',()=>setTimeout(backToSettings,0));
@@ -4931,6 +4971,7 @@ const pUp=page('setup','Database Upload','setdb'),pDcr=page('setdcr','Daily Coll
 if(upCard){upCard.querySelector('.hint').textContent='Upload either file or both. Credit limit data replaces only the credit limits. Outstanding data replaces the bills; bills and collections you posted in the app are reconciled by date.';
   const bd=upCard.querySelector('#bDb');if(bd)bd.textContent='Upload Database';pages.setup.body.appendChild(upCard)}
 if(dcrCard)pages.setdcr.body.appendChild(dcrCard);
+{const vs=dcrCard&&dcrCard.querySelector('#dcrUpSec');if(vs&&window.RDL_ROLE==='admin')vs.style.display='none'}   /* admins do not enter visits */
 pDcr.querySelector('.st-top button').onclick=()=>{if(window.RDL.openUpload)window.RDL.openUpload()};
 window.RDL_openSet=open;
 function buildMainList(){
@@ -5347,19 +5388,93 @@ page('setusers','User Manage & Access Control','setsec',b=>{
     +'.ua-h{font-weight:700;font-size:13.5px;margin:12px 0 2px}'
     +'.ua-lr{font-size:12px;padding:5px 0;border-bottom:1px solid #8aa0c433;word-break:break-word}.ua-lr.bad{color:#c0392b}.ua-lr b{font-weight:700}';
     document.head.appendChild(cs)}
+  /* new look of this page (design only; every button still does exactly what it did) */
+  if(!document.getElementById('uxCss')){const c2=document.createElement('style');c2.id='uxCss';
+    c2.textContent=`
+.ux-card{position:relative;border:1px solid #cfdcf3!important;border-radius:26px!important;background:linear-gradient(#fff,#f7faff)!important;box-shadow:0 10px 26px -14px #0a49b566!important;padding:18px!important}
+.ux-hd{display:flex;align-items:center;gap:14px;margin:0 0 14px}
+.ux-ic{flex:none;width:50px;height:50px;border-radius:16px;display:flex;align-items:center;justify-content:center;color:#fff;box-shadow:0 8px 16px -8px #0a49b588}
+.ux-ic.gold{background:linear-gradient(135deg,#c8961f,#f0cd73);color:#5a3d00}.ux-ic.blue{background:linear-gradient(135deg,#0a49b5,#16a3c4)}.ux-ic svg{width:24px;height:24px}
+.ux-ht{min-width:0}.ux-ht h3{margin:0!important;font-size:20px!important;font-weight:800;color:#0b2a5b}.ux-ht small{display:block;margin-top:3px;font-size:12px;font-weight:800;letter-spacing:.16em;color:#b98d2b;text-transform:uppercase}
+.ux-f{position:relative;display:flex;align-items:center;gap:12px;margin:12px 0;padding:10px 14px;border:1px solid #c9daf5;border-radius:22px;background:#f4f8ff}
+.ux-fi{flex:none;width:36px;height:36px;border-radius:12px;background:#fff;border:1px solid #d6e3f7;display:flex;align-items:center;justify-content:center;color:#0a49b5}.ux-fi svg{width:19px;height:19px}
+.ux-fb{flex:1;min-width:0}.ux-fl{display:block;font-size:11.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#0a4fd0;margin-bottom:1px}
+.ux-f input,.ux-f select{display:block;width:100%;border:0!important;outline:0;background:transparent!important;padding:0!important;margin:0!important;font-size:16px;font-weight:600;color:#0b2a5b;box-shadow:none!important;min-width:0}
+.ux-f select{appearance:none;-webkit-appearance:none;text-overflow:ellipsis;padding-right:22px!important}
+.ux-f.sel::after{content:'';position:absolute;right:18px;top:50%;width:8px;height:8px;border-right:2px solid #0a4fd0;border-bottom:2px solid #0a4fd0;transform:translateY(-70%) rotate(45deg);pointer-events:none}
+.ux-2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0}.ux-2 .ux-f{margin:0}
+.ux-card .asg-pick{border:1.5px dashed #5b9be0!important;background:linear-gradient(100deg,#eef6ff,#e3f4fb)!important;color:#0a3a9a;border-radius:22px!important;padding:20px 10px!important;font-size:17px!important;font-weight:800}
+.ux-card .asg-sum{display:inline-block;margin-top:12px;padding:8px 14px;border-radius:999px;background:#e6f4ff;color:#0a4fd0;font-size:14px;font-weight:700;border:1px solid #cfe0f6}.ux-card .asg-sum::before{content:'';display:inline-block;width:9px;height:9px;border-radius:50%;background:#0a86d0;margin-right:8px}
+.ux-card .asg-sum.none{background:#fff3d6;color:#8a5a00;border-color:#f1dba0}.ux-card .asg-sum.none::before{background:#e0a21a}
+.ux-u{position:relative;margin:14px 0!important;padding:16px 16px 14px 22px!important;border-radius:24px!important;border:1px solid #cfdcf3!important;background:linear-gradient(#fff,#f6f9ff);box-shadow:0 8px 20px -14px #0a49b566;overflow:hidden}
+.ux-u::before{content:'';position:absolute;left:0;top:0;bottom:0;width:9px;background:linear-gradient(#0a49b5,#16b8c0)}
+.ux-u.ux-root{background:linear-gradient(#fffbea,#fff6d9);border-color:#ecd48a!important}.ux-u.ux-root::before{background:linear-gradient(#c8961f,#f0cd73)}
+.ux-ut{display:flex;align-items:center;gap:14px}
+.ux-av{flex:none;width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:800;color:#fff;background:linear-gradient(135deg,#0a49b5,#16a3c4);box-shadow:0 8px 14px -8px #0a49b5}
+.ux-root .ux-av{background:linear-gradient(135deg,#c8961f,#f0cd73);color:#5a3d00}
+.ux-ui{flex:1;min-width:0}.ux-un{font-size:19px;font-weight:800;color:#0b2a5b;word-break:break-word}.ux-you{font-size:14px;font-weight:600;color:#51648a}.ux-ue{font-size:14px;color:#51648a;word-break:break-all}
+.ux-bds{flex:none;display:flex;flex-direction:column;gap:5px;align-items:flex-end}
+.ux-bd{display:inline-block;padding:5px 11px;border-radius:999px;font-size:12.5px;font-weight:800;white-space:nowrap}
+.ux-bd.gold{background:#fbe9b0;color:#8a5a00}.ux-bd.ok{background:#dcf5e8;color:#0b7a4a}.ux-bd.off{background:#e8edf5;color:#51648a}.ux-bd.adm{background:#e3ecff;color:#0a4fd0}.ux-bd.act{background:#e8edf5;color:#35507d}.ux-bd.usr{background:#e3ecff;color:#0a4fd0}.ux-bd.adm2{background:#fdf0c8;color:#8a5a00}.ux-bd.bad{background:#ffe9ee;color:#d4183d}
+.ux-chips{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 0}
+.ux-chip{display:inline-block;padding:7px 13px;border-radius:999px;border:1px solid #d6e3f7;background:#f1f6ff;color:#35507d;font-size:13px;font-weight:600}.ux-chip.ok{background:#dcf5e8;border-color:#bfe8d3;color:#0b7a4a;font-weight:800}.ux-chip.bad{background:#ffe9ee;border-color:#f7b5c4;color:#d4183d;font-weight:800}
+.ux-note{margin:12px 0 0;padding:11px 14px;border-radius:16px;font-size:13.5px;font-weight:600}
+.ux-note.gold{border:1.5px dashed #d8b45a;background:#fff8e0;color:#7a5200}.ux-note.amb{background:#fff0dc;border:1px solid #f3d3a0;color:#8a5200}.ux-note.mut{background:none;padding:6px 2px;color:#51648a;font-weight:500}.ux-note.warn{background:#ffe9ee;color:#c0392b}
+.ux-bs{display:flex;flex-wrap:wrap;gap:9px;margin-top:14px;padding-top:14px;border-top:1px solid #dbe6f7}
+.ux-bs .ua-b{margin:0!important;padding:10px 16px;border-radius:999px;border:1px solid #cfe0f6;background:#eaf2ff;color:#0a3fa8;font-size:14px;font-weight:700}
+.ux-bs .ua-b.main{background:linear-gradient(100deg,#0a49b5,#0a86d0);color:#fff;border-color:transparent}.ux-bs .ua-b.red{background:#ffe9ee;border-color:#f7b5c4;color:#c0392b}
+.ux-bs .o1{order:1}.ux-bs .o2{order:2}.ux-bs .o3{order:3}.ux-bs .o4{order:4}.ux-bs .o5{order:5}.ux-bs .o6{order:6}
+.ux-u .ua-ed{margin-top:12px}
+.ux-acc{margin:14px 0 6px;padding:12px;border-radius:26px;background:#e9f0fc;border:1px solid #d4e1f7}
+.ux-ah{display:flex;align-items:center;gap:12px;padding:6px 4px 10px}
+.ux-leg{display:flex;justify-content:center;flex-wrap:wrap;gap:6px 16px;font-size:13px;font-weight:700;color:#35507d;margin:0 0 6px}.ux-leg i{display:inline-block;width:11px;height:11px;border-radius:50%;margin-right:5px;vertical-align:-1px}
+.ux-mod{margin:10px 0;padding:13px 14px;border-radius:20px;background:#fff;border:1px solid #d9e5f8}
+.ux-mh{display:flex;gap:12px;align-items:center;margin-bottom:11px}
+.ux-mi{flex:none;width:40px;height:40px;border-radius:13px;background:#eef4ff;border:1px solid #d6e3f7;color:#0a49b5;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px}.ux-mi svg{width:19px;height:19px}
+.ux-mn{font-size:16.5px;font-weight:800;color:#0b2a5b;line-height:1.2}.ux-md{font-size:13px;color:#6b7fa6;margin-top:2px}
+.ux-seg{display:flex;gap:4px;padding:5px;border-radius:999px;background:#eaf0fa;border:1px solid #d9e5f8}
+.ux-sg{flex:1;border:0;background:transparent;border-radius:999px;padding:10px 6px;font-size:14px;font-weight:700;color:#51648a;white-space:nowrap;cursor:pointer}
+.ux-sg.on.ux-sg-g{background:linear-gradient(100deg,#16a864,#3cc98a);color:#fff;box-shadow:0 5px 10px -5px #16a864}.ux-sg.on.ux-sg-y{background:linear-gradient(100deg,#e2a21a,#f4c95a);color:#4a3200}.ux-sg.on.ux-sg-r{background:linear-gradient(100deg,#e5584f,#f58a7e);color:#fff}.ux-sg.on.ux-sg-p{background:linear-gradient(100deg,#4f6fb5,#7f95cf);color:#fff}
+.ux-subs{margin:12px 0 0 8px;padding-left:14px;border-left:2px dotted #b9c9e6}.ux-sub{margin:10px 0}.ux-sub .ux-mi{width:34px;height:34px}.ux-sub .ux-mn{font-size:15px}
+.ux-lg{margin-top:14px;border:1px solid #d6e3f7;border-radius:20px;overflow:hidden;background:#fff}
+.ux-lr{display:flex;align-items:center;gap:12px;padding:12px 14px;border-bottom:1px solid #e3ecfa}.ux-lr:nth-child(even){background:#f6f9ff}.ux-lr:last-child{border-bottom:0}
+.ux-la{flex:none;width:40px;height:40px;border-radius:12px;background:#e6efff;color:#0a4fd0;display:flex;align-items:center;justify-content:center}.ux-la svg{width:19px;height:19px}
+.ux-lm{flex:1;min-width:0}.ux-le{font-weight:800;color:#0b2a5b;font-size:15px;word-break:break-all}.ux-lt{font-size:13px;color:#6b7fa6;margin-top:2px;word-break:break-word}
+.ux-lc{flex:none;display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+@media(max-width:560px){.ux-lr{flex-wrap:wrap}.ux-lc{width:100%;justify-content:flex-start;padding-left:52px}.ux-bds{align-self:flex-start}.ux-ut{align-items:flex-start}}
+`;document.head.appendChild(c2)}
+  const UI=p=>'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+p+'</svg>';
+  const P={stop:'<circle cx="12" cy="13" r="7.5"/><path d="M12 9v4l2.500 2M9.500 2.500h5M12 2.500V5.500"/>',pencil:'<path d="M4 20l1-4L16.500 4.500a2 2 0 012.800 2.800L7.800 19z"/><path d="M14.500 6.500l3 3"/>',key:'<circle cx="8" cy="12" r="3.500"/><path d="M11.500 12H21M18 12v3M15 12v2"/>',user:'<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.500-6 8-6s8 2 8 6"/>',mail:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/>',shield:'<path d="M12 3l8 3v6c0 5-3.500 8-8 9-4.500-1-8-4-8-9V6z"/>',cal:'<rect x="3.500" y="5" width="17" height="15" rx="2"/><path d="M3.500 10h17M8 3v4M16 3v4"/>',
+    up:'<path d="M12 16V4m0 0l-4 4m4-4l4 4M4 20h16"/>',phone:'<path d="M5 4h4l2 5-2.500 1.500a11 11 0 005 5L15 13l5 2v4a2 2 0 01-2 2A15 15 0 013 6a2 2 0 012-2z"/>',bell:'<path d="M6 17V11a6 6 0 0112 0v6l2 2H4zM10 21h4"/>',pal:'<path d="M12 3a9 9 0 100 18c1.500 0 2-1 1.500-2s0-2 1.500-2H17a4 4 0 004-4c0-5-4-10-9-10z"/><circle cx="8" cy="11" r="1"/><circle cx="12" cy="7.500" r="1"/><circle cx="16" cy="11" r="1"/>',disk:'<path d="M5 4h11l3 3v13H5zM8 4v5h7M8 20v-6h8v6"/>',clock:'<circle cx="12" cy="12" r="8.500"/><path d="M12 7v5l3 2"/>',userp:'<circle cx="10" cy="8" r="4"/><path d="M2 21c0-4 3.500-6 8-6M18 8v6M15 11h6"/>',shift:'<path d="M4 8h14m0 0l-4-4m4 4l-4 4M20 16H6m0 0l4-4m-4 4l4 4"/>',trash:'<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>',users:'<circle cx="9" cy="8" r="3.500"/><circle cx="17" cy="9" r="2.500"/><path d="M2 20c0-3.500 3-5.500 7-5.500s7 2 7 5.500M16 14.500c3 0 6 1.500 6 4.500"/>',
+    arr:'<path d="M5 12h14m0 0l-5-5m5 5l-5 5"/>',ne:'<path d="M7 17L17 7M9 7h8v8"/>',sw:'<path d="M17 7L7 17M15 17H7V9"/>',tt:'<path d="M5 6h14M12 6v13"/>',dot:'<circle cx="12" cy="12" r="3"/>'};
+  const ICM={dcr:P.up,entry:P.pencil,wa:P.phone,notif:P.bell,theme:P.pal,backup:P.disk,actlog:P.clock,dbup:P.up,corr:P.pencil,newcust:P.userp,shift:P.shift,erase:P.trash,users:P.users,'entry.sales':P.ne,'entry.coll':P.sw,'theme.hdr':P.tt};
+  const ucard=(t,sub,ic,tone)=>{const c=el('div','st-card ux-card'),h=el('div','ux-hd'),i=el('div','ux-ic '+tone),x=el('div','ux-ht');i.innerHTML=UI(P[ic]);x.appendChild(el('h3',null,t));x.appendChild(el('small',null,sub));h.appendChild(i);h.appendChild(x);c.appendChild(h);return c};
+  /* a labelled field with an icon; node = the real input / select (it keeps doing its job) */
+  const ufield=(host,lab,ic,node,isSel)=>{const w=el('div','ux-f'+(isSel?' sel':'')),fi=el('span','ux-fi'),bx=el('div','ux-fb');fi.innerHTML=UI(P[ic]);bx.appendChild(el('span','ux-fl',lab));bx.appendChild(node);w.appendChild(fi);w.appendChild(bx);host.appendChild(w);return w};
   const msg=e=>String(e&&e.message||e||'').replace(/^Error:\s*/,'').replace(/^ACCESS_DENIED:\s*/,'');
   const W=k=>ACC.level(k)===2,mayCreate=W('users.create'),mayEdit=W('users.edit'),mayDel=W('users.delete'),mayPerm=W('users.perms'),mayLog=ACC.level('users.log')>0;   /* each option of User Manage is opened or closed on its own */
   const LV=[[2,'Full access'],[1,'View only'],[0,'No access']],LVT={2:'full',1:'view only',0:'no access'};
-  /* one row per part of the app: Full access / View only / No access. Returns the chosen limits. */
+  /* one block per part of the app: tap Full access / View / No access. Returns the chosen limits (a hidden select still holds each value). */
+  const seg=(s,opts)=>{const w=el('div','ux-seg'),bs=[];s.style.display='none';w.appendChild(s);
+    const sync=()=>bs.forEach(x=>{const on=String(s.value)===String(x[1]);x[0].classList.toggle('on',on);x[0].setAttribute('aria-pressed',on?'true':'false')});
+    opts.forEach(o=>{const b=el('button','ux-sg ux-sg-'+o[2],o[1]);b.type='button';b.onclick=()=>{s.value=o[0];s.dispatchEvent(new Event('change'));sync()};bs.push([b,o[0]]);w.appendChild(b)});sync();return w};
   const accEditor=(host,role,cur)=>{
-    const sel={},subSel={};
-    ACC.modsFor(role).forEach(m=>{const row=el('div','ua-r'),lb=el('div');lb.appendChild(document.createTextNode(m.t+(m.sub?' (whole group)':'')));lb.appendChild(el('small',null,m.d||''));row.appendChild(lb);
+    const sel={},subSel={},pn=el('div','ux-acc');host.appendChild(pn);
+    {const h=el('div','ux-ah'),i=el('div','ux-ic gold'),x=el('div','ux-ht');i.innerHTML=UI(P.key);x.appendChild(el('h3',null,'Access limits for this account'));x.appendChild(el('small',null,'Tap a level for each area'));h.appendChild(i);h.appendChild(x);pn.appendChild(h);
+     const lg=el('div','ux-leg');[['#3cc98a','Full'],['#f4c95a','View only'],['#f58a7e','No access']].forEach(o=>{const t=el('span');const d=el('i');d.style.background=o[0];t.appendChild(d);t.appendChild(document.createTextNode(o[1]));lg.appendChild(t)});pn.appendChild(lg)}
+    const ico=(k)=>{const d=el('div','ux-mi');if(k==='theme.look')d.textContent='Aa';else d.innerHTML=UI(ICM[k]||P.dot);return d};
+    ACC.modsFor(role).forEach(m=>{const blk=el('div','ux-mod'),hd=el('div','ux-mh'),tx=el('div');hd.appendChild(ico(m.k));tx.appendChild(el('div','ux-mn',m.t));tx.appendChild(el('div','ux-md',(m.d||'')+(m.sub?(m.d?' · ':'')+'whole group':'')));hd.appendChild(tx);blk.appendChild(hd);
       const s=el('select');LV.forEach(o=>{if(o[0]===1&&!m.ro)return;const op=el('option',null,o[1]);op.value=o[0];s.appendChild(op)});
-      s.value=String(ACC.lvl(cur,role,m.k));sel[m.k]=s;row.appendChild(s);host.appendChild(row);
-      (m.sub||[]).forEach(sm=>{if(sm.adminOnly&&role!=='admin')return;
-        const r2=el('div','ua-r ua-sub'),l2=el('div');l2.appendChild(document.createTextNode('↳ '+sm.t));if(sm.d)l2.appendChild(el('small',null,sm.d));r2.appendChild(l2);
-        const s2=el('select');[['inh','Same as the group'],['2','Full access'],['0','No access']].forEach(o=>{const op=el('option',null,o[1]);op.value=o[0];s2.appendChild(op)});
-        const cv=cur&&cur[sm.k];s2.value=(cv===0||cv===2)?String(cv):'inh';subSel[sm.k]=s2;r2.appendChild(s2);host.appendChild(r2)})});
+      s.value=String(ACC.lvl(cur,role,m.k));sel[m.k]=s;
+      blk.appendChild(seg(s,[[2,'Full access','g']].concat(m.ro?[[1,'View','y']]:[],[[0,'No access','r']])));
+      const subs=(m.sub||[]).filter(sm=>!(sm.adminOnly&&role!=='admin'));
+      if(subs.length){const sw=el('div','ux-subs');
+        subs.forEach(sm=>{const r2=el('div','ux-sub'),h2=el('div','ux-mh'),t2=el('div');h2.appendChild(ico(sm.k));t2.appendChild(el('div','ux-mn',sm.t));if(sm.d)t2.appendChild(el('div','ux-md',sm.d));h2.appendChild(t2);r2.appendChild(h2);
+          const s2=el('select');[['inh','Same as the group'],['2','Full access'],['0','No access']].forEach(o=>{const op=el('option',null,o[1]);op.value=o[0];s2.appendChild(op)});
+          const cv=cur&&cur[sm.k];s2.value=(cv===0||cv===2)?String(cv):'inh';subSel[sm.k]=s2;
+          r2.appendChild(seg(s2,[['inh','Same as group','p'],['2','Full','g'],['0','No','r']]));sw.appendChild(r2)});
+        blk.appendChild(sw)}
+      pn.appendChild(blk)});
     return{get:()=>{const p={};ACC.modsFor(role).forEach(m=>{p[m.k]=+sel[m.k].value;(m.sub||[]).forEach(sm=>{const x=subSel[sm.k];if(x&&x.value!=='inh')p[sm.k]=+x.value})});return p}}};
   /* short text: where this account differs from the usual defaults */
   const summary=(p,role)=>{const r=[];ACC.modsFor(role).forEach(m=>{const v=ACC.lvl(p,role,m.k),d=ACC.lvl({},role,m.k);if(v!==d)r.push(m.t+': '+LVT[v]);
@@ -5367,13 +5482,13 @@ page('setusers','User Manage & Access Control','setsec',b=>{
     return r.length?'Changed from default — '+r.join(' • '):'Default access'};
 
   /* ---- add a user or an admin ---- */
-  const add=card('Add a user or an admin','The account is added to the Google Sheet and can sign in with this Gmail. Choose below what it may open and change. You can change this later.');
-  const mk=(ph,type)=>{const i=el('input','ua-in');i.placeholder=ph;i.type=type||'text';i.autocomplete='off';add.appendChild(i);return i};
-  const fe=mk('Gmail address','email'),fn=mk('Name');
-  const rs=el('select','ua-in sel');[['user','User — works on chosen depots and customers'],['admin','Admin — sees every depot and customer']].forEach(o=>{const op=el('option',null,o[1]);op.value=o[0];rs.appendChild(op)});add.appendChild(rs);
+  const add=ucard('Add a user or an admin','New account','user','blue');
+  const mk=(ph,type,lab,ic)=>{const i=el('input');i.placeholder=ph;i.type=type||'text';i.autocomplete='off';ufield(add,lab,ic,i);return i};
+  const fe=mk('name@gmail.com','email','Gmail address','mail'),fn=mk('Full name','text','Name','user');
+  const rs=el('select');[['user','User — works on chosen depots and customers'],['admin','Admin — sees every depot and customer']].forEach(o=>{const op=el('option',null,o[1]);op.value=o[0];rs.appendChild(op)});ufield(add,'Role','shield',rs,true);
   const asgBox=el('div');add.appendChild(asgBox);
   const asgF=RDLAssign.field(asgBox,{users:()=>GT.api('listUsers').then(j=>j.users),email:()=>fe.value});
-  add.appendChild(el('div','ua-h','Access limits for this account'));
+  {const sm=asgBox.querySelector('.asg-sum');if(sm){const t=()=>sm.classList.toggle('none',/^No depot/i.test(sm.textContent));t();new MutationObserver(t).observe(sm,{childList:true,characterData:true,subtree:true})}}
   const accHost=el('div');add.appendChild(accHost);let ed=null;
   const paint=()=>{accHost.textContent='';ed=accEditor(accHost,rs.value,{});asgBox.style.display=rs.value==='admin'?'none':''};
   rs.onchange=paint;paint();
@@ -5382,10 +5497,10 @@ page('setusers','User Manage & Access Control','setsec',b=>{
   const listCard=card('Accounts');const list=el('div');listCard.appendChild(list);b.appendChild(listCard);
 
   /* ---- what users changed ---- */
-  const cc=card('What users changed','Who changed what, and when. A phone sends its list together with its backup, so a phone that was offline appears later.');
-  const usel=el('select','ua-in sel'),d1=el('input','ua-in'),d2=el('input','ua-in');d1.type=d2.type='date';
+  const cc=ucard('What users changed','Change history','pencil','blue');
+  const usel=el('select'),d1=el('input'),d2=el('input');d1.type=d2.type='date';
   const fromD=new Date();fromD.setDate(fromD.getDate()-7);d1.value=ymd(fromD);d2.value=ymd(new Date());
-  cc.appendChild(el('label','od-label','User'));cc.appendChild(usel);cc.appendChild(el('label','od-label','From'));cc.appendChild(d1);cc.appendChild(el('label','od-label','To'));cc.appendChild(d2);
+  ufield(cc,'User','user',usel,true);{const g=el('div','ux-2');ufield(g,'From','cal',d1);ufield(g,'To','cal',d2);cc.appendChild(g)}
   const cb=el('button','st-btn','Show changes');cb.type='button';const cl=el('div');cc.appendChild(cb);cc.appendChild(cl);if(mayLog)b.appendChild(cc);
   const OP={add:'Added',edit:'Edited',del:'Deleted'};
   cb.onclick=async()=>{cl.textContent='Loading…';cb.disabled=true;
@@ -5406,14 +5521,25 @@ page('setusers','User Manage & Access Control','setsec',b=>{
     if(pm===null)list.appendChild(el('p','ua-w','⚠ Access limits, admins and the changes list need the Apps Script update (new Code.gs). Add, Turn off and Turn on still work.'));
     us.forEach(u=>{
       const em=u.email.toLowerCase(),self=em===meMail,isAdm=u.role==='admin';
-      const r=el('div','ua-u'+(u.active?'':' off'));
-      r.appendChild(el('div','ua-n',(u.name||u.email)+(u.root?'  (Main Admin)':isAdm?'  (Admin)':'')+(self?'  — you':'')));
-      r.appendChild(el('div','ua-s',u.email));
-      {const pb=el('button','ua-b alt','Profile & edit history');pb.type='button';pb.style.margin='4px 0';pb.onclick=()=>{try{window.RDLPROFILE.open(u.email)}catch(e){RDLUI.alert('Profile','Could not open the profile.')}};r.appendChild(pb)}
+      const r=el('div','ua-u ux-u'+(u.active?'':' off')+(u.root?' ux-root':''));
+      {const top=el('div','ux-ut'),av=el('div','ux-av',String((u.name||u.email||'?').trim().charAt(0)||'?').toUpperCase()),inf=el('div','ux-ui'),nm=el('div','ux-un',u.name||u.email),bd=el('div','ux-bds');
+       if(self)nm.appendChild(el('span','ux-you',' — you'));inf.appendChild(nm);inf.appendChild(el('div','ux-ue',u.email));top.appendChild(av);top.appendChild(inf);
+       if(u.root)bd.appendChild(el('span','ux-bd gold','♛ Main Admin'));else{if(isAdm)bd.appendChild(el('span','ux-bd adm','Admin'));bd.appendChild(el('span','ux-bd '+(u.active?'ok':'off'),'● '+(u.active?'Active':'Turned off')))}
+       top.appendChild(bd);r.appendChild(top)}
+      const chips=el('div','ux-chips');r.appendChild(chips);
       {const t=u.lastBackup?new Date(u.lastBackup):null,mins=t?Math.max(0,Math.round((Date.now()-t)/60000)):null,
         ago=mins===null?'no backup yet':mins<2?'just now':mins<60?mins+' min ago':mins<1440?Math.round(mins/60)+' h ago':Math.round(mins/1440)+' day'+(Math.round(mins/1440)===1?'':'s')+' ago',
-        d=el('div','ua-s','Last backup: '+ago);if(u.active&&(mins===null||mins>1440)){d.style.color='#d90000';d.style.fontWeight='800'}r.appendChild(d)}
-      {const db=el('button','ua-b alt','Devices & activity');db.type='button';db.style.margin='4px 0 4px 6px';let dbox=null;
+        c=el('span','ux-chip','⟳ Last backup: '+ago);if(u.active&&(mins===null||mins>1440))c.className='ux-chip bad';chips.appendChild(c)}
+      chips.appendChild(el('span','ux-chip','⌂ '+(isAdm?'All depots & customers':String(RDLAssign.describe(u.assign)||u.depot||'all depots').replace(/ \((\d+ customers?)\)/g,' · $1'))));
+      if(u.root)chips.appendChild(el('span','ux-chip ok','● Active'));
+      const cur=(pm&&pm[em])||{};
+      if(u.root)r.appendChild(el('div','ux-note gold','🔒 Main Admin: cannot be limited, turned off or deleted.'));
+      else{if(pm!==null){const sm=summary(cur,u.role);r.appendChild(el('div','ux-note '+(/^Changed/.test(sm)?'amb':'mut'),/^Changed/.test(sm)?'✎ '+sm:sm))}
+        if(!isAdm&&u.depot&&!u.depotKnown)r.appendChild(el('div','ux-note warn','⚠ No data published under this depot name. Check the spelling.'));
+        if(self)r.appendChild(el('div','ux-note mut','You cannot limit, turn off or delete your own account.'))}
+      const bs=el('div','ua-bs ux-bs');r.appendChild(bs);
+      {const pb=el('button','ua-b alt o4','Profile & edit history');pb.type='button';pb.onclick=()=>{try{window.RDLPROFILE.open(u.email)}catch(e){RDLUI.alert('Profile','Could not open the profile.')}};bs.appendChild(pb)}
+      {const db=el('button','ua-b alt o5','Devices & activity');db.type='button';let dbox=null;
         const fm=x=>{try{return new Date(x).toLocaleString('en-GB')}catch(e){return String(x)}};
         const sec=(h)=>{const t=el('div','ua-s',h);t.style.cssText='font-weight:800;margin:10px 0 4px';dbox.appendChild(t)};
         const ln=(t,c)=>{const x=el('div','ua-s',t);x.style.cssText='white-space:pre-line;margin-bottom:6px;border-bottom:1px solid #e4ecf8;padding-bottom:4px'+(c?';color:'+c:'');dbox.appendChild(x)};
@@ -5421,35 +5547,29 @@ page('setusers','User Manage & Access Control','setsec',b=>{
           try{const j=await GT.api('userActivity',{email:u.email});dbox.textContent='';
             sec('Devices ('+j.devices.length+')');
             if(!j.devices.length)ln('No device seen yet. A device appears here after its next backup.');
-            j.devices.forEach(d=>ln((d.label||'Unknown device')+' \u2022 id …'+d.device+'\nLast seen: '+fm(d.lastAt)+'\nFirst seen: '+fm(d.firstAt)));
+            j.devices.forEach(d=>ln((d.label||'Unknown device')+' • id …'+d.device+'\nLast seen: '+fm(d.lastAt)+'\nFirst seen: '+fm(d.firstAt)));
             if(j.devices.length>1)ln('⚠ This person uses '+j.devices.length+' devices.','#b86e00');
             sec('Sign-ins & account actions ('+j.log.length+')');
             if(!j.log.length)ln('Nothing recorded yet.');
             j.log.forEach(x=>ln(fm(x.at)+'  •  '+x.action+(x.result&&x.result!=='OK'?' ('+x.result+')':'')+(x.note?'\n'+x.note:'')+(String(x.by).toLowerCase()!==String(u.email).toLowerCase()?'\nby '+x.by:''),x.result==='FAIL'?'#d90000':''));
             sec('Changes made in the app ('+j.changes.length+')');
             if(!j.changes.length)ln('No changes recorded yet.');
-            j.changes.forEach(x=>ln(fm(x.at)+'  •  '+x.kind+' • '+x.op+(x.detail?'\n'+x.detail:'')))}catch(e){dbox.textContent=msg(e)}};r.appendChild(db)}
-      r.appendChild(el('div','ua-s',(isAdm?'All depots and customers':(RDLAssign.describe(u.assign)||u.depot||'all depots'))+' • '+(u.active?'Active':'Turned off')));
-      if(u.root){r.appendChild(el('div','ua-s','Main Admin: cannot be limited, turned off or deleted.'));list.appendChild(r);return}
-      const cur=(pm&&pm[em])||{};
-      r.appendChild(el('div','ua-s',pm===null?'':summary(cur,u.role)));
-      if(!isAdm&&u.depot&&!u.depotKnown)r.appendChild(el('div','ua-w','⚠ No data published under this depot name. Check the spelling.'));
-      if(self){r.appendChild(el('div','ua-s','You cannot limit, turn off or delete your own account.'));list.appendChild(r);return}
-      const bs=el('div','ua-bs');r.appendChild(bs);
+            j.changes.forEach(x=>ln(fm(x.at)+'  •  '+x.kind+' • '+x.op+(x.detail?'\n'+x.detail:'')))}catch(e){dbox.textContent=msg(e)}};bs.appendChild(db)}
+      if(u.root||self){list.appendChild(r);return}
       const btn=(t,cls,fn)=>{const x=el('button','ua-b '+(cls||''),t);x.type='button';x.onclick=()=>fn(x);bs.appendChild(x);return x};
       const mayStop=!isAdm||iAmRoot;   /* only the Main Admin may turn off or delete another admin */
-      if(mayStop&&mayEdit)btn(u.active?'Turn off':'Turn on','',async x=>{
+      if(mayStop&&mayEdit)btn(u.active?'Turn off':'Turn on','main o1',async x=>{
         if(u.active&&!await RDLUI.ask({title:'Turn off '+u.email+'?',msg:'They lose access the next time they open the app. You can turn them on again later.'}))return;
         x.disabled=true;try{await GT.api('saveUser',{email:u.email,active:!u.active});load()}catch(e){x.disabled=false;await RDLUI.alert('Could not change',msg(e))}});
-      if(!isAdm&&mayEdit)btn('Depots & customers','alt',()=>RDLAssign.open({title:(u.name||u.email),assign:u.assign,email:u.email,users:()=>Promise.resolve(us),save:a=>GT.api('saveUser',{email:u.email,assign:a}).then(load)}));
+      if(!isAdm&&mayEdit)btn('Depots & customers','alt o2',()=>RDLAssign.open({title:(u.name||u.email),assign:u.assign,email:u.email,users:()=>Promise.resolve(us),save:a=>GT.api('saveUser',{email:u.email,assign:a}).then(load)}));
       let box=null;
-      if(mayPerm)btn('Access','alt',()=>{
+      if(mayPerm)btn('Access','alt o3',()=>{
         if(box){box.remove();box=null;return}
         box=el('div','ua-ed');r.appendChild(box);
         const e2=accEditor(box,u.role,cur);
         const sv=el('button','st-btn','Save access');sv.type='button';const st=msgBox();box.appendChild(sv);box.appendChild(st);
         sv.onclick=async()=>{sv.disabled=true;try{await GT.api('setPerms',{email:u.email,perms:e2.get()});say(st,'Saved. It applies the next time this account opens the app with internet.','ok');load()}catch(e){sv.disabled=false;say(st,msg(e),'bad')}}});
-      if(mayStop&&mayDel)btn('Delete','red',async x=>{
+      if(mayStop&&mayDel)btn('Delete','red o6',async x=>{
         if(!await RDLUI.ask({title:'Delete '+u.email+'?',msg:'The account is removed from the Google Sheet and loses access. Its backups are kept. This cannot be undone.'}))return;
         x.disabled=true;try{await GT.api('deleteUser',{email:u.email});load()}catch(e){x.disabled=false;await RDLUI.alert('Could not delete',msg(e))}});
       list.appendChild(r)})};
@@ -5464,9 +5584,15 @@ page('setusers','User Manage & Access Control','setsec',b=>{
     catch(e){say(am,msg(e),'bad')}ab.disabled=false};
 
   /* sign-in / backup log kept by the server */
-  const lc=card('Sign-in & backup log','Server log: who signed in, backed up or was refused.');const lb=el('button','st-btn','Show log');lb.type='button';const lg=el('div');lc.appendChild(lb);lc.appendChild(lg);b.appendChild(lc);
-  lb.onclick=async()=>{lg.textContent='Loading…';try{const j=await GT.api('listLog');lg.textContent='';if(!j.rows.length)lg.textContent='No activity yet.';
-    j.rows.forEach(r=>{const d=el('div','ua-lr'+(r.result==='FAIL'?' bad':''));let t=r.at;try{t=new Date(r.at).toLocaleString()}catch(e){}d.textContent=t+' • '+(r.email||'?')+' • '+r.action+' • '+r.result+(r.note?' • '+r.note:'');lg.appendChild(d)})}catch(e){lg.textContent=msg(e)}};
+  const lc=ucard('Sign-in & backup log','Server log','stop','gold');const lb=el('button','st-btn','Show log');lb.type='button';const lg=el('div');lc.appendChild(lb);lc.appendChild(lg);b.appendChild(lc);
+  lb.onclick=async()=>{lg.textContent='Loading…';try{const j=await GT.api('listLog');lg.textContent='';if(!j.rows.length){lg.textContent='No activity yet.';return}
+    const box=el('div','ux-lg');lg.appendChild(box);
+    j.rows.forEach(r=>{const d=el('div','ux-lr'),ar=el('div','ux-la'),mm=el('div','ux-lm'),cs=el('div','ux-lc');ar.innerHTML=UI(P.arr);let t=r.at;try{t=new Date(r.at).toLocaleString().replace(', ',' · ')}catch(e){}
+      mm.appendChild(el('div','ux-le',r.email||'?'));mm.appendChild(el('div','ux-lt',t));
+      const rl=String(r.note||'').toLowerCase();cs.appendChild(el('span','ux-bd act',r.action));
+      if(rl==='admin'||rl==='user')cs.appendChild(el('span','ux-bd '+(rl==='admin'?'adm2':'usr'),rl));else if(r.note)mm.appendChild(el('div','ux-lt',r.note));
+      cs.appendChild(el('span','ux-bd '+(r.result==='OK'?'ok':'bad'),'● '+r.result));
+      d.appendChild(ar);d.appendChild(mm);d.appendChild(cs);box.appendChild(d)})}catch(e){lg.textContent=msg(e)}};
   load()});
 
 const CV={tab:'dz',q:'',d1:'',d2:'',set:0,sel:null,lit:false};
@@ -7336,6 +7462,16 @@ const getV=()=>{const x=jget(VK,{});return{visits:Array.isArray(x.visits)?x.visi
 const hm=t=>{if(!t)return '';const[h,m]=t.split(':').map(Number);return(h%12||12)+':'+pad(m)+' '+(h<12?'AM':'PM')};
 const mins=(a,b)=>{if(!a||!b)return null;const[h1,m1]=a.split(':').map(Number),[h2,m2]=b.split(':').map(Number);return(h2*60+m2)-(h1*60+m1)};
 const dur=m=>m==null||m<0?'—':(m>=60?Math.floor(m/60)+'h '+(m%60?pad(m%60)+'m':''):m+' min').trim();
+/* ONE time box (like the Excel sheet): 10 = 10 minutes, 1.20 = 1 hour 20 minutes (part after the dot = minutes, as Excel cells show it: 1.2 = 1.20). */
+function parseDur(s){s=String(s==null?'':s).trim();if(!s)return{mn:null};
+  let hr=false;const u=/\s*(minutes?|mins?|hours?|hrs?)$/i.exec(s);if(u){hr=/^h/i.test(u[1]);s=s.slice(0,u.index).trim()}
+  let m=/^(\d{1,3})$/.exec(s),v;
+  if(m)v=hr?+m[1]*60:+m[1];
+  else if((m=/^(\d{1,2})\.(\d{1,2})$/.exec(s))){const mm=m[2].length===1?+m[2]*10:+m[2];if(mm>59)return{err:'After the dot write minutes from 00 to 59 (1.20 = 1 hour 20 minutes)'};v=+m[1]*60+mm}
+  else return{err:'Write minutes (10) or hours.minutes (1.20)'};
+  if(!(v>0))return{err:'Time must be more than 0'};if(v>1440)return{err:'Time cannot be more than 24 hours'};return{mn:v}}
+const durIn=m=>m<60?String(m):Math.floor(m/60)+'.'+pad(m%60);   /* minutes -> what is typed in the box */
+const vmin=v=>{if(v&&+v.mn>0)return +v.mn;const m=v?mins(v.tin,v.tout):null;return m>0?m:0};   /* saved minutes; old visits with Time in/out still work */
 const nowT=()=>{const d=new Date();return pad(d.getHours())+':'+pad(d.getMinutes())};
 const BK='<svg class="bk-ar" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 12h-15M10.5 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="4.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 const app=$('.app');
@@ -7430,7 +7566,7 @@ let dcrPC=0;
 const DP=mkPage('dcrp','DCR Entry',()=>{if(dcrPC){dcrPC=0;if(R.openUpload)R.openUpload()}else goMore()}),DF=mkPage('dcrf','Add visit',()=>{show('dcrp');drawD()});
 const vOf=d=>getV().visits.filter(v=>v.date===d&&dpShow(v)).sort((a,b)=>(a.tin||'99')>(b.tin||'99')?1:-1);
 const key=v=>v.cu||String(v.nm||'').toLowerCase();
-function stats(L){return{n:L.length,c:new Set(L.map(key)).size,m:L.reduce((s,v)=>s+(mins(v.tin,v.tout)>0?mins(v.tin,v.tout):0),0)}}
+function stats(L){return{n:L.length,c:new Set(L.map(key)).size,m:L.reduce((s,v)=>s+vmin(v),0)}}
 function drawD(){const B=DP.body;B.textContent='';
   const nv=el('div','mv-nav'),pv=el('button',null,'‹'),nx=el('button',null,'›'),di=el('input','list-search');pv.type=nx.type='button';di.type='date';di.value=DV.date;di.max=today();
   pv.onclick=()=>{DV.date=addD(DV.date,-1);drawD()};nx.onclick=()=>{if(DV.date<today()){DV.date=addD(DV.date,1);drawD()}};di.onchange=()=>{if(di.value){DV.date=di.value;drawD()}};
@@ -7440,7 +7576,7 @@ function drawD(){const B=DP.body;B.textContent='';
   const add=el('button','st-btn','+ Add visit');add.type='button';add.onclick=()=>openDF({date:DV.date});B.appendChild(add);
   if(!L.length)B.appendChild(el('div','mv-empty','No visit recorded for this day.'));
   L.forEach(v=>{const card=el('div','mv-item');card.style.setProperty('--c','#1d6fe8');const top=el('div','mv-top');
-    top.appendChild(el('span','mv-chip',v.vp||v.purpose||'Visit'));top.appendChild(el('span','mv-time','⏰ '+(v.tin?hm(v.tin):'—')+(v.tout?' – '+hm(v.tout):'')));const m=mins(v.tin,v.tout);if(m>0)top.appendChild(el('span','mv-time','• '+dur(m)));card.appendChild(top);
+    top.appendChild(el('span','mv-chip',v.vp||v.purpose||'Visit'));const m=vmin(v);if(v.tin)top.appendChild(el('span','mv-time','⏰ '+hm(v.tin)+(v.tout?' – '+hm(v.tout):'')));if(m>0)top.appendChild(el('span','mv-time',(v.tin?'• ':'⏱ ')+dur(m)));card.appendChild(top);
     dpLine(card,v);card.appendChild(el('div','mv-nm',v.nm||'(no name)'));if(v.vw)card.appendChild(el('div','mv-nt','Visited with: '+v.vw));if(v.note)card.appendChild(el('div','mv-nt',v.note));
     const ac=el('div','mv-act'),btn=(t,f,c)=>{const b=el('button',c||'',t);b.type='button';b.onclick=f;ac.appendChild(b)};
     btn('Edit',()=>openDF(v,true));btn('Delete',()=>{if(confirm('Delete this visit?')){const V=getV();V.visits=V.visits.filter(x=>x.id!==v.id);saveV(V);drawD();refreshMore()}},'del');card.appendChild(ac);B.appendChild(card)});
@@ -7455,11 +7591,11 @@ function drawD(){const B=DP.body;B.textContent='';
 function openDF(v,edit){v=v||{};const B=DF.body;B.textContent='';DF.h.textContent=edit?'Edit visit':'Add visit';const box=el('div','st-card');B.appendChild(box);
   const dt=el('input','list-search');dt.type='date';dt.value=v.date||today();dt.max=today();field(box,'Date',dt);
   box.appendChild(el('label','od-label','Customer visited'));const pk=picker(box,v);
-  const tin=el('input','list-search');tin.type='time';tin.value=v.tin||'';const tout=el('input','list-search');tout.type='time';tout.value=v.tout||'';
-  const r1=el('div','mv-row'),n1=el('button',null,'Now'),r2=el('div','mv-row'),n2=el('button',null,'Now');n1.type=n2.type='button';r1.appendChild(tin);r1.appendChild(n1);r2.appendChild(tout);r2.appendChild(n2);
-  box.appendChild(el('label','od-label','Time in'));box.appendChild(r1);box.appendChild(el('label','od-label','Time out'));box.appendChild(r2);
-  const du=el('div','stt');box.appendChild(du);const upd=()=>{const m=mins(tin.value,tout.value);if(m==null){du.className='stt';du.textContent=''}else if(m<=0){du.className='stt bad';du.textContent='Time out must be after time in'}else{du.className='stt ok';du.textContent='Time spent: '+dur(m)}};
-  n1.onclick=()=>{tin.value=nowT();upd()};n2.onclick=()=>{tout.value=nowT();upd()};tin.oninput=tout.oninput=upd;upd();
+  const tm=el('input','list-search');tm.type='text';tm.inputMode='decimal';tm.placeholder='e.g. 30 = 30 minutes, 1.20 = 1 hour 20 minutes';tm.autocomplete='off';
+  {const m0=vmin(v);tm.value=m0>0?durIn(m0):''}
+  field(box,'Time spent',tm);
+  const du=el('div','stt');box.appendChild(du);const upd=()=>{const r=parseDur(tm.value);if(r.mn==null&&!r.err){du.className='stt';du.textContent=''}else if(r.err){du.className='stt bad';du.textContent=r.err}else{du.className='stt ok';du.textContent='= '+dur(r.mn)+' ('+r.mn+' minutes)'}};
+  tm.oninput=upd;upd();
   const pu=el('select','list-search');VP.forEach(p=>pu.appendChild(new Option(p)));pu.value=VP.includes(v.vp)?v.vp:VP[0];field(box,'Visit Point',pu);
   const vw=el('input','list-search');vw.placeholder='Self';vw.value=v.vw!=null?v.vw:'Self';field(box,'Visited With (If any)',vw);
   const nt=el('textarea','mv-ta');nt.placeholder='Remarks';nt.value=v.note||'';field(box,'Remarks',nt);
@@ -7467,8 +7603,8 @@ function openDF(v,edit){v=v||{};const B=DF.body;B.textContent='';DF.h.textConten
   const row=el('div','od-actions'),sv=el('button','st-btn','Save'),cn=el('button','st-btn od-clear','Cancel');sv.type=cn.type='button';row.appendChild(sv);row.appendChild(cn);box.appendChild(row);
   cn.onclick=()=>{show('dcrp');drawD()};
   sv.onclick=()=>{const bad=x=>{msg.className='stt bad';msg.textContent=x};if(!pk.nm)return bad('Enter the customer name');if(!dt.value||dt.value>today())return bad('Choose a valid date (not in the future)');
-    if(tin.value&&tout.value&&mins(tin.value,tout.value)<=0)return bad('Time out must be after time in');
-    const V=getV(),o={id:edit?v.id:uidn(),date:dt.value,cu:pk.cu,nm:pk.nm,tin:tin.value,tout:tout.value,vp:pu.value,vw:vw.value.trim(),note:nt.value.trim()};
+    const pd=parseDur(tm.value);if(pd.err)return bad(pd.err);
+    const V=getV(),o={id:edit?v.id:uidn(),date:dt.value,cu:pk.cu,nm:pk.nm,tin:v.tin||'',tout:v.tout||'',mn:pd.mn||0,vp:pu.value,vw:vw.value.trim(),note:nt.value.trim()};
     if(edit)V.visits=V.visits.map(x=>x.id===v.id?o:x);else V.visits.push(o);
     if(!saveV(V))return bad('Could not save on this device');DV.date=o.date;show('dcrp');drawD();refreshMore()};
   show('dcrf')}
@@ -7502,7 +7638,7 @@ async function buildDcrXlsx(buf,date,L){
     const cm=new RegExp('<c r="C'+top+'"[^>]*?(?:/>|>[\\s\\S]*?</c>)').exec(rowOf(x,top));
     return{top:info(top),mid:info(Math.min(top+1,end)),end:info(end),emp:cm?cm[0]:''}};
   const n=L.length;if(!n)throw new Error('No visit recorded for this day');
-  const mk=(T,start,sl)=>{let o='';for(let i=0;i<n;i++){const f=i===0?T.top:(i===n-1?T.end:T.mid),r=start+i,s=f.st,v=L[i],m=mins(v.tin,v.tout);
+  const mk=(T,start,sl)=>{let o='';for(let i=0;i<n;i++){const f=i===0?T.top:(i===n-1?T.end:T.mid),r=start+i,s=f.st,v=L[i],m=vmin(v);
     let c='<c r="A'+r+'"'+sa(s.A)+'><v>'+(sl+i)+'</v></c>';
     c+=i===0?'<c r="B'+r+'"'+sa(s.B)+'><v>'+ts+'</v></c>':'<c r="B'+r+'"'+sa(s.B)+'/>';
     if(i===0&&T.emp)c+=T.emp.replace(/ r="C\d+"/,' r="C'+r+'"').replace(/ s="\d+"/,sa(s.C)||'');else c+='<c r="C'+r+'"'+sa(s.C)+'/>';
@@ -7697,7 +7833,7 @@ function coTable(B){entTable(B,{noDl:true,title:'My Collection & Order table',sh
   rows:S=>{const X=coGet(),out=[];Object.keys(X).sort().reverse().forEach(d=>{if((S.from&&d<S.from)||(S.to&&d>S.to))return;(X[d]||[]).forEach(e=>COL7.forEach(k=>{if(S.biz&&S.biz!==k)return;const o=+(e.o||{})[k]||0,c=+(e.c||{})[k]||0;if(o||c)out.push([dd(d),k,e.nm,o,c])}))});return out},
   total:rows=>['Total','','',rows.reduce((a,r)=>a+r[3],0),rows.reduce((a,r)=>a+r[4],0)]})}
 function dcrTable(B){entTable(B,{title:'My DCR table',sheet:'DCR',file:'DCR_table',st:DCT,head:['Date','Customer','Time','Purpose'],
-  rows:S=>getV().visits.filter(dpShow).filter(v=>!((S.from&&v.date<S.from)||(S.to&&v.date>S.to))).sort((a,b)=>a.date===b.date?((a.tin||'99')>(b.tin||'99')?1:-1):(a.date<b.date?1:-1)).map(v=>[dd(v.date),v.nm||'',(v.tin?hm(v.tin):'\u2014')+(v.tout?' \u2013 '+hm(v.tout):''),v.vp||v.purpose||'Visit']),
+  rows:S=>getV().visits.filter(dpShow).filter(v=>!((S.from&&v.date<S.from)||(S.to&&v.date>S.to))).sort((a,b)=>a.date===b.date?((a.tin||'99')>(b.tin||'99')?1:-1):(a.date<b.date?1:-1)).map(v=>[dd(v.date),v.nm||'',(v.tin?hm(v.tin)+(v.tout?' \u2013 '+hm(v.tout):''):'')+(vmin(v)>0?(v.tin?' \u2022 ':'')+dur(vmin(v)):(v.tin?'':'\u2014')),v.vp||v.purpose||'Visit']),
   total:rows=>['Total',rows.length+' visit'+(rows.length===1?'':'s'),'','']})}
 const CP=mkPage('coep','Collection & Order',()=>{if(CX.commit)try{CX.commit()}catch(e){}if(R.openUpload)R.openUpload()});
 function drawCO(){const B=CP.body;B.textContent='';
@@ -9485,12 +9621,15 @@ function delKeys(keys){
   LS.setItem('rdl.etdel.v1',JSON.stringify(a));
   var X=J('rdl.coe.v1',{}),ch=0;Object.keys(X).forEach(function(d){var n=(X[d]||[]).filter(function(e){return !set[ckey(d,e)]});if(n.length!==(X[d]||[]).length){X[d]=n;ch=1}});if(ch)LS.setItem('rdl.coe.v1',JSON.stringify(X));
   var V=J('rdl.visit.v1',{});if(Array.isArray(V.visits)){var n2=V.visits.filter(function(e){return !set[vkey(e)]});if(n2.length!==V.visits.length){V.visits=n2;LS.setItem('rdl.visit.v1',JSON.stringify(V))}}}
-function coRows(){var X=J('rdl.coe.v1',{}),out=[],T=tomb();
-  Object.keys(X).forEach(function(d){(X[d]||[]).forEach(function(e){if(T[ckey(d,e)])return;var w=who(e._u);
-    COL7.forEach(function(k){var o=+(e.o||{})[k]||0,c=+(e.c||{})[k]||0;if(o||c)out.push({d:d,k:ckey(d,e),dp:w.depot,u:w.name,b:k,nm:e.nm||'',rm:e.rm||'',o:o,c:c,r:[fd(d),w.depot,w.name,k,e.nm||'',o,c]})})})});
+function coRows(){var X=J('rdl.coe.v1',{}),out=[],T=tomb(),have={};
+  function push(d,e){if(T[ckey(d,e)])return;var w=who(e._u);
+    COL7.forEach(function(k){var o=+(e.o||{})[k]||0,c=+(e.c||{})[k]||0;if(o||c)out.push({d:d,k:ckey(d,e),dp:w.depot,u:w.name,b:k,nm:e.nm||'',rm:e.rm||'',o:o,c:c,r:[fd(d),w.depot,w.name,k,e.nm||'',o,c]})})}
+  Object.keys(X).forEach(function(d){(X[d]||[]).forEach(function(e){have[String(e._u||'').toLowerCase()+'|'+d+'|'+String(e.nm||'').toLowerCase()]=1;push(d,e)})});
+  /* uploaded Daily Collection & Order files: added when the same user/date/customer is not already there from an app entry */
+  var U=J('rdl.coup.v1',{});Object.keys(U).forEach(function(em){var m=U[em]||{};Object.keys(m).forEach(function(k){var r=m[k];if(have[em+'|'+r.d+'|'+String(r.n).toLowerCase()])return;push(r.d,{_u:em,id:'up|'+r.d+'|'+String(r.n).toLowerCase(),nm:r.n,o:r.o,c:r.c,rm:r.rm})})});
   return out}
 function dcrRows(){var x=J('rdl.visit.v1',{}),v=Array.isArray(x.visits)?x.visits:[],T=tomb();
-  return v.filter(function(e){return !T[vkey(e)]}).map(function(e){var w=who(e._u),t=(e.tin||'—')+(e.tout?' – '+e.tout:'');
+  return v.filter(function(e){return !T[vkey(e)]}).map(function(e){var w=who(e._u),t=e.tin?e.tin+(e.tout?' – '+e.tout:''):(e.mn?e.mn+' Minutes':'—');
     return{d:e.date,k:vkey(e),dp:w.depot,u:w.name,b:'',t:e.tin||'99',r:[fd(e.date),w.depot,w.name,e.nm||'',t,e.vp||'Visit',e.vw||'',e.note||'']}})}
 /* ---- one-sheet xlsx ---- */
 function xlsx(sheet,head,rows){
