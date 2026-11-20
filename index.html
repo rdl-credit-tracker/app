@@ -7563,31 +7563,82 @@ function openS(){drawS();show('sched')}
 const PUR=['Collection','Order','Meeting','Courtesy visit','Complaint / issue','TDS challan','Other'];
 const DV={date:today(),days:15};
 let dcrPC=0;
-const DP=mkPage('dcrp','DCR Entry',()=>{if(dcrPC){dcrPC=0;if(R.openUpload)R.openUpload()}else goMore()}),DF=mkPage('dcrf','Add visit',()=>{show('dcrp');drawD()});
+const DP=mkPage('dcrp','DCR Entry',()=>{if(DS.commit)try{DS.commit()}catch(e){}if(dcrPC){dcrPC=0;if(R.openUpload)R.openUpload()}else goMore()}),DF=mkPage('dcrf','Add visit',()=>{show('dcrp');drawD()});
 const vOf=d=>getV().visits.filter(v=>v.date===d&&dpShow(v)).sort((a,b)=>(a.tin||'99')>(b.tin||'99')?1:-1);
 const key=v=>v.cu||String(v.nm||'').toLowerCase();
 function stats(L){return{n:L.length,c:new Set(L.map(key)).size,m:L.reduce((s,v)=>s+vmin(v),0)}}
+const DS={rows:null,commit:null,vh:0};
+(function(){const s=document.createElement('style');s.textContent='.co-tbl.dc-tbl{min-width:760px}.dc-kt{width:96px}.dc-kv{width:170px}.dc-kw{width:120px}.dc-kr{width:190px}.co-n.dc-l{text-align:left}select.co-n{padding:6px 4px;-webkit-appearance:menulist;appearance:menulist}@media(min-width:1000px){.co-tbl.dc-tbl{min-width:0}.co-tbl.dc-tbl .co-k0{width:28%}.dc-kt{width:10%}.dc-kv{width:18%}.dc-kw{width:14%}.dc-kr{width:26%}}';document.head.appendChild(s)})();
 function drawD(){const B=DP.body;B.textContent='';
-  const nv=el('div','mv-nav'),pv=el('button',null,'‹'),nx=el('button',null,'›'),di=el('input','list-search');pv.type=nx.type='button';di.type='date';di.value=DV.date;di.max=today();
-  pv.onclick=()=>{DV.date=addD(DV.date,-1);drawD()};nx.onclick=()=>{if(DV.date<today()){DV.date=addD(DV.date,1);drawD()}};di.onchange=()=>{if(di.value){DV.date=di.value;drawD()}};
-  nv.appendChild(pv);nv.appendChild(di);nv.appendChild(nx);B.appendChild(nv);
-  const L=vOf(DV.date),s=stats(L);B.appendChild(el('div','mv-day',dow(DV.date)+', '+dd(DV.date)+(DV.date===today()?' • Today':'')));
-  const sm=el('div','mv-sum');[['Visits',s.n,''],['Customers',s.c,'g'],['Time spent',dur(s.m),'']].forEach(([l,n,k])=>{const b=el('div','mv-box '+k);b.appendChild(el('b',null,String(n)));b.appendChild(el('small',null,l));sm.appendChild(b)});B.appendChild(sm);
-  const add=el('button','st-btn','+ Add visit');add.type='button';add.onclick=()=>openDF({date:DV.date});B.appendChild(add);
-  if(!L.length)B.appendChild(el('div','mv-empty','No visit recorded for this day.'));
-  L.forEach(v=>{const card=el('div','mv-item');card.style.setProperty('--c','#1d6fe8');const top=el('div','mv-top');
-    top.appendChild(el('span','mv-chip',v.vp||v.purpose||'Visit'));const m=vmin(v);if(v.tin)top.appendChild(el('span','mv-time','⏰ '+hm(v.tin)+(v.tout?' – '+hm(v.tout):'')));if(m>0)top.appendChild(el('span','mv-time',(v.tin?'• ':'⏱ ')+dur(m)));card.appendChild(top);
-    dpLine(card,v);card.appendChild(el('div','mv-nm',v.nm||'(no name)'));if(v.vw)card.appendChild(el('div','mv-nt','Visited with: '+v.vw));if(v.note)card.appendChild(el('div','mv-nt',v.note));
-    const ac=el('div','mv-act'),btn=(t,f,c)=>{const b=el('button',c||'',t);b.type='button';b.onclick=f;ac.appendChild(b)};
-    btn('Edit',()=>openDF(v,true));btn('Delete',()=>{if(confirm('Delete this visit?')){const V=getV();V.visits=V.visits.filter(x=>x.id!==v.id);saveV(V);drawD();refreshMore()}},'del');card.appendChild(ac);B.appendChild(card)});
-  dcrExcelCard(B);
-  /* day-wise report */
-  B.appendChild(el('div','mv-day','Day-wise report'));const rg=el('select','list-search');[[7,'Last 7 days'],[15,'Last 15 days'],[30,'Last 30 days'],[90,'Last 90 days']].forEach(([v,l])=>rg.appendChild(new Option(l,v)));rg.value=DV.days;rg.onchange=()=>{DV.days=+rg.value;drawD()};B.appendChild(rg);
-  const V=getV().visits.filter(dpShow),t=today(),tb=el('table','mv-tbl'),th=el('tr');['Date','Visits','Customers','Time'].forEach(h=>th.appendChild(el('th',null,h)));tb.appendChild(th);
-  let T={n:0,m:0},uc=new Set();
-  for(let i=0;i<DV.days;i++){const d=addD(t,-i),l=V.filter(v=>v.date===d),x=stats(l);T.n+=x.n;T.m+=x.m;l.forEach(v=>uc.add(key(v)));
-    const r=el('tr','tap'+(d===DV.date?' sel':''));[dow(d)+' '+dd(d).slice(0,6),x.n||'—',x.c||'—',x.m?dur(x.m):'—'].forEach(c=>r.appendChild(el('td',null,String(c))));r.onclick=()=>{DV.date=d;drawD();window.scrollTo(0,0)};tb.appendChild(r)}
-  const tr=el('tr','tot');['Total',T.n,uc.size,dur(T.m)].forEach(c=>tr.appendChild(el('td',null,String(c))));tb.appendChild(tr);B.appendChild(tb);dcrTable(B)}
+  /* two ways to do the daily work: type the visits in the table (this page) or upload the DCR Excel file (Settings page, unchanged) */
+  {const sw=el('div','od-actions'),a=el('button','st-btn','Entry'),u=el('button','st-btn od-clear','Upload');a.type=u.type='button';
+   u.onclick=()=>{if(DS.commit)try{DS.commit()}catch(e){}if(window.RDL_openSet){window.RDL_openSet('setdcr');setTimeout(()=>{const s=document.getElementById('dcrUpSec');if(s)s.scrollIntoView({block:'start'})},80)}};sw.appendChild(a);sw.appendChild(u);B.appendChild(sw)}
+  const di=el('input','list-search');di.type='date';di.value=DV.date;di.max=today();di.onchange=()=>{if(!di.value)return;if(DS.commit)try{DS.commit()}catch(e){}DV.date=di.value;drawD()};B.appendChild(di);
+  const CL=custs(),blank=()=>({id:'',cu:'',nm:'',txt:'',t:'',vp:VP[0],vw:'Self',rm:'',saved:false,dirty:false}),
+    isBlank=r=>!r.cu&&!(r.txt||'').trim()&&!(r.t||'').trim()&&!(r.rm||'').trim()&&(!r.vw||r.vw==='Self')&&r.vp===VP[0];
+  const rows=vOf(DV.date).map(v=>({id:v.id,cu:v.cu||'',nm:v.nm||'',txt:v.cu?'':(v.nm||''),t:vmin(v)>0?durIn(vmin(v)):'',vp:v.vp||v.purpose||VP[0],vw:v.vw!=null?v.vw:'Self',rm:v.note||'',saved:true,dirty:false,src:v}));
+  DS.rows=rows;if(!rows.length||!isBlank(rows[rows.length-1]))rows.push(blank());
+  const tcard=el('div','st-card co-tcard');B.appendChild(tcard);tcard.appendChild(el('div','co-th','Daily Call Report (DCR)'));
+  const wrap=el('div','co-wrap'),tbl=el('table','co-tbl dc-tbl'),thd=el('thead'),hr=el('tr'),tb=el('tbody');
+  {const cg=document.createElement('colgroup');['co-k0','dc-kt','dc-kv','dc-kw','dc-kr','co-kx'].forEach(c=>{const x=document.createElement('col');x.className=c;cg.appendChild(x)});tbl.appendChild(cg)}
+  tbl.appendChild(thd);thd.appendChild(hr);tbl.appendChild(tb);wrap.appendChild(tbl);tcard.appendChild(wrap);
+  hr.appendChild(el('th','co-c0','Customer (code or name)'));
+  [['Time spent','10 or 1.20'],['Visit Point',''],['Visited With',''],['Remarks','']].forEach(([a,b])=>{const h=el('th');h.appendChild(document.createTextNode(a));if(b)h.appendChild(el('small',null,b));hr.appendChild(h)});hr.appendChild(el('th'));
+  const msg=el('div','stt'),setMsg=(t,k)=>{msg.className='stt'+(k?' '+k:'');msg.textContent=t||''};
+  const flat=()=>[...tb.querySelectorAll('input,select')].filter(i=>!i.disabled);
+  const nextFrom=e0=>{const f=flat(),i=f.indexOf(e0);if(i>=0&&f[i+1]){f[i+1].focus();try{f[i+1].select()}catch(e){}}};
+  const find=v=>{v=v.trim().toLowerCase();if(!v)return[];const ex=CL.filter(c=>c.code.toLowerCase()===v);if(ex.length)return ex;const nx=CL.filter(c=>c.name.toLowerCase()===v);if(nx.length)return nx;return CL.filter(c=>c.code.toLowerCase().includes(v)||c.name.toLowerCase().includes(v)||(c.dp||'').toLowerCase().includes(v))};
+  /* a row is ready when it has a customer (chosen from the list, or any name that is not in the list) and a valid time */
+  const chk=r=>{const nm=r.cu?r.nm:(r.txt||'').trim();if(!nm)return{ok:false,err:'enter the customer'};
+    if(!r.cu&&find(nm).length&&!(r.saved&&!r.dirty))return{ok:false,err:'choose the customer from the list'};
+    let mn=0;if((r.t||'').trim()){const p=parseDur(r.t);if(p.err)return{ok:false,err:p.err};mn=p.mn||0}
+    return{ok:true,nm,mn}};
+  const grow=()=>{const last=rows[rows.length-1];if(!isBlank(last)){const r=blank();rows.push(r);tb.appendChild(mkRow(r))}};
+  function mkRow(r){
+    const tr=el('tr',r.saved?'co-sv':''),t0=el('td','co-c0'),ci=el('input','co-cu'),cn=el('div','co-cn',r.cu?(r.nm+(dpOf(r.cu)?' • '+dpOf(r.cu):'')):''),sg=el('div','od-suggestions co-sg');
+    r._tr=tr;ci.type='text';ci.placeholder='Code or name';ci.autocomplete='off';ci.value=r.cu||r.txt||'';t0.appendChild(ci);t0.appendChild(cn);t0.appendChild(sg);tr.appendChild(t0);
+    const pick=c=>{r.cu=c.code;r.nm=c.name;r.txt='';ci.value=c.code;cn.textContent=c.name+(c.dp?' • '+c.dp:'');ci.classList.remove('bad');sg.textContent='';setMsg('');r.dirty=true;grow();return true};
+    const sug=m=>{sg.textContent='';m.slice(0,8).forEach(c=>{const b=el('button','od-sug',c.name+' ');b.type='button';b.appendChild(el('small',null,c.code+(c.dp?' • '+c.dp:'')));b.onpointerdown=e=>e.preventDefault();b.onclick=()=>{if(pick(c))nextFrom(ci)};sg.appendChild(b)})};
+    ci.addEventListener('input',()=>{r.cu='';r.nm='';r.txt=ci.value;cn.textContent='';ci.classList.remove('bad');r.dirty=true;sg.textContent='';const v=ci.value.trim().toLowerCase();grow();if(v.length<2)return;sug(find(v))});
+    ci.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();const v=ci.value.trim();if(!v)return;if(!r.cu){const m=find(v);if(m.length===1)pick(m[0]);else if(m.length>1){sug(m);return}}nextFrom(ci)}});
+    ci.addEventListener('blur',()=>{if(ci.value.trim()&&!r.cu){const m=find(ci.value);if(m.length===1)pick(m[0])}});
+    const mkTd=(node)=>{const td=el('td');td.appendChild(node);tr.appendChild(td);return node};
+    const ti=el('input','co-n');ti.type='text';ti.inputMode='decimal';ti.autocomplete='off';ti.placeholder='Time';ti.value=r.t||'';
+    ti.addEventListener('input',()=>{let t=ti.value.replace(/[^0-9.]/g,'');const p=t.indexOf('.');if(p>=0)t=t.slice(0,p+1)+t.slice(p+1).replace(/\./g,'');if(t!==ti.value)ti.value=t;r.t=t;r.dirty=true;grow()});
+    ti.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();nextFrom(ti)}});mkTd(ti);
+    const vp=el('select','co-n dc-l');const vps=VP.includes(r.vp)?VP:VP.concat([r.vp]);vps.forEach(p=>vp.appendChild(new Option(p)));vp.value=r.vp;
+    vp.addEventListener('change',()=>{r.vp=vp.value;r.dirty=true;grow()});mkTd(vp);
+    const vw=el('input','co-n dc-l');vw.type='text';vw.placeholder='Self';vw.value=r.vw||'';vw.addEventListener('input',()=>{r.vw=vw.value;r.dirty=true;grow()});vw.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();nextFrom(vw)}});mkTd(vw);
+    const rm=el('input','co-n dc-l');rm.type='text';rm.placeholder='Remarks';rm.value=r.rm||'';rm.addEventListener('input',()=>{r.rm=rm.value;r.dirty=true;grow()});rm.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();nextFrom(rm)}});mkTd(rm);
+    const tx=el('td'),x=el('button','co-x','×');x.type='button';x.setAttribute('aria-label','Delete row');
+    x.onclick=()=>{if(r.saved){if(!confirm('Delete this visit?'))return;const V=getV();V.visits=V.visits.filter(z=>z.id!==r.id);saveV(V);refreshMore();drawD();return}
+      const i=rows.indexOf(r);if(i>=0)rows.splice(i,1);tr.remove();if(!rows.length||!isBlank(rows[rows.length-1])){const nb=blank();rows.push(nb);tb.appendChild(mkRow(nb))}};
+    tx.appendChild(x);tr.appendChild(tx);return tr}
+  rows.forEach(r=>tb.appendChild(mkRow(r)));
+  tcard.appendChild(msg);
+  /* ---- automatic saving (no Submit): a finished visit row is added to "My DCR table" below as soon as the next row is started, when the table is left, or when the date is changed ---- */
+  const tw=el('div'),sumEl=el('div','mv-day');
+  const paintSum=()=>{const L=vOf(DV.date),s=stats(L);sumEl.textContent=dow(DV.date)+', '+dd(DV.date)+(DV.date===today()?' • Today':'')+' • '+s.n+' visit'+(s.n===1?'':'s')+' • '+s.c+' customer'+(s.c===1?'':'s')+' • '+dur(s.m)};
+  const redraw=()=>{tw.textContent='';dcrTable(tw);paintSum()};
+  const commit=upto=>{if(upto==null)upto=rows.length;const pgx=document.getElementById('dcrp');if(!pgx||!pgx.classList.contains('on'))return false;
+    const date=DV.date;if(!date||date>today())return false;
+    const V=getV();let changed=false;
+    rows.forEach((r,i)=>{if(i>=upto||isBlank(r)||(r.saved&&!r.dirty))return;const k=chk(r);if(!k.ok)return;
+      const o={id:r.id||uidn(),date,cu:r.cu||null,nm:k.nm,tin:r.src&&r.src.tin||'',tout:r.src&&r.src.tout||'',mn:k.mn,vp:r.vp,vw:(r.vw||'').trim(),note:(r.rm||'').trim()};
+      const j=V.visits.findIndex(z=>z.id===o.id);if(j>=0)V.visits[j]=Object.assign({},V.visits[j],o);else V.visits.push(o);
+      r.id=o.id;r.saved=true;r.dirty=false;r.src=o;if(r._tr)r._tr.classList.add('co-sv');changed=true});
+    if(!changed)return false;
+    if(!saveV(V)){setMsg('✗ Could not save on this device','bad');return false}
+    setMsg('');redraw();refreshMore();return true};
+  tb.addEventListener('focusin',e=>{const tr=e.target.closest&&e.target.closest('tr');if(!tr)return;const k=[...tb.children].indexOf(tr);if(k<=0)return;
+    for(let i=0;i<k;i++){const r=rows[i];if(r&&!isBlank(r)&&!(r.saved&&!r.dirty)){const c=chk(r);if(!c.ok){setMsg('✗ Row '+(i+1)+': '+c.err+' — not saved yet','bad');break}}}
+    commit(k)});
+  tcard.addEventListener('focusout',e=>{const n=e.relatedTarget;if(n&&tcard.contains(n))return;setTimeout(()=>commit(),0)});
+  DS.commit=()=>commit();
+  if(!DS.vh){DS.vh=1;document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'&&DS.commit)try{DS.commit()}catch(e){}})}
+  B.appendChild(tw);dcrTable(tw);   /* My DCR table sits right under the entry table */
+  paintSum();B.appendChild(sumEl);
+  dcrExcelCard(B)}
 function openDF(v,edit){v=v||{};const B=DF.body;B.textContent='';DF.h.textContent=edit?'Edit visit':'Add visit';const box=el('div','st-card');B.appendChild(box);
   const dt=el('input','list-search');dt.type='date';dt.value=v.date||today();dt.max=today();field(box,'Date',dt);
   box.appendChild(el('label','od-label','Customer visited'));const pk=picker(box,v);
