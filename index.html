@@ -2,9 +2,12 @@
 <html lang="">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<style>html,body{touch-action:pan-x pan-y}</style>
-<script>["gesturestart","gesturechange","gestureend"].forEach(function(e){document.addEventListener(e,function(x){x.preventDefault()})});</script>
+<meta name="viewport" id="rdlvp" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<script>/* Pinch-zoom is allowed on Android / computers (people with weak eyesight can enlarge the text). iPhone / iPad keep zoom locked: Safari zooms the page by itself when a field with text smaller than 16px is tapped, and it would stay zoomed. */
+(function(){var ios=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+if(ios){document.getElementById('rdlvp').setAttribute('content','width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover');
+var st=document.createElement('style');st.textContent='html,body{touch-action:pan-x pan-y}';document.head.appendChild(st);
+["gesturestart","gesturechange","gestureend"].forEach(function(e){document.addEventListener(e,function(x){x.preventDefault()})})}})();</script>
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"><meta http-equiv="Pragma" content="no-cache"><meta http-equiv="Expires" content="0">
 <title>RDL Credit Tracker</title>
 <link rel="manifest" href="manifest.json">
@@ -1453,6 +1456,11 @@ try{document.documentElement.classList.add('rdl-restoring');setTimeout(function(
       b.style.cssText='position:fixed;left:8px;right:8px;top:8px;z-index:2147483000;padding:12px 14px;border-radius:12px;color:#fff;font:600 14px/1.4 system-ui,sans-serif;box-shadow:0 6px 20px #0006;text-align:center';
       b.onclick=function(){b.style.display='none'};document.body.appendChild(b)}
     b.style.background=col;b.textContent=msg+'  (বন্ধ করতে চাপুন)';b.style.display='block'}
+  /* WRONG PHONE CLOCK: today's date comes from the phone. If the phone's clock is more than 10 minutes away from the server's, a warning is shown (once in a while); nothing else changes. */
+  window.RDLCLOCK=function(srv){try{srv=+srv;if(!srv)return;var d=Date.now()-srv;if(Math.abs(d)<600000)return;
+    var last=+(sessionStorage.getItem('rdl.clockwarn')||0);if(Date.now()-last<3600000)return;sessionStorage.setItem('rdl.clockwarn',String(Date.now()));
+    var m=Math.round(Math.abs(d)/60000),t=m>=1440?Math.round(m/1440)+' দিন':m>=60?Math.round(m/60)+' ঘণ্টা':m+' মিনিট';
+    bar('⚠ আপনার ফোনের ঘড়ি সঠিক নয়: প্রকৃত সময়ের চেয়ে প্রায় '+t+(d>0?' এগিয়ে':' পিছিয়ে')+' আছে। এতে এন্ট্রি ভুল তারিখে যেতে পারে। ফোনের Settings-এ তারিখ ও সময় "স্বয়ংক্রিয়" করুন।','#b45309')}catch(e){}};
   function isQuota(e){return !!e&&(e.name==='QuotaExceededError'||e.name==='NS_ERROR_DOM_QUOTA_REACHED'||e.code===22||e.code===1014)}
   Storage.prototype.setItem=function(k,v){
     try{return raw.call(this,k,v)}
@@ -1680,6 +1688,8 @@ function firstLogin(){
   setLogin('Signing in… please wait, do not tap again');
   var guard=setTimeout(function(){if(signing&&!reloading){signing=false;S=null;tok=null;loginBusy(false);setLogin('Taking too long. Check the internet and tap your Gmail once again.',true)}},45000);
   api('me').then(function(j){
+    if(window.RDLCLOCK)RDLCLOCK(j.now);
+    try{if(Array.isArray(j.deletedDepots))LS.setItem('rdl.deldp',JSON.stringify(j.deletedDepots))}catch(e){}
     var u=j.user;S={email:u.email,name:u.name,role:u.role,depot:u.depot,seq:u.seq,root:!!u.root};
     if(u.role==='user'){setLogin('Downloading your depot data…');
       return stashAdmin().then(function(){wipeUserData();return mergeOwn(true,false)}).then(function(){return pullData(true)}).then(function(){LS.setItem('rdlgate.owner','user');setDepotLabel();jset(SK,S);clearTimeout(guard);setLogin('Opening…');goReload()})}
@@ -1857,7 +1867,8 @@ document.addEventListener('visibilitychange',function(){if(document.visibilitySt
 function ledSig(){var L=jget('rdl.ledger.v1');if(!L)return '0';var s='';try{s=JSON.stringify({rv:L.rv||[],dz:L.dz||[]})}catch(e){}return (L.rv||[]).length+'/'+(L.dz||[]).length+'/'+s.length}
 function sigNow(){var m=jget('rdl.master.v1'),d=jget('rdl.dcr.v1');return m?(m.at+'|'+(d?d.at:0)+'|'+(LS.getItem('rdlgate.cut')||'')+'|'+ledSig()):''}
 /* Removed test depots (exact spelling; CTG. West Depot is the real one and stays). Their rows leave this phone when the same customer also exists under a real depot, and are never published. */
-var DEL_DP=['Dhaka Depot','Ctg. West Depot'];
+var DEL_DP=['Dhaka Depot','Ctg. West Depot'];/* fallback only; the server list (Code.gs DELETED_DEPOTS) is saved by the app and wins */
+try{var _dd=JSON.parse(LS.getItem('rdl.deldp')||'null');if(Array.isArray(_dd)&&_dd.every(function(x){return typeof x==='string'}))DEL_DP=_dd}catch(e){}
 function purgeDeleted(){
   var raw=LS.getItem('rdl.master.v1');if(!raw||!DEL_DP.some(function(d){return raw.indexOf('"'+d+'"')>=0}))return;
   var m;try{m=JSON.parse(raw)}catch(e){return}
@@ -2187,7 +2198,8 @@ document.addEventListener('visibilitychange',function(){if(document.visibilitySt
 function afterLogin(){
   afterAt=Date.now();chipSync();status('Checking…');
   api('me').then(function(j){
-    var u=j.user,ch=u.role!==S.role||u.depot!==S.depot||u.seq!==S.seq;
+    if(window.RDLCLOCK)RDLCLOCK(j.now);
+    var u=j.user,ch=u.role!==S.role||u.depot!==S.depot||u.seq!==S.seq;try{if(Array.isArray(j.deletedDepots))LS.setItem('rdl.deldp',JSON.stringify(j.deletedDepots))}catch(e){}
     S={email:u.email,name:u.name,role:u.role,depot:u.depot,seq:u.seq,root:!!u.root};jset(SK,S);
     setDepotLabel();if(ch){goReload();return}
     if(S.role==='admin'){if(!LS.getItem('rdl.master.v1'))return restoreAdmin().then(function(ok){if(ok){goReload();throw new Error('__reload')}
@@ -2906,7 +2918,7 @@ if(k<256)e=String.fromCharCode(k);else if(d[k])e=d[k];else if(k===n)e=w+w[0];els
 return o.join('')}
 function unesc(s){return s.indexOf('\u0002')<0?s:s.replace(/\u0002([0-9a-f]{4})/g,function(_,h){return String.fromCharCode(parseInt(h,16))})}
 function pack(v){if(v.length<1500||v.indexOf('\u0002')>=0)return v;try{var e=enc2(esc(v));if(!e)return v;var z=M2+e;if(z.length>=v.length*0.8)return v;if(unesc(dec2(e))!==v)return v;return z}catch(_){return v}}
-function unpack(z){return unesc((z.charAt(0)===M2?dec2:dec)(z.slice(1)))}
+function unpack(z){return unesc(dec2(z.slice(1)))}
 P.getItem=function(k){var r=G.call(this,k);if(r===null||this!==localStorage||typeof k!=='string'||k.indexOf('rdl.')!==0||(r.charAt(0)!==M&&r.charAt(0)!==M2))return r;
 var c=C[k];if(c&&c[0]===r)return c[1];try{var v=unpack(r);C[k]=[r,v];return v}catch(_){return r}};
 P.setItem=function(k,v){if(this===localStorage&&typeof k==='string'&&k.indexOf('rdl.')===0){v=String(v);var z=pack(v);if(z!==v)C[k]=[z,v];else delete C[k];return S.call(this,k,z)}return S.call(this,k,v)};
@@ -7637,12 +7649,12 @@ function drawD(){const B=DP.body;B.textContent='';
   /* two ways to do the daily work: type the visits in the table (this page) or upload the DCR Excel file (Settings page, unchanged) */
   {const sw=el('div','od-actions'),a=el('button','st-btn','Entry'),u=el('button','st-btn od-clear','Upload');a.type=u.type='button';
    u.onclick=()=>{if(DS.commit)try{DS.commit()}catch(e){}if(window.RDL_openSet){window.RDL_openSet('setdcr');setTimeout(()=>{const s=document.getElementById('dcrUpSec');if(s)s.scrollIntoView({block:'start'})},80)}};sw.appendChild(a);sw.appendChild(u);B.appendChild(sw)}
-  const di=el('input','list-search');di.type='date';di.value=DV.date;di.max=today();di.onchange=()=>{if(!di.value)return;if(DS.commit)try{DS.commit()}catch(e){}DV.date=di.value;drawD()};B.appendChild(di);
+  const di=el('input','list-search');di.type='date';di.value=DV.date;di.max=today();di.onchange=()=>{if(!di.value)return;if(DS.commit)try{DS.commit()}catch(e){}DV.date=di.value;DCT.from=DCT.to=DV.date;drawD()};di.classList.add('co-dt');
   const CL=custs(),blank=()=>({id:'',cu:'',nm:'',txt:'',t:'',vp:VP[0],vw:'Self',rm:'',saved:false,dirty:false}),
     isBlank=r=>!r.cu&&!(r.txt||'').trim()&&!(r.t||'').trim()&&!(r.rm||'').trim()&&(!r.vw||r.vw==='Self')&&r.vp===VP[0];
   const rows=vOf(DV.date).map(v=>({id:v.id,cu:v.cu||'',nm:v.nm||'',txt:v.cu?'':(v.nm||''),t:vmin(v)>0?durIn(vmin(v)):'',vp:v.vp||v.purpose||VP[0],vw:v.vw!=null?v.vw:'Self',rm:v.note||'',saved:true,dirty:false,src:v}));
   DS.rows=rows;if(!rows.length||!isBlank(rows[rows.length-1]))rows.push(blank());
-  const tcard=el('div','st-card co-tcard');B.appendChild(tcard);tcard.appendChild(el('div','co-th','Daily Call Report (DCR)'));
+  const tcard=el('div','st-card co-tcard');B.appendChild(tcard);{const th=el('div','co-th co-th2');th.appendChild(di);th.appendChild(el('span','co-tt','Daily Call Report (DCR)'));th.appendChild(el('span','co-ts'));tcard.appendChild(th)}
   const wrap=el('div','co-wrap'),tbl=el('table','co-tbl dc-tbl'),thd=el('thead'),hr=el('tr'),tb=el('tbody');
   {const cg=document.createElement('colgroup');['co-k0','dc-kt','dc-kv','dc-kw','dc-kr','co-kx'].forEach(c=>{const x=document.createElement('col');x.className=c;cg.appendChild(x)});tbl.appendChild(cg)}
   tbl.appendChild(thd);thd.appendChild(hr);tbl.appendChild(tb);wrap.appendChild(tbl);tcard.appendChild(wrap);
@@ -7792,22 +7804,19 @@ async function buildDcrXlsx(buf,date,L){
   return{blob,msg,n}}
 function dcrExcelCard(B){
   const c=el('div','st-card');
-  const fi=el('input');fi.type='file';fi.accept='.xlsx';fi.hidden=true;
-  const lab=()=>DX.buf?DX.name+' (new file chosen)':DX.saved?'\u2713 Saved file: '+DX.saved.name+' \u2014 tap to change':'Choose your DCR Excel file (first time only)';
-  const pk=el('button','st-btn od-clear',lab());pk.type='button';pk.onclick=()=>fi.click();
-  dxGet().then(o=>{DX.saved=o&&o.buf?o:null;if(DX.saved&&!DX.buf)DX.name=DX.saved.name;pk.textContent=lab()});
   const st=el('div','stt'),say=(t,k)=>{st.className='stt'+(k?' '+k:'');st.textContent=t};
-  fi.onchange=async()=>{const f=fi.files[0];fi.value='';if(!f)return;try{DX.buf=await f.arrayBuffer();DX.name=f.name;pk.textContent=lab();say('✓ File ready. The app will remember it after you make the Excel.','ok')}catch(e){say('✗ Could not read this file','bad')}};
-  const run=async share=>{const picked=!!DX.buf,sv=DX.saved,base=picked?DX.buf:(sv?((sv.bases||{})[DV.date]||sv.buf):null);if(!base)return say('Choose the DCR Excel file once (first time only)','bad');const L=vOf(DV.date);if(!L.length)return say('No visit recorded for this day','bad');
+  /* the DCR Excel is made in the team format: every visit of this month up to the chosen date (nothing after it); name, SAP ID and designation come from the Profile. No Excel file has to be chosen. */
+  const run=async share=>{const to=DV.date,fr=to.slice(0,8)+'01';
+    const list=getV().visits.filter(dpShow).filter(v=>v.date>=fr&&v.date<=to).map(v=>{let lb=v.nm||'';if(v.cu&&lb.indexOf(v.cu)<0)lb+='-'+v.cu;return{d:v.date,nm:lb,mn:vmin(v),vp:v.vp||v.purpose||'Visit',vw:v.vw||'',note:v.note||'',t:v.tin||'99'}}).sort((a,b)=>a.d===b.d?(a.t>b.t?1:-1):(a.d>b.d?1:-1));
+    if(!list.length)return say('No visit from '+dd(fr)+' to '+dd(to)+' to put in the Excel','bad');
     say('Making the file…');
-    try{const r=await buildDcrXlsx(base,DV.date,L),f=new File([r.blob],DX.name,{type:r.blob.type});
-      try{const nb=await r.blob.arrayBuffer(),bs=picked?{}:Object.assign({},sv.bases||{});bs[DV.date]=base;const ks=Object.keys(bs).sort();while(ks.length>3)delete bs[ks.shift()];
-        const o={name:DX.name,buf:nb,bases:bs,at:Date.now()};await dxSet(o);DX.saved=o;DX.buf=null;pk.textContent=lab()}catch(e){}   /* this new file is the base for tomorrow; the file before today is kept too, so today can be made again */
-      if(share&&navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f],title:'DCR '+dd(DV.date),text:'Daily Call Report — '+dd(DV.date)});say('✓ '+r.msg+' • '+r.n+' visit'+(r.n===1?'':'s')+' • shared','ok')}
-      else{const a=el('a');a.href=URL.createObjectURL(r.blob);a.download=DX.name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);say('✓ '+r.msg+' • '+r.n+' visit'+(r.n===1?'':'s')+(share?' • sharing is not available here, so the file was downloaded':' • downloaded'),'ok')}
+    try{if(!window.RDL_SELFX)throw new Error('The Excel maker is not ready, reload the app and try again');
+      const r=await RDL_SELFX('dcr',to,list),f=new File([r.blob],r.name,{type:r.blob.type}),days=new Set(list.map(z=>z.d)).size,info=days+' day'+(days===1?'':'s')+' • '+list.length+' visit'+(list.length===1?'':'s')+' • '+dd(fr)+' to '+dd(to),warn=r.missing?' • Your official name is not in your Profile yet — add it in My profile so it appears in the Excel':'';
+      if(share&&navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f],title:'DCR '+dd(DV.date),text:'Daily Call Report — '+dd(DV.date)});say('✓ '+info+' • shared'+warn,'ok')}
+      else{const a=el('a');a.href=URL.createObjectURL(r.blob);a.download=r.name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);say('✓ '+info+(share?' • sharing is not available here, so the file was downloaded':' • downloaded')+warn,'ok')}
     }catch(e){if(e&&e.name==='AbortError')say('');else say('✗ '+(e&&e.message||'Could not make the file'),'bad')}};
   const row=el('div','od-actions'),dl=el('button','st-btn','Download Excel'),sh=el('button','st-btn','Share to Outlook');dl.type=sh.type='button';dl.onclick=()=>run(false);sh.onclick=()=>run(true);row.appendChild(dl);row.appendChild(sh);
-  c.appendChild(pk);c.appendChild(fi);c.appendChild(row);c.appendChild(st);B.appendChild(c)}
+  c.appendChild(row);c.appendChild(st);B.appendChild(c)}
 /* ---- Collection & Order Entry: the day's orders and collections are typed here, then (1) added to the end of the user's latest Collection & Order Excel, copying the last block's look exactly, and (2) saved into the app as the Daily Collection & Order data, so Smart Post can send them to Drafts. Nothing is posted from here. ---- */
 const COL7=['RPL','RNL','PCL','REXIME','RBCL','Jenphar','NLS'],OCL='DEFGHIJ'.split(''),CCL='MNOPQRS'.split('');
 const CX={name:'',buf:null,date:today()},coGet=()=>jget('rdl.coe.v1',{}),coSet=x=>jset('rdl.coe.v1',x),coList=d=>coGet()[d]||[];
@@ -7819,7 +7828,7 @@ const coDb=(m,fn)=>new Promise((res,rej)=>{try{const q=indexedDB.open('rdl-coefi
 coFileGet=k=>coDb('readonly',s=>s.get(k||'latest')).catch(()=>null),coFileSet=(o,k)=>coDb('readwrite',s=>s.put(o,k||'latest'));
 const rnd2=x=>Math.round(x*100)/100,fm2=n=>Number(n).toLocaleString('en-US',{maximumFractionDigits:2});
 (function(){const s=document.createElement('style');s.textContent='.coe-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:6px 0 10px}.coe-c small{display:block;font-weight:700;margin:0 0 3px;opacity:.8}.coe-c input{width:100%;box-sizing:border-box}';document.head.appendChild(s)})();
-(function(){const s=document.createElement('style');s.textContent='.co-tcard{padding:0!important;overflow:hidden}.co-th{padding:11px 14px;font-weight:800;font-size:15px;color:#fff;text-align:center;background:linear-gradient(100deg,#0a49b5,#0a86d0 70%,#16b8c0)}.co-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}.co-tbl{border-collapse:separate;border-spacing:0;table-layout:fixed;width:100%;min-width:1010px}.co-k0{width:150px}.co-kb{width:104px}.co-kr{width:130px}.co-kx{width:44px}.co-tbl th{background:#eaf2ff;color:#0a3fa8;font-size:12px;font-weight:800;padding:8px 6px;border-bottom:1px solid #cfe0f6;white-space:nowrap}.co-tbl th small{display:block;font-size:9.5px;font-weight:700;opacity:.75}.co-tbl td{padding:6px;border-bottom:1px solid #e6eefb;vertical-align:top}.co-tbl .co-c0{position:sticky;left:0;z-index:2;background:#fff;border-right:2px solid #cfe0f6;text-align:left}.co-tbl th.co-c0{z-index:3;background:#eaf2ff}.co-n{width:100%;min-width:0;box-sizing:border-box;padding:6px 7px;border-radius:8px;border:1px solid #cfe0f6;font-size:13.5px;text-align:right;background:#fff;color:#0b2a5b;margin:0;-moz-appearance:textfield;appearance:textfield}.co-n.o{border-color:#b9d4f6;background:#f4f9ff;margin-bottom:4px}.co-n.c{border-color:#a9e0c6;background:#f2fbf6}.co-n.co-rm{text-align:left}.co-cu{width:100%;box-sizing:border-box;padding:7px;border-radius:8px;border:1px solid #cfe0f6;font-size:13.5px;margin:0}.co-cu.bad{border-color:#d4183d;background:#fff0f3}.co-cn{font-size:11.5px;color:#35507d;margin-top:3px;line-height:1.25;word-break:break-word}.co-x{border:0;background:#ffe9ee;color:#d4183d;border-radius:8px;width:28px;height:28px;font-size:17px;font-weight:800;line-height:1;cursor:pointer}.co-tbl tr.co-sv td.co-c0{box-shadow:inset 3px 0 0 #0b9a62}.co-sg{position:static}.co-tbl tr.co-pst td{background:#f3f6fa}.co-tbl tr.co-pst td.co-c0{box-shadow:inset 3px 0 0 #6b7686}.co-tbl tr.co-pst input:disabled{background:#eef2f7;color:#4a5668;cursor:not-allowed}.co-pb{display:inline-block;margin-top:3px;padding:1px 7px;border-radius:9px;background:#e1e7ef;color:#3b475a;font-size:10.5px;font-weight:800}.co-submit{margin:10px 12px 12px!important;width:calc(100% - 24px)!important}.co-tcard .stt{margin:8px 12px 0}@media(min-width:1000px){.co-tbl{min-width:0}.co-k0{width:25%}.co-kb{width:9.4%}.co-kr{width:5.5%}.co-kx{width:3%}.co-tbl .co-c0{max-width:none}}';document.head.appendChild(s)})();
+(function(){const s=document.createElement('style');s.textContent='.co-tcard{padding:0!important;overflow:hidden}.co-th2{display:flex;align-items:center;gap:8px;text-align:center}.co-th2 .co-tt{flex:1;min-width:0}.co-th2 .co-ts{width:128px;flex:none}.co-th2 .co-dt{width:128px;flex:none;box-sizing:border-box;margin:0;padding:5px 6px;height:32px;font-size:13px;font-weight:700;color:#0a3fa8;background:rgba(255,255,255,.95);border:0;border-radius:8px}@media(max-width:560px){.co-th2 .co-ts{display:none}.co-th2 .co-tt{font-size:13.5px}.co-th2 .co-dt{width:118px}}.co-ct .co-n.o{border-color:#a9e0c6;background:#f2fbf6}.co-ct .co-n.c{border-color:#b9d4f6;background:#f4f9ff}.co-ct td{border-bottom:2px solid #9db8e0!important}.co-ct .co-n::placeholder{font-size:9.5px;letter-spacing:-.2px}.co-th{padding:11px 14px;font-weight:800;font-size:15px;color:#fff;text-align:center;background:linear-gradient(100deg,#0a49b5,#0a86d0 70%,#16b8c0)}.co-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}.co-tbl{border-collapse:separate;border-spacing:0;table-layout:fixed;width:100%;min-width:1010px}.co-k0{width:150px}.co-kb{width:104px}.co-kr{width:130px}.co-kx{width:44px}.co-tbl th{background:#eaf2ff;color:#0a3fa8;font-size:12px;font-weight:800;padding:8px 6px;border-bottom:1px solid #cfe0f6;white-space:nowrap}.co-tbl th small{display:block;font-size:9.5px;font-weight:700;opacity:.75}.co-tbl td{padding:6px;border-bottom:1px solid #e6eefb;vertical-align:top}.co-tbl .co-c0{position:sticky;left:0;z-index:2;background:#fff;border-right:2px solid #cfe0f6;text-align:left}.co-tbl th.co-c0{z-index:3;background:#eaf2ff}.co-n{width:100%;min-width:0;box-sizing:border-box;padding:6px 7px;border-radius:8px;border:1px solid #cfe0f6;font-size:13.5px;text-align:right;background:#fff;color:#0b2a5b;margin:0;-moz-appearance:textfield;appearance:textfield}.co-n.o{border-color:#b9d4f6;background:#f4f9ff;margin-bottom:4px}.co-n.c{border-color:#a9e0c6;background:#f2fbf6}.co-n.co-rm{text-align:left}.co-cu{width:100%;box-sizing:border-box;padding:7px;border-radius:8px;border:1px solid #cfe0f6;font-size:13.5px;margin:0}.co-cu.bad{border-color:#d4183d;background:#fff0f3}.co-cn{font-size:11.5px;color:#35507d;margin-top:3px;line-height:1.25;word-break:break-word}.co-x{border:0;background:#ffe9ee;color:#d4183d;border-radius:8px;width:28px;height:28px;font-size:17px;font-weight:800;line-height:1;cursor:pointer}.co-tbl tr.co-sv td.co-c0{box-shadow:inset 3px 0 0 #0b9a62}.co-sg{position:static}.co-tbl tr.co-pst td{background:#f3f6fa}.co-tbl tr.co-pst td.co-c0{box-shadow:inset 3px 0 0 #6b7686}.co-tbl tr.co-pst input:disabled{background:#eef2f7;color:#4a5668;cursor:not-allowed}.co-pb{display:inline-block;margin-top:3px;padding:1px 7px;border-radius:9px;background:#e1e7ef;color:#3b475a;font-size:10.5px;font-weight:800}.co-submit{margin:10px 12px 12px!important;width:calc(100% - 24px)!important}.co-tcard .stt{margin:8px 12px 0}@media(min-width:1000px){.co-tbl{min-width:0}.co-k0{width:25%}.co-kb{width:9.4%}.co-kr{width:5.5%}.co-kx{width:3%}.co-tbl .co-c0{max-width:none}}';document.head.appendChild(s)})();
 async function buildCoXlsx(buf,date,E){
   const zip=await JSZip.loadAsync(buf),rd=async p=>{const f=zip.file(p);return f?f.async('string'):null};
   let wb=await rd('xl/workbook.xml'),rel=await rd('xl/_rels/workbook.xml.rels'),ct=await rd('[Content_Types].xml');
@@ -7955,15 +7964,15 @@ function drawCO(){const B=CP.body;B.textContent='';
   /* two ways to do the daily work: type business-wise entries (this page) or upload the Excel file (old page, unchanged) */
   {const sw=el('div','od-actions'),a=el('button','st-btn','Entry'),u=el('button','st-btn od-clear','Upload');a.type=u.type='button';
    u.onclick=()=>{if(window.RDL_openSet)window.RDL_openSet('setdcr')};sw.appendChild(a);sw.appendChild(u);B.appendChild(sw)}
-  const di=el('input','list-search');di.type='date';di.value=CX.date;di.max=today();di.onchange=()=>{if(!di.value)return;if(CX.commit)try{CX.commit()}catch(e){}CX.date=di.value;CX.rows=null;CX.dirty=false;drawCO()};B.appendChild(di);
+  const di=el('input','list-search');di.type='date';di.value=CX.date;di.max=today();di.onchange=()=>{if(!di.value)return;if(CX.commit)try{CX.commit()}catch(e){}CX.date=di.value;COT.from=COT.to=CX.date;CX.rows=null;CX.dirty=false;drawCO()};di.classList.add('co-dt');
   const E=coList(CX.date);
   /* ---- Business Wise Order & Collection: ONE input table. A row = one customer; every business has its own column, Order on top, Collection below ---- */
   if(CX.rowsDate!==CX.date||!CX.rows){CX.rows=E.map(e=>({id:e.id,cu:e.cu,nm:e.nm,o:Object.assign({},e.o||{}),c:Object.assign({},e.c||{}),rm:e.rm||'',saved:true,posted:coPosted(CX.date,e)}));CX.rowsDate=CX.date;CX.dirty=false}
   const rows=CX.rows,CL=custs();
   const blank=()=>({id:'',cu:'',nm:'',o:{},c:{},rm:'',txt:'',saved:false}),isBlank=r=>!r.cu&&!r.txt&&!Object.keys(r.o).length&&!Object.keys(r.c).length&&!(r.rm||'').trim();
   if(!rows.length||!isBlank(rows[rows.length-1]))rows.push(blank());
-  const tcard=el('div','st-card co-tcard');B.appendChild(tcard);tcard.appendChild(el('div','co-th','Business Wise Order & Collection'));
-  const wrap=el('div','co-wrap'),tbl=el('table','co-tbl'),thd=el('thead'),hr=el('tr'),tb=el('tbody');
+  const tcard=el('div','st-card co-tcard');B.appendChild(tcard);{const th=el('div','co-th co-th2');th.appendChild(di);th.appendChild(el('span','co-tt','Business Wise Order & Collection'));th.appendChild(el('span','co-ts'));tcard.appendChild(th)}
+  const wrap=el('div','co-wrap'),tbl=el('table','co-tbl co-ct'),thd=el('thead'),hr=el('tr'),tb=el('tbody');
   {const cg=document.createElement('colgroup');['co-k0'].concat(COL7.map(()=>'co-kb'),['co-kr','co-kx']).forEach(c=>{const x=document.createElement('col');x.className=c;cg.appendChild(x)});tbl.appendChild(cg)}
   tbl.appendChild(thd);thd.appendChild(hr);tbl.appendChild(tb);wrap.appendChild(tbl);tcard.appendChild(wrap);
   hr.appendChild(el('th','co-c0','Customer (code or name)'));
@@ -7990,7 +7999,7 @@ function drawCO(){const B=CP.body;B.textContent='';
     ci.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();if(resolve()&&(r.cu||!ci.value.trim()))nextFrom(ci)}});
     ci.addEventListener('blur',()=>{if(ci.value.trim()&&!r.cu){const m=find(ci.value);if(m.length===1)pick(m[0]);else if(!m.length){ci.classList.add('bad');cn.textContent='Customer not found'}}});
     COL7.forEach(k=>{const td=el('td','co-bz');
-      const mk=(kind,cls,ph)=>{const i=el('input','co-n '+cls);i.type='text';i.inputMode='decimal';i.autocomplete='off';i.placeholder=ph;const v=r[kind][k];i.value=v?String(v):'';
+      const mk=(kind,cls,ph)=>{ph=k+'-'+ph;const i=el('input','co-n '+cls);i.type='text';i.inputMode='decimal';i.autocomplete='off';i.placeholder=ph;const v=r[kind][k];i.value=v?String(v):'';
         i.addEventListener('input',()=>{let t=i.value.replace(/[^0-9.]/g,'');const p=t.indexOf('.');if(p>=0)t=t.slice(0,p+1)+t.slice(p+1).replace(/\./g,'');if(t!==i.value)i.value=t;const n=parseFloat(t);if(n>0)r[kind][k]=n;else delete r[kind][k];CX.dirty=true;grow()});
         i.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();nextFrom(i)}});return i};
       const io=mk('o','o','Order'),ic=mk('c','c','Collection');if(r.posted)io.disabled=ic.disabled=true;td.appendChild(io);td.appendChild(ic);tr.appendChild(td)});
@@ -8030,28 +8039,33 @@ function drawCO(){const B=CP.body;B.textContent='';
   const fi=el('input');fi.type='file';fi.accept='.xlsx';fi.hidden=true;
   const lab=()=>CX.buf?CX.name+' (new file chosen)':CX.saved?'\u2713 Saved file: '+CX.saved.name+' \u2014 tap to change':'Choose your Collection & Order Excel file (first time only)';
   const pf=el('button','st-btn od-clear',lab());pf.type='button';pf.onclick=()=>fi.click();pf.style.display='none';   /* shown only if no Excel has ever been chosen */
-  coFileGet().then(async o=>{if(!(o&&o.buf)){try{o=await coSrvGet();if(o&&o.buf){o.srv=1;await coFileSet({name:o.name,buf:o.buf,at:Date.now(),srv:1})}}catch(e){o=null}}CX.saved=o&&o.buf?o:null;if(CX.saved&&!CX.buf)CX.name=CX.saved.name;pf.textContent=lab();pf.style.display=CX.saved?'none':''});
+  /* no Excel file has to be chosen any more: the file is made in the team format from the entries and the Profile */
   const st=el('div','stt'),say=(t,k)=>{st.className='stt'+(k?' '+k:'');st.textContent=t};
   fi.onchange=async()=>{const f=fi.files[0];fi.value='';if(!f)return;try{CX.buf=await f.arrayBuffer();CX.name=f.name;await coFileSet({name:f.name,buf:CX.buf,at:Date.now()});CX.saved={name:f.name,buf:CX.buf};CX.buf=null;pf.textContent=lab();pf.style.display='none';say('✓ File saved in the app. Saving it on Drive…');coSrvPut(f.name,CX.saved.buf).then(()=>{coFileSet({name:f.name,buf:CX.saved.buf,at:Date.now(),srv:1}).catch(()=>{});say('✓ File saved in the app and on Drive. It stays the same file on every phone and computer.','ok')},()=>say('✓ File saved in the app. Could not save it on Drive now (no internet?). It will be saved on Drive the next time you make the Excel.','warn'))}catch(x){say('✗ Could not read this file','bad')}};
   const run=async mode=>{commit();const E=coList(CX.date);if(!coDates().length)return say('Add at least one entry first','bad');
     if(mode==='app'){if(!E.length)return say('Add at least one entry for this day','bad');try{coSave(CX.date,E);say('✓ Saved in the app. Open Smart Post, pick '+dd(CX.date)+' and press Save to Draft. Then review and post from Drafts.','ok')}catch(x){say('✗ Could not save on this device','bad')}return}
     say('Making the file…');
-    try{let sv=CX.saved;if(!(sv&&sv.buf)){try{sv=await coSrvGet();if(sv&&sv.buf){sv.srv=1;await coFileSet({name:sv.name,buf:sv.buf,at:Date.now(),srv:1});CX.saved=sv}}catch(e){sv=null}}
-      if(!(sv&&sv.buf))return say('Choose the Collection & Order Excel file once (first time only)','bad');
-      CX.name=sv.name;if(!sv.srv){coSrvPut(sv.name,sv.buf).then(()=>coFileSet({name:sv.name,buf:sv.buf,at:Date.now(),srv:1}).then(()=>{CX.saved.srv=1}).catch(()=>{}),()=>{})}
-      const r=await buildCoAll(sv.buf),f=new File([r.blob],sv.name,{type:r.blob.type});if(E.length)coSave(CX.date,E);
-      const tail=' • saved in the app for Smart Post',info=r.days?r.days+' day'+(r.days===1?'':'s')+' • '+r.n+' entr'+(r.n===1?'y':'ies')+' added to your file':'no new date to add';
-      if(mode==='share'&&navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f],title:'Collection & Order '+dd(CX.date),text:'Daily Sales Order & Collection Statements — '+dd(CX.date)});say('✓ '+info+' • shared'+tail,'ok')}
-      else{const a=el('a');a.href=URL.createObjectURL(r.blob);a.download=sv.name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);say('✓ '+info+(mode==='share'?' • sharing is not available here, so the file was downloaded':' • downloaded')+tail,'ok')}
+    try{if(!window.RDL_SELFX)throw new Error('The Excel maker is not ready, reload the app and try again');
+      /* the user's own Excel in the team format: every date of this month up to the chosen date (nothing after it); name, SAP ID and designation come from the Profile */
+      const to=CX.date,fr=to.slice(0,8)+'01',X=coGet(),list=[];
+      Object.keys(X).sort().forEach(d=>{if(d<fr||d>to)return;(X[d]||[]).forEach(e=>{if(!COL7.some(k=>(+(e.o||{})[k]||0)>0||(+(e.c||{})[k]||0)>0))return;let lb=e.nm||('Customer '+e.cu);if(e.cu&&lb.indexOf(e.cu)<0)lb+='-'+e.cu;
+        const o={},c={};COL7.forEach(k=>{if(+(e.o||{})[k]>0)o[k]=+e.o[k];if(+(e.c||{})[k]>0)c[k]=+e.c[k]});list.push({d,label:lb,o,c,rm:e.rm||''})})});
+      list.sort((a,b)=>a.d===b.d?(a.label>b.label?1:-1):(a.d>b.d?1:-1));
+      if(!list.length)return say('No entry from '+dd(fr)+' to '+dd(to)+' to put in the Excel','bad');
+      if(E.length)coSave(CX.date,E);
+      const r=await RDL_SELFX('co',to,list),f=new File([r.blob],r.name,{type:r.blob.type}),days=new Set(list.map(z=>z.d)).size;
+      const tail=' • saved in the app for Smart Post',info=days+' day'+(days===1?'':'s')+' • '+list.length+' entr'+(list.length===1?'y':'ies')+' • '+dd(fr)+' to '+dd(to),warn=r.missing?' • Your official name / SAP ID is not in your Profile yet — add it in My profile so it appears in the Excel':'';
+      if(mode==='share'&&navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f],title:'Collection & Order '+dd(CX.date),text:'Daily Sales Order & Collection Statements — '+dd(CX.date)});say('✓ '+info+' • shared'+tail+warn,'ok')}
+      else{const a=el('a');a.href=URL.createObjectURL(r.blob);a.download=r.name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);say('✓ '+info+(mode==='share'?' • sharing is not available here, so the file was downloaded':' • downloaded')+tail+warn,'ok')}
     }catch(x){if(x&&x.name==='AbortError')say('');else say('✗ '+(x&&x.message||'Could not make the file'),'bad')}};
   const row=el('div','co-acts');
   const IC={dl:'<path d="M12 3v11m0 0l-4-4m4 4l4-4M5 19h14"/>',sh:'<path d="M4 6h16v12H4zM4 7l8 6 8-6"/>',sv:'<path d="M5 4h11l3 3v13H5zM8 4v5h7M8 20v-6h8v6"/>',op:'<path d="M5 12h14m0 0l-5-5m5 5l-5 5"/>'};
   const mb=(t,k,cls)=>{const b=el('button','st-btn co-b '+cls);b.type='button';b.innerHTML='<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+IC[k]+'</svg><span>'+t+'</span>';return b};
   const dl=mb('Download Excel','dl','co-p'),sh=mb('Share to Outlook','sh','co-p'),sp=mb('Save to app only','sv','co-s'),op=mb('Open Smart Post','op','co-s');dl.onclick=()=>run('dl');sh.onclick=()=>run('share');sp.onclick=()=>run('app');op.onclick=()=>{if(R.openTab)R.openTab('s','post')};
   [sp,op,dl,sh].forEach(b=>row.appendChild(b));
-  c.appendChild(pf);c.appendChild(fi);c.appendChild(row);c.appendChild(st);B.appendChild(c)}
-R.openCOE=()=>{if(window.RDL_ROLE==='admin')return;CX.date=R.salesDay?R.salesDay():today();drawCO();show('coep')};   /* the file made today is for the sales day (yesterday; Thursday on Saturday), same as Today Sales and the uploaded file */
-function openD(){if(window.RDL_ROLE==='admin')return;dcrPC=0;DV.date=R.salesDay?R.salesDay():today();drawD();show('dcrp')}
+  c.appendChild(row);c.appendChild(st);B.appendChild(c)}
+R.openCOE=()=>{if(window.RDL_ROLE==='admin')return;CX.date=R.salesDay?R.salesDay():today();COT.from=COT.to=CX.date;COT.biz='';drawCO();show('coep')};   /* the file made today is for the sales day (yesterday; Thursday on Saturday), same as Today Sales and the uploaded file */
+function openD(){if(window.RDL_ROLE==='admin')return;dcrPC=0;DV.date=R.salesDay?R.salesDay():today();DCT.from=DCT.to=DV.date;drawD();show('dcrp')}
 
 /* =====================================================  MORE page  ===================================================== */
 /* =====================================================  NOTES  (Tools > Notes, under Schedule). Key rdl.notes.v1 is inside Backup / Restore. Notes are never deleted automatically. ===================================================== */
@@ -9733,7 +9747,7 @@ function ckey(d,e){return 'c|'+d+'|'+(e._u||'')+'|'+(e.id||JSON.stringify(e.o||{
 function vkey(e){return 'v|'+(e._u||'')+'|'+(e.id||[e.date,e.cu,e.tin,e.tout].join('~'))}
 function delKeys(keys){
   var a=J('rdl.etdel.v1',[]);if(!Array.isArray(a))a=[];var set={};keys.forEach(function(k){set[k]=1;if(a.indexOf(k)<0)a.push(k)});
-  LS.setItem('rdl.etdel.v1',JSON.stringify(a));
+  if(a.length>6000)a=a.slice(a.length-5000);LS.setItem('rdl.etdel.v1',JSON.stringify(a));
   var X=J('rdl.coe.v1',{}),ch=0;Object.keys(X).forEach(function(d){var n=(X[d]||[]).filter(function(e){return !set[ckey(d,e)]});if(n.length!==(X[d]||[]).length){X[d]=n;ch=1}});if(ch)LS.setItem('rdl.coe.v1',JSON.stringify(X));
   var V=J('rdl.visit.v1',{});if(Array.isArray(V.visits)){var n2=V.visits.filter(function(e){return !set[vkey(e)]});if(n2.length!==V.visits.length){V.visits=n2;LS.setItem('rdl.visit.v1',JSON.stringify(V))}}}
 function coRows(){var X=J('rdl.coe.v1',{}),out=[],T=tomb(),have={};
@@ -9909,7 +9923,9 @@ function getPeople(all){
     out.forEach(function(o){var w=um[o.key];if(w&&!o.depot)o.depot=w.depot||''});
     return out})}
 function teamDownload(kind,rowsAll,msg){
-  var rows=rowsAll.filter(function(x){return !((ST.from&&x.d<ST.from)||(ST.to&&x.d>ST.to)||(ST.dp&&x.dp!==ST.dp)||(ST.u&&x.u!==ST.u))});
+  /* the file runs from the 1st of the 'To' month (or an earlier 'From') up to 'To': dates after 'To' are never inside */
+  var FR=ST.from;if(ST.to){var ms=ST.to.slice(0,8)+'01';if(!FR||FR>ms)FR=ms}
+  var rows=rowsAll.filter(function(x){return !((FR&&x.d<FR)||(ST.to&&x.d>ST.to)||(ST.dp&&x.dp!==ST.dp)||(ST.u&&x.u!==ST.u))});
   if(!rows.length){msg.className='stt bad';msg.textContent='Nothing to download for this filter';return}
   msg.className='stt';msg.textContent='Collecting every user’s name, SAP ID and designation…';
   getPeople(rowsAll).then(function(ppl){
@@ -9921,14 +9937,16 @@ function teamDownload(kind,rowsAll,msg){
     else{rows.forEach(function(x){var lab=x.nmv||'';if(x.cu&&lab.indexOf(x.cu)<0)lab=lab+'-'+x.cu;(vis[x.em]=vis[x.em]||[]).push({d:x.d,nm:lab,hr:TX.hourText(x.mnv),vp:x.vpv,vw:x.vwv,note:x.notev,t:x.t})});
       Object.keys(vis).forEach(function(k){vis[k].sort(function(a,b){return a.d===b.d?(a.t>b.t?1:-1):(a.d>b.d?1:-1)})})}
     msg.textContent='Making the Excel…';
-    var pr=kind==='co'?TX.buildReport(JSZip,ppl,ent,ST.from,ST.to):TX.buildDcr(JSZip,ppl,vis);
-    return pr.then(function(blob){var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=(kind==='co'?'Report_':'DCR_')+TX.monthLabel(ST.from,ST.to).replace(/\s+/g,'')+'.xlsx';document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(a.href)},4000);
+    var pr=kind==='co'?TX.buildReport(JSZip,ppl,ent,FR,ST.to):TX.buildDcr(JSZip,ppl,vis);
+    return pr.then(function(blob){var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=(kind==='co'?'Report_':'DCR_')+TX.monthLabel(FR,ST.to).replace(/\s+/g,'')+'.xlsx';document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(a.href)},4000);
       var withData=ppl.filter(function(p){return (kind==='co'?ent:vis)[p.key]}).length,miss=ppl.filter(function(p){return !p.official||(kind==='co'&&!p.sap)}).length;
       msg.className='stt ok';msg.textContent='✓ '+ppl.length+' user sheet'+(ppl.length===1?'':'s')+' ('+withData+' with entries)'+(miss?' • '+miss+' user(s) have no official name / SAP ID in their profile yet':'')})})
   .catch(function(e){msg.className='stt bad';msg.textContent='✗ '+(e&&e.message||'Could not make the file')})}
 /* ---- the page ---- */
 var ST={tab:'co',from:td().slice(0,8)+'01',to:td(),dp:'',u:'',b:''};
 function open(){
+  /* every time the table is opened it starts with ONE day only (the sales day users enter for); older days: change From / To */
+  try{var d0=(window.RDL&&RDL.salesDay)?RDL.salesDay():td();ST.from=ST.to=(d0&&d0<=td())?d0:td()}catch(e){ST.from=ST.to=td()}
   var old=document.getElementById('et-pg');if(old)old.remove();
   var ov=el('div');ov.id='et-pg';
   ov.style.cssText='position:fixed;inset:0;z-index:9000;overflow:auto;-webkit-overflow-scrolling:touch;background:'+getComputedStyle(document.body).backgroundColor+';padding:max(12px,env(safe-area-inset-top)) 14px 90px';
@@ -9968,7 +9986,8 @@ function open(){
     if(ST.tab==='co'||true){dl.style.cssText='background:#e8f0fe;color:#0a49b5;margin-top:10px'}
     if(rows.length){var da=el('button','st-btn','Delete all '+rows.length+' shown row'+(rows.length===1?'':'s'));da.type='button';da.style.cssText='background:#fde8e6;color:#c0392b;margin-top:10px';
       da.onclick=function(){if(!confirm('Delete all '+rows.length+' shown row(s)?\n\nOnly what is shown with the current filter (depot / user / dates) is deleted. This cannot be undone.'))return;var ks={};rows.forEach(function(x){ks[x.k]=1});delKeys(Object.keys(ks));draw()};box.appendChild(da)}
-    if(ST.tab==='co'){
+    if(ST.tab==='co'){box.appendChild(msg);return}   /* the old 'choose your own Excel file' way is gone: the Report Excel above needs no file */
+    if(false){
       /* default-format Excel: your own Collection & Order file (kept on Drive) + the dates and customers of the filtered rows */
       var fi=document.createElement('input');fi.type='file';fi.accept='.xlsx';fi.hidden=true;
       var pf=el('button','st-btn','Checking your Excel file…');pf.type='button';pf.style.cssText='background:#e8f0fe;color:#0a49b5;margin-top:10px';pf.onclick=function(){fi.click()};
@@ -9991,6 +10010,16 @@ function open(){
     box.appendChild(dl);box.appendChild(msg)}
   draw()}
 window.RDL_ENTRYTABLES=open;
+/* ---- a user's own Excel in the team format (same files the Admin gets): the details come from the Profile (official name, SAP ID, designation) and the depot, so no Excel file has to be chosen. kind 'co' = Report (Top Sheet + the user's sheet), 'dcr' = DCR. upto = last date: every date of that month up to it is included, nothing after. ---- */
+window.RDL_SELFX=function(kind,upto,list){
+  var S0=J('rdlgate.session',{}),em=String(S0.email||'').toLowerCase(),from=upto.slice(0,8)+'01';
+  function prof(){return (window.RDLGATE&&RDLGATE.api?RDLGATE.api('getProfile',null,true):Promise.reject(new Error('no gate'))).then(function(j){var p=j&&j.profile;if(p){try{LS.setItem('rdlgate.selfprof',JSON.stringify(p))}catch(e){}}return p}).catch(function(){return J('rdlgate.selfprof',null)})}
+  return prof().then(function(P){P=P||{};
+    var per={key:em,name:P.username||S0.name||em,official:P.official||'',sap:P.sap||'',desig:P.designation||'',depot:P.depot||S0.depot||''},bag={};
+    var pr;if(kind==='co'){bag[em]=list;pr=TX.buildReport(JSZip,[per],bag,from,upto)}
+    else{bag[em]=list.map(function(v){return{d:v.d,nm:v.nm,hr:TX.hourText(v.mn),vp:v.vp,vw:v.vw,note:v.note,t:v.t||'99'}});pr=TX.buildDcr(JSZip,[per],bag)}
+    return pr.then(function(blob){var who=String(per.official||per.name).replace(/[^A-Za-z0-9\u0980-\u09FF]+/g,'_').replace(/^_+|_+$/g,'');
+      return{blob:blob,name:(kind==='co'?'Report_':'DCR_')+TX.monthLabel(from,upto).replace(/\s+/g,'')+(who?'_'+who:'')+'.xlsx',from:from,missing:!P.official||(kind==='co'&&!P.sap)}})})};
 /* ---- the tile, inside Daily Work Tools (admins only) ---- */
 function addTile(){
   if(role()!=='admin')return;
