@@ -1445,7 +1445,7 @@ try{document.documentElement.classList.add('rdl-restoring');setTimeout(function(
    (red bar), a backup is tried, and the Data Hub shows how full the phone is. Normal saves are not changed in any way. ===== */
 (function(){
   var LIM=5000000,raw=Storage.prototype.setItem,lastBar=0,busy=0,warned=0;
-  function used(){var n=0;try{for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);n+=k.length+(localStorage.getItem(k)||'').length}}catch(e){}return n}
+  function used(){var n=0;try{for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);n+=k.length+((window.__rdlRaw?window.__rdlRaw(k):localStorage.getItem(k))||'').length}}catch(e){}return n}
   window.RDLSTORE={used:used,limit:LIM,pct:function(){return Math.min(100,Math.round(used()*100/LIM))}};
   function bar(msg,col){
     var b=document.getElementById('rdl-store-bar');
@@ -2890,7 +2890,7 @@ window.RDLGATE={bkRender:bkRender,mergeBackups:mergeBackups,showMergeReport:show
 
 <script>/* transparent compressed storage for rdl.* keys */
 (function(){try{
-var P=Storage.prototype,G=P.getItem,S=P.setItem,M='\u0001',MAX=55000,C={};
+var P=Storage.prototype,G=P.getItem,S=P.setItem,M='\u0001',M2='\u0003',MAX=55000,C={};
 function enc2(s){var d=new Map,n=256,o='',w='',i,c,x,b=[];function f(v){b.push(v);if(b.length>=4000){o+=String.fromCharCode.apply(null,b);b=[]}}
 for(i=0;i<s.length;i++){c=s[i];if(c.charCodeAt(0)>255)return null;x=w+c;if(x.length===1||d.has(x))w=x;else{f(w.length===1?w.charCodeAt(0):d.get(w));if(n>=MAX){d=new Map;n=256}d.set(x,n++);w=c}}
 if(w)f(w.length===1?w.charCodeAt(0):d.get(w));return o+String.fromCharCode.apply(null,b)}
@@ -2899,13 +2899,20 @@ for(i=1;i<z.length;i++){k=z.charCodeAt(i);if(k<256)e=String.fromCharCode(k);else
 return o.join('')}
 /* non-latin text is escaped to \\uXXXX so the 8-bit LZW input stays small and exact */
 function esc(s){return s.replace(/[^\x00-\xff]/g,function(c){return '\u0002'+('000'+c.charCodeAt(0).toString(16)).slice(-4)})}
+/* dec2 = corrected decoder for the new format (marker \u0003): resets in step with the encoder. The old format (marker \u0001) is still read by dec, so nothing stored earlier changes. */
+function dec2(z){var d=[],n=256,o,w,i,k,e;if(!z.length)return '';w=String.fromCharCode(z.charCodeAt(0));o=[w];
+for(i=1;i<z.length;i++){k=z.charCodeAt(i);if(n>=MAX){d=[];n=256}
+if(k<256)e=String.fromCharCode(k);else if(d[k])e=d[k];else if(k===n)e=w+w[0];else throw 0;o.push(e);d[n++]=w+e[0];w=e}
+return o.join('')}
 function unesc(s){return s.indexOf('\u0002')<0?s:s.replace(/\u0002([0-9a-f]{4})/g,function(_,h){return String.fromCharCode(parseInt(h,16))})}
-function pack(v){if(v.length<1500||v.indexOf('\u0002')>=0)return v;try{var e=enc2(esc(v));if(!e)return v;var z=M+e;if(z.length>=v.length*0.8)return v;if(unesc(dec(e))!==v)return v;return z}catch(_){return v}}
-function unpack(z){return unesc(dec(z.slice(1)))}
-P.getItem=function(k){var r=G.call(this,k);if(r===null||this!==localStorage||typeof k!=='string'||k.indexOf('rdl.')!==0||r.charAt(0)!==M)return r;
+function pack(v){if(v.length<1500||v.indexOf('\u0002')>=0)return v;try{var e=enc2(esc(v));if(!e)return v;var z=M2+e;if(z.length>=v.length*0.8)return v;if(unesc(dec2(e))!==v)return v;return z}catch(_){return v}}
+function unpack(z){return unesc((z.charAt(0)===M2?dec2:dec)(z.slice(1)))}
+P.getItem=function(k){var r=G.call(this,k);if(r===null||this!==localStorage||typeof k!=='string'||k.indexOf('rdl.')!==0||(r.charAt(0)!==M&&r.charAt(0)!==M2))return r;
 var c=C[k];if(c&&c[0]===r)return c[1];try{var v=unpack(r);C[k]=[r,v];return v}catch(_){return r}};
 P.setItem=function(k,v){if(this===localStorage&&typeof k==='string'&&k.indexOf('rdl.')===0){v=String(v);var z=pack(v);if(z!==v)C[k]=[z,v];else delete C[k];return S.call(this,k,z)}return S.call(this,k,v)};
 window.__rdlPack=pack;window.__rdlRaw=function(k){return G.call(localStorage,k)};
+/* one-time clean-up: big values the old (faulty) check had left uncompressed are packed now. The packed copy is verified inside pack() before it replaces anything; if it cannot be verified the value is left exactly as it is. */
+try{Object.keys(localStorage).forEach(function(k){if(k.indexOf('rdl.')!==0)return;var r=G.call(localStorage,k);if(!r||r.length<1500||r.charAt(0)===M||r.charAt(0)===M2)return;var z=pack(r);if(z!==r){S.call(localStorage,k,z);delete C[k]}})}catch(e){}
 }catch(e){}})();
 </script>
 <script>/* one-time: remove the old built-in demo data (only data marked as test; real uploads are never touched) */
