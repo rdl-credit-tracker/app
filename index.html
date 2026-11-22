@@ -2833,6 +2833,7 @@ window.RDLGATE={bkRender:bkRender,mergeBackups:mergeBackups,showMergeReport:show
         <button type="button" class="rc-p c" data-k="DZ"><small>Collection</small><b class="rc-ca">৳ 0.00/=</b><i class="rc-cn"><span><svg class="mi"><use href="#i-person"/></svg> 00 Customers</span><span><svg class="mi"><use href="#i-building"/></svg> 00 Companies</span></i><em class="rc-ar" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/></svg></em></button>
       </div>
     </div>
+    <button type="button" id="pcHome" class="pch" style="display:none" aria-label="Posting Center"><span class="pch-i"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8z"/><path d="M14 3v5h5M9 14l2 2 4-4"/></svg></span><span class="pch-t"><b>Posting Center</b><small>Smart Post, Drafts, Quick Sales &amp; Collection</small><em id="pcTag" style="display:none"></em></span><span class="pch-g"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4.5 12h15M13.5 6l6 6-6 6" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></button>
     <div class="qa">
       <div class="card cya"><div class="em"><svg><use href="#i-cust-stmt"/></svg></div><h4>Customer Statement</h4><p>View customer statement details</p><div class="go"><svg class="ar" viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 12h15M13.5 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div></div>
       <div class="card blu"><div class="em"><svg><use href="#i-recp"/></svg></div><h4>Customer Outstanding</h4><p>Check customer outstanding balance</p><div class="go"><svg class="ar" viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 12h15M13.5 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div></div>
@@ -4582,7 +4583,7 @@ const hubReload=()=>{try{sessionStorage.setItem('rdl.openHub','1')}catch(e){}set
 function buildUpload(){
   if(mState){const n=mState;mState=0;try{history.go(-n)}catch(e){}}
   const P=$('#upl');P.className='pg st'+(P.classList.contains('on')?' on':'');P.textContent='';
-  const top=el('div','st-top'),bk=el('button');bk.type='button';bk.innerHTML=BKS0;bk.setAttribute('aria-label','Back');bk.onclick=()=>{const b=$('.nav button[data-p="more"]');if(b)b.click()};top.appendChild(bk);top.appendChild(el('h2',null,'Posting Center'));P.appendChild(top);
+  const top=el('div','st-top'),bk=el('button');bk.type='button';bk.innerHTML=BKS0;bk.setAttribute('aria-label','Back');bk.onclick=()=>{const h=window.RDL.pcHome;window.RDL.pcHome=0;const b=$('.nav button[data-p="'+(h?'home':'more')+'"]');if(b)b.click()};top.appendChild(bk);top.appendChild(el('h2',null,'Posting Center'));P.appendChild(top);
   if(msg.a){P.appendChild(el('div','stt ok',msg.a));msg.a=''}
   const dr=(ld().dr||[]),sdN=(ld().sd||[]).length,drT=dr.reduce((a,d)=>a+(+d.col||0)+(+d.tds||0),0);
   const C={v:['#f8f4ff','#e3d8fb','#d0c0f3','#9a88f5','#6a52d9','#33248a','#6a52d966'],b:['#fff','#dbeafe','#a9c9f5','#4f9bff','#1650d8','#0f3ca3','#1650d855'],g:['#fff','#d8f7ea','#a5e6cb','#34d399','#0b9a62','#065f46','#0b9a6255'],a:['#fffdf5','#ffeac4','#f3d794','#f8c24d','#d98200','#6b4200','#d9820055'],n:['#f4f9ff','#dcebff','#b9d3f5','#4f9bff','#0a49b5','#0a2f78','#0a49b566']};
@@ -4701,6 +4702,11 @@ function chooser(title,opts){
   opts.forEach(([t,sub,fn,bg])=>{const b=el('button','st-btn');if(bg){b.style.background=bg;b.style.color='#fff'}b.type='button';b.style.textAlign='left';b.appendChild(document.createTextNode(t));if(sub){const sm=el('div',null,sub);sm.style.cssText='font-size:11.5px;font-weight:500;opacity:.9;margin-top:2px';b.appendChild(sm)}b.onclick=()=>{close();fn()};sh.appendChild(b)});
   const cn=el('button','st-btn od-clear','Cancel');cn.type='button';cn.onclick=close;sh.appendChild(cn);
   ov.onclick=e=>{if(e.target===ov)close()};ov.appendChild(sh);document.body.appendChild(ov)}
+/* Posting Center shortcut on the user's Home (same page as Settings > Daily Work Tools > Posting Center; Back returns to Home) */
+(function(){var st=document.createElement('style');st.textContent='.pch{display:flex;align-items:center;gap:12px;width:100%;margin:10px 0;padding:14px;border:0;border-radius:20px;color:#fff;text-align:left;cursor:pointer;background:linear-gradient(120deg,#0b7a5b,#10a37f 55%,#25c9a0);box-shadow:0 10px 18px -10px #0b7a5b99,inset 0 2px 0 #ffffff55;font-family:inherit}.pch-i{width:54px;height:54px;border-radius:50%;display:grid;place-items:center;flex:none;background:linear-gradient(135deg,#ffffff55,#ffffff1a);box-shadow:inset 0 2px 0 #ffffff77,0 4px 8px #0006}.pch-t{flex:1;min-width:0;border-left:1px solid #fff6;padding-left:12px}.pch-t b{display:block;font-size:19px}.pch-t small{display:block;opacity:.92;font-size:12.5px;margin-top:2px}.pch-t em{display:inline-block;margin-top:7px;background:#fff;color:#0b7a5b;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:800;font-style:normal}.pch-g{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;flex:none;background:#ffffff33;box-shadow:inset 0 2px 0 #ffffff66}';document.head.appendChild(st)})();
+window.RDL.pcHome=0;document.addEventListener('click',e=>{if(e.target&&e.target.closest&&e.target.closest('.nav button'))window.RDL.pcHome=0},true);
+function pcUpd(){const b=document.getElementById('pcHome');if(!b)return;const u=window.RDL_ROLE==='user';b.style.display=u?'':'none';if(!u)return;const L=ld(),n=(L.dr||[]).length+(L.sd||[]).length,t=document.getElementById('pcTag');if(t){t.textContent=n?n+' draft'+(n===1?'':'s')+' waiting':'';t.style.display=n?'':'none'}}
+{const b=document.getElementById('pcHome');if(b){b.onclick=()=>{window.RDL.pcHome=1;window.RDL.openUpload()};pcUpd();setInterval(pcUpd,1500)}}
 window.RDL.openUpload=()=>{if(window.RDL_ROLE==='admin'){const hb=document.querySelector('.nav button[data-p="home"]');if(hb)hb.click();return}buildUpload();document.querySelectorAll('.pg').forEach(x=>x.classList.remove('on'));document.querySelectorAll('.nav button').forEach(x=>x.classList.remove('on'));$('#upl').classList.add('on');const nb=$('.nav button[data-p="more"]');if(nb)nb.classList.add('on');window.scrollTo(0,0)};
 /* after midnight the previous day's data leaves the posting pages (also while the app stays open) */
 let lastDay=today();
@@ -5017,7 +5023,7 @@ function open(id){
   if(!accOK(id)){RDLUI.alert('Not allowed','The Admin has not given you access to this part.');return}
   if(PROT.has(id)&&window.RDL_ROLE!=='user'&&!unlocked()){unlock().then(ok=>{if(ok)open(id)});return}
   const pg=pages[id];if(pg&&pg.build){pg.body.textContent='';pg.build(pg.body)}
-  show(id);
+  show(id);if(id==='setdcr'&&window.applyUpModeFn)window.applyUpModeFn();
   if(pg&&window.RDLACC&&PAGEMOD[id])RDLACC.lock(pg.body,RDLACC.level(PAGEMOD[id])===1);   /* view only: buttons that change something are switched off */
   if(id==='setup'&&window.RDLACC){[['fOut','dbup.out'],['fCr','dbup.cr']].forEach(([f,k])=>{const ok=RDLACC.can(k),lb=document.querySelector('label[for='+f+']'),inp=document.getElementById(f);if(lb)lb.style.display=ok?'':'none';if(inp)inp.disabled=!ok})}   /* each file option can be closed on its own */
   if(id==='setup'||id==='setdcr')R.curStatus&&R.curStatus()}
@@ -5049,9 +5055,16 @@ const pUp=page('setup','Database Upload','setdb'),pDcr=page('setdcr','Daily Coll
 if(upCard){upCard.querySelector('.hint').textContent='Upload either file or both. Credit limit data replaces only the credit limits. Outstanding data replaces the bills; bills and collections you posted in the app are reconciled by date.';
   const bd=upCard.querySelector('#bDb');if(bd)bd.textContent='Upload Database';pages.setup.body.appendChild(upCard)}
 if(dcrCard)pages.setdcr.body.appendChild(dcrCard);
+/* the Upload button of the Collection & Order page shows ONLY the Collection & Order upload; the one of the DCR page shows ONLY the DCR upload */
+window.RDL_upMode='co';
+function applyUpMode(){var m=window.RDL_upMode==='dcr'?'dcr':'co';window.RDL_upMode='co';if(!dcrCard)return;var sec=dcrCard.querySelector('#dcrUpSec'),t=pDcr.querySelector('.st-top h2');
+  Array.prototype.forEach.call(dcrCard.children,function(k){if(k!==sec)k.style.display=m==='dcr'?'none':''});
+  var h3=dcrCard.querySelector(':scope > h3');if(h3)h3.textContent='Collection & Order Upload';
+  if(sec){var on=m==='dcr'&&window.RDL_ROLE!=='admin';sec.style.display=on?'':'none';sec.style.marginTop=on?'0':'18px';sec.style.paddingTop=on?'0':'14px';sec.style.borderTop=on?'0':'1px dashed #b9c9e6';var sh=sec.querySelector('h3');if(sh)sh.textContent='DCR (Daily Call Report) Upload'}
+  if(t)t.textContent=m==='dcr'?'DCR (Daily Call Report) Upload':'Collection & Order Upload'}
 {const vs=dcrCard&&dcrCard.querySelector('#dcrUpSec');if(vs&&window.RDL_ROLE==='admin')vs.style.display='none'}   /* admins do not enter visits */
 pDcr.querySelector('.st-top button').onclick=()=>{if(window.RDL.openUpload)window.RDL.openUpload()};
-window.RDL_openSet=open;
+window.RDL_openSet=open;window.applyUpModeFn=applyUpMode;
 function buildMainList(){
   const A=window.RDLACC,can=k=>A?A.can(k):true,role=window.RDL_ROLE;
   mainList.textContent='';
@@ -7650,7 +7663,7 @@ const DS={rows:null,commit:null,vh:0};
 function drawD(){const B=DP.body;B.textContent='';
   /* two ways to do the daily work: type the visits in the table (this page) or upload the DCR Excel file (Settings page, unchanged) */
   {const sw=el('div','od-actions'),a=el('button','st-btn','Entry'),u=el('button','st-btn od-clear','Upload');a.type=u.type='button';
-   u.onclick=()=>{if(DS.commit)try{DS.commit()}catch(e){}if(window.RDL_openSet){window.RDL_openSet('setdcr');setTimeout(()=>{const s=document.getElementById('dcrUpSec');if(s)s.scrollIntoView({block:'start'})},80)}};sw.appendChild(a);sw.appendChild(u);B.appendChild(sw)}
+   u.onclick=()=>{if(DS.commit)try{DS.commit()}catch(e){}if(window.RDL_openSet){window.RDL_upMode='dcr';window.RDL_openSet('setdcr')}};sw.appendChild(a);sw.appendChild(u);B.appendChild(sw)}
   const di=el('input','list-search');di.type='date';di.value=DV.date;di.max=today();di.onchange=()=>{if(!di.value)return;if(DS.commit)try{DS.commit()}catch(e){}DV.date=di.value;DCT.from=DCT.to=DV.date;drawD()};di.classList.add('co-dt');
   const CL=custs(),blank=()=>({id:'',cu:'',nm:'',txt:'',t:'',vp:VP[0],vw:'Self',rm:'',saved:false,dirty:false}),
     isBlank=r=>!r.cu&&!(r.txt||'').trim()&&!(r.t||'').trim()&&!(r.rm||'').trim()&&(!r.vw||r.vw==='Self')&&r.vp===VP[0];
@@ -7965,7 +7978,7 @@ const CP=mkPage('coep','Collection & Order',()=>{if(CX.commit)try{CX.commit()}ca
 function drawCO(){const B=CP.body;B.textContent='';
   /* two ways to do the daily work: type business-wise entries (this page) or upload the Excel file (old page, unchanged) */
   {const sw=el('div','od-actions'),a=el('button','st-btn','Entry'),u=el('button','st-btn od-clear','Upload');a.type=u.type='button';
-   u.onclick=()=>{if(window.RDL_openSet)window.RDL_openSet('setdcr')};sw.appendChild(a);sw.appendChild(u);B.appendChild(sw)}
+   u.onclick=()=>{if(window.RDL_openSet){window.RDL_upMode='co';window.RDL_openSet('setdcr')}};sw.appendChild(a);sw.appendChild(u);B.appendChild(sw)}
   const di=el('input','list-search');di.type='date';di.value=CX.date;di.max=today();di.onchange=()=>{if(!di.value)return;if(CX.commit)try{CX.commit()}catch(e){}CX.date=di.value;COT.from=COT.to=CX.date;CX.rows=null;CX.dirty=false;drawCO()};di.classList.add('co-dt');
   const E=coList(CX.date);
   /* ---- Business Wise Order & Collection: ONE input table. A row = one customer; every business has its own column, Order on top, Collection below ---- */
@@ -10100,33 +10113,77 @@ function depRows(){var m=J('rdl.master.v1',null)||{},g={};
   list.forEach(function(x){(by[x.cu]=by[x.cu]||{})[x.dp]=1});
   list.forEach(function(x){var o=Object.keys(by[x.cu]).filter(function(d){return d!==x.dp});x.also=o.join(' / ')});
   return list.sort(function(a,b){return a.dp===b.dp?(a.nm>b.nm?1:-1):(a.dp>b.dp?1:-1)})}
-var DC={dp:''};
+var DC={dp:'',q:'',sort:'dp'};
 function openDepCust(){
   var old=document.getElementById('dc-pg');if(old)old.remove();
+  if(!document.getElementById('dc-css')){var st=document.createElement('style');st.id='dc-css';st.textContent=
+   '#dc-pg .dcw{max-width:1000px;margin:0 auto}'+
+   '#dc-pg .dc-top{display:flex;align-items:center;gap:10px;margin-bottom:12px}#dc-pg .dc-top h2{margin:0;font-size:20px;flex:1;min-width:0}'+
+   '#dc-pg .dc-bk{border:0;background:#e8f0fe;color:#0a49b5;font-size:26px;line-height:1;width:40px;height:40px;border-radius:12px;font-weight:700;flex:none}'+
+   '#dc-pg .dc-xl{border:0;background:linear-gradient(135deg,#22a85a,#0f7a37);color:#fff;font:700 13.5px system-ui,sans-serif;padding:10px 13px;border-radius:12px;box-shadow:0 3px 8px #0f7a3744;flex:none}'+
+   '#dc-pg .dc-stats{display:grid;grid-template-columns:.8fr .9fr 1.5fr;gap:8px;margin-bottom:12px}'+
+   '#dc-pg .dc-stat{background:linear-gradient(160deg,#fff,#eef4ff);border:1px solid #d3e2fb;border-radius:14px;padding:9px 11px;min-width:0}'+
+   '#dc-pg .dc-stat small{display:block;color:#5b78a8;font-size:11.5px;font-weight:600}#dc-pg .dc-stat b{display:block;font-size:16px;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}'+
+   '#dc-pg .dc-tool{position:sticky;top:-1px;z-index:5;background:'+getComputedStyle(document.body).backgroundColor+';padding:6px 0 8px;margin-bottom:4px}'+
+   '#dc-pg .dc-row{display:flex;gap:8px}#dc-pg .dc-row>*{min-width:0}'+
+   '#dc-pg .dc-in{flex:1;border:1px solid #bcd0f0;border-radius:12px;padding:11px 12px;font-size:15px;background:#fff;color:#12306b;width:100%}'+
+   '#dc-pg .dc-sel{flex:none;width:38%;border:1px solid #bcd0f0;border-radius:12px;padding:11px 8px;font-size:14px;background:#fff;color:#12306b}'+
+   '#dc-pg .dc-lab{display:flex;align-items:center;justify-content:space-between;margin:12px 2px 6px;font-size:12.5px;font-weight:700;color:#5b78a8;text-transform:uppercase;letter-spacing:.04em}'+
+   '#dc-pg .dc-lab button{border:0;background:none;color:#0a49b5;font:700 12.5px system-ui,sans-serif;text-transform:none;letter-spacing:0;padding:2px 4px}'+
+   '#dc-pg .dc-chips{display:flex;flex-wrap:wrap;gap:6px;max-height:78px;overflow:hidden}#dc-pg .dc-chips.open{max-height:none}'+
+   '#dc-pg .dc-chip{border:1px solid #c4d4ef;background:#fff;color:#12306b;border-radius:999px;padding:6px 11px;font:600 13px system-ui,sans-serif}'+
+   '#dc-pg .dc-chip i{font-style:normal;opacity:.65;margin-left:6px;font-weight:700}#dc-pg .dc-chip.on{background:#0a49b5;border-color:#0a49b5;color:#fff}'+
+   '#dc-pg .dc-info{margin:10px 2px 8px;font-size:13px;color:#5b78a8}'+
+   '#dc-pg .dc-warn{margin:8px 0;background:#fff4e0;border:1px solid #f3cf8e;color:#8a5a00;border-radius:12px;padding:8px 11px;font-size:13px}'+
+   '#dc-pg .dc-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:10px}'+
+   '#dc-pg .dc-card{background:#fff;border:1px solid #d6e4fb;border-radius:15px;padding:11px 13px;box-shadow:0 2px 8px #0a3a9a14}'+
+   '#dc-pg .dc-nm{font-weight:700;font-size:15px;line-height:1.25;overflow-wrap:anywhere}'+
+   '#dc-pg .dc-meta{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:6px 0 9px;font-size:12.5px;color:#5b78a8}'+
+   '#dc-pg .dc-dep{background:#e8f0fe;color:#0a49b5;border-radius:8px;padding:2px 8px;font-weight:700;font-size:12px}'+
+   '#dc-pg .dc-nums{display:grid;grid-template-columns:.8fr .8fr 1.7fr;gap:6px;text-align:center}'+
+   '#dc-pg .dc-nums div{background:#f3f7ff;border-radius:10px;padding:5px 3px;min-width:0}#dc-pg .dc-nums small{display:block;font-size:10.5px;color:#6b86b3}#dc-pg .dc-nums b{font-size:14px;display:block;overflow:hidden;text-overflow:ellipsis}'+
+   '#dc-pg .dc-also{margin-top:8px;color:#c0392b;font-size:12px}'+
+   '#dc-pg .dc-more{display:block;margin:14px auto 0;border:0;background:#e8f0fe;color:#0a49b5;font:700 14px system-ui,sans-serif;padding:11px 22px;border-radius:12px}'+
+   '#dc-pg .dc-empty{text-align:center;color:#5b78a8;padding:36px 10px}';
+   document.head.appendChild(st)}
   var ov=el('div');ov.id='dc-pg';ov.style.cssText='position:fixed;inset:0;z-index:9000;overflow:auto;-webkit-overflow-scrolling:touch;background:'+getComputedStyle(document.body).backgroundColor+';padding:max(12px,env(safe-area-inset-top)) 14px 90px';
-  var top=el('div');top.style.cssText='display:flex;align-items:center;gap:10px;margin-bottom:10px';
-  var bk=el('button',null,'‹');bk.type='button';bk.setAttribute('aria-label','Back');bk.style.cssText='border:0;background:#e8f0fe;color:#0a49b5;font-size:26px;line-height:1;width:40px;height:40px;border-radius:12px;font-weight:700';bk.onclick=function(){ov.remove()};
-  var h=el('h2',null,'Depot Customers');h.style.cssText='margin:0;font-size:20px';top.appendChild(bk);top.appendChild(h);ov.appendChild(top);
-  var box=el('div','st-card');ov.appendChild(box);document.body.appendChild(ov);
+  var W=el('div','dcw');ov.appendChild(W);document.body.appendChild(ov);
+  var top=el('div','dc-top'),bk=el('button','dc-bk','‹');bk.type='button';bk.setAttribute('aria-label','Back');bk.onclick=function(){ov.remove()};
+  var h=el('h2',null,'Depot Customers'),dl=el('button','dc-xl','⬇ Excel');dl.type='button';top.appendChild(bk);top.appendChild(h);top.appendChild(dl);W.appendChild(top);
   var all=depRows();
-  if(!all.length){box.appendChild(el('div','mv-empty','No database in this app yet.'));return}
-  var cnt={};all.forEach(function(x){cnt[x.dp]=(cnt[x.dp]||0)+1});
-  box.appendChild(el('small',null,'Depots in this app (exact spelling) and customers in each'));
-  var sm=el('div');sm.style.cssText='margin:6px 0 10px;line-height:1.7';Object.keys(cnt).sort().forEach(function(d){var r=el('div');r.appendChild(el('b',null,d));r.appendChild(document.createTextNode(' — '+cnt[d]+' customer'+(cnt[d]===1?'':'s')));sm.appendChild(r)});box.appendChild(sm);
-  box.appendChild(el('small',null,'Depot'));
-  var sel=el('select','list-search');sel.appendChild(new Option('All depots',''));Object.keys(cnt).sort().forEach(function(d){sel.appendChild(new Option(d+' ('+cnt[d]+')',d))});sel.value=cnt[DC.dp]?DC.dp:'';box.appendChild(sel);
-  var info=el('div','stt'),wrap=el('div');wrap.style.cssText='overflow-x:auto;margin:8px 0';box.appendChild(info);box.appendChild(wrap);
-  var head=['Depot','Customer code','Customer name','Companies','Bills','Outstanding amount','Also under depot name'],cur=[];
-  function draw(){DC.dp=sel.value;cur=all.filter(function(x){return !DC.dp||x.dp===DC.dp});wrap.textContent='';
-    var dup=cur.filter(function(x){return x.also}).length;
-    info.className='stt'+(dup?' warn':'');info.textContent=cur.length+' customer'+(cur.length===1?'':'s')+(dup?' • '+dup+' also appear under another depot name (last column)':'');
-    var tb=el('table','mv-tbl'),th=el('tr');head.forEach(function(x){th.appendChild(el('th',null,x))});tb.appendChild(th);
-    cur.forEach(function(x){var tr=el('tr');[x.dp,x.cu,x.nm,Object.keys(x.co).length,x.bills,x.out,x.also].forEach(function(v,i){var c=el('td',null,typeof v==='number'?fm(v):String(v));if(typeof v==='number')c.style.textAlign='right';if(i===6&&x.also)c.style.color='#c0392b';tr.appendChild(c)});tb.appendChild(tr)});wrap.appendChild(tb)}
-  sel.onchange=draw;draw();
-  var dl=el('button','st-btn','Download Excel');dl.type='button';var msg=el('div','stt');
-  dl.onclick=function(){if(!cur.length){msg.className='stt bad';msg.textContent='Nothing to download';return}
-    xlsx('Customers',head,cur.map(function(x){return [x.dp,x.cu,x.nm,Object.keys(x.co).length,x.bills,Math.round(x.out*100)/100,x.also]})).then(function(blob){var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='Depot_customers_'+(DC.dp?DC.dp.replace(/[^A-Za-z0-9]+/g,'_')+'_':'')+td()+'.xlsx';document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(a.href)},4000);msg.className='stt ok';msg.textContent='✓ Downloaded'}).catch(function(){msg.className='stt bad';msg.textContent='✗ Could not make the file'})};
-  box.appendChild(dl);box.appendChild(msg)}
+  if(!all.length){W.appendChild(el('div','dc-empty','No database in this app yet.'));return}
+  var cnt={};all.forEach(function(x){cnt[x.dp]=(cnt[x.dp]||0)+1});var names=Object.keys(cnt).sort();
+  var stats=el('div','dc-stats'),sv={};[['dep','Depots'],['cus','Customers'],['out','Outstanding']].forEach(function(a){var s=el('div','dc-stat');s.appendChild(el('small',null,a[1]));sv[a[0]]=el('b',null,'');s.appendChild(sv[a[0]]);stats.appendChild(s)});W.appendChild(stats);
+  var tool=el('div','dc-tool'),row=el('div','dc-row'),q=el('input','dc-in');q.type='search';q.placeholder='Search customer…';q.autocomplete='off';q.value=DC.q||'';
+  var so=el('select','dc-sel');[['dp','By depot'],['nm','Name A–Z'],['out','Outstanding ↓'],['bills','Bills ↓']].forEach(function(a){so.appendChild(new Option(a[1],a[0]))});so.value=DC.sort||'dp';
+  row.appendChild(q);row.appendChild(so);tool.appendChild(row);W.appendChild(tool);
+  var lab=el('div','dc-lab');lab.appendChild(el('span',null,'Depots'));var tg=el('button',null,'Show all '+names.length);tg.type='button';lab.appendChild(tg);W.appendChild(lab);
+  var chips=el('div','dc-chips');W.appendChild(chips);tg.onclick=function(){var o=chips.classList.toggle('open');tg.textContent=o?'Show less':'Show all '+names.length};
+  var info=el('div','dc-info'),warn=el('div','dc-warn'),list=el('div','dc-list'),more=el('button','dc-more');more.type='button';
+  W.appendChild(info);W.appendChild(warn);W.appendChild(list);W.appendChild(more);
+  var msg=el('div','dc-info');W.appendChild(msg);
+  var cur=[],shown=0,PAGE=60;
+  function chip(lbl,val,n){var b=el('button','dc-chip'+((DC.dp===val)?' on':''),lbl);b.type='button';b.appendChild(el('i',null,String(n)));b.onclick=function(){DC.dp=(DC.dp===val&&val)?'':val;draw(true)};chips.appendChild(b)}
+  function card(x){var c=el('div','dc-card');c.appendChild(el('div','dc-nm',x.nm||'(no name)'));
+    var m=el('div','dc-meta');m.appendChild(el('span',null,'Code '+x.cu));m.appendChild(el('span','dc-dep',x.dp));c.appendChild(m);
+    var n=el('div','dc-nums');[['Companies',Object.keys(x.co).length],['Bills',x.bills],['Outstanding','৳ '+fm(x.out)]].forEach(function(a){var d=el('div');d.appendChild(el('small',null,a[0]));d.appendChild(el('b',null,String(a[1])));n.appendChild(d)});c.appendChild(n);
+    if(x.also)c.appendChild(el('div','dc-also','Also under depot name: '+x.also));return c}
+  function page(){var end=Math.min(cur.length,shown+PAGE);for(var i=shown;i<end;i++)list.appendChild(card(cur[i]));shown=end;more.style.display=shown<cur.length?'':'none';more.textContent='Show more ('+(cur.length-shown)+' left)'}
+  function draw(keep){DC.q=q.value.trim();DC.sort=so.value;if(!cnt[DC.dp])DC.dp='';
+    var t=DC.q.toLowerCase();cur=all.filter(function(x){return (!DC.dp||x.dp===DC.dp)&&(!t||(x.nm+' '+x.cu+' '+x.dp).toLowerCase().indexOf(t)>=0)});
+    var S=DC.sort;cur.sort(function(a,b){if(S==='out')return b.out-a.out||(a.nm>b.nm?1:-1);if(S==='bills')return b.bills-a.bills||(a.nm>b.nm?1:-1);if(S==='nm')return a.nm>b.nm?1:a.nm<b.nm?-1:0;return a.dp===b.dp?(a.nm>b.nm?1:-1):(a.dp>b.dp?1:-1)});
+    chips.textContent='';chip('All',  '',all.length);names.forEach(function(d){chip(d.replace(/\s*Depot$/i,''),d,cnt[d])});
+    var dd={};cur.forEach(function(x){dd[x.dp]=1});sv.dep.textContent=String(Object.keys(dd).length);sv.cus.textContent=String(cur.length);sv.out.textContent='৳ '+fm(cur.reduce(function(s,x){return s+x.out},0));
+    var dup=cur.filter(function(x){return x.also}).length;warn.style.display=dup?'':'none';warn.textContent=dup?dup+' customer'+(dup===1?'':'s')+' also appear under another depot name (shown in red on the card)':'';
+    info.textContent=cur.length?(DC.dp||'All depots')+(DC.q?' • “'+DC.q+'”':''):'';
+    list.textContent='';shown=0;if(!cur.length){list.appendChild(el('div','dc-empty','No customer found'));more.style.display='none'}else page();
+    if(keep&&DC.dp){var o=ov.querySelector('.dc-lab');if(o&&o.getBoundingClientRect().top<0)o.scrollIntoView({block:'start'})}}
+  var tm=0;q.oninput=function(){clearTimeout(tm);tm=setTimeout(function(){draw()},180)};so.onchange=function(){draw()};more.onclick=page;
+  draw();
+  var head=['Depot','Customer code','Customer name','Companies','Bills','Outstanding amount','Also under depot name'];
+  dl.onclick=function(){if(!cur.length){msg.className='dc-info';msg.textContent='Nothing to download';return}
+    msg.textContent='Making the file…';
+    xlsx('Customers',head,cur.map(function(x){return [x.dp,x.cu,x.nm,Object.keys(x.co).length,x.bills,Math.round(x.out*100)/100,x.also]})).then(function(blob){var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='Depot_customers_'+(DC.dp?DC.dp.replace(/[^A-Za-z0-9]+/g,'_')+'_':'')+td()+'.xlsx';document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(a.href)},4000);msg.textContent='✓ Downloaded ('+cur.length+' customers)'}).catch(function(){msg.textContent='✗ Could not make the file'})}}
 window.RDL_DEPCUST=openDepCust;
 function addTile2(){
   if(role()!=='admin')return;
