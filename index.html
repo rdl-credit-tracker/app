@@ -1721,6 +1721,8 @@ function mergeAdminLedger(led){
 function devLabel(){try{var u=navigator.userAgent||'',m=u.match(/Android[^;)]*;\s*([^;)]+?)(?:\sBuild|[;)])/),os=/iPhone/.test(u)?'iPhone':/iPad/.test(u)?'iPad':/Android/.test(u)?'Android':/Windows/.test(u)?'Windows':/Mac OS/.test(u)?'Mac':'Other',br=/Edg\//.test(u)?'Edge':/OPR\//.test(u)?'Opera':/Chrome\//.test(u)?'Chrome':/Safari\//.test(u)?'Safari':/Firefox\//.test(u)?'Firefox':'';return (m?m[1].trim():os)+(br?' • '+br:'')}catch(e){return ''}}
 function devId(){var d=LS.getItem('rdlgate.dev');if(!d){d=Math.random().toString(36).slice(2)+Date.now().toString(36);LS.setItem('rdlgate.dev',d)}return d}
 function rowKey(x){return [x.bill,x.co,x.cu].join('|')}
+/* a bill number is 'deleted' only if the delete happened AFTER that bill was posted; a new bill that re-uses an old deleted number is kept */
+function billDeleted(L,x){var t=L.del&&L.del[x.bill];return !!t&&t>=(+x.pt||0)}
 /* deleted Sales / Collections are remembered in L.del, so a copy kept by the admin or in an older backup cannot bring them back */
 window.RDLDDEL=function(L,ids){L.ddel=L.ddel||{};var now=Date.now();ids.forEach(function(i){if(i)L.ddel[i]=now});
   var ks=Object.keys(L.ddel);if(ks.length>3000){ks.sort(function(a,b){return L.ddel[a]-L.ddel[b]}).slice(0,ks.length-2500).forEach(function(k){delete L.ddel[k]})}};   /* a draft that was posted or deleted is remembered, so it cannot come back from another device */
@@ -1737,8 +1739,8 @@ function mergeOwn(strict,onlyIfOther){
         var L=jget('rdl.ledger.v1')||{};L.rv=L.rv||[];L.dz=L.dz||[];L.n=L.n||{RV:0,DZ:0};L.ps=L.ps||{};L.pc=L.pc||{};L.pl=L.pl||{};
         var live={};['rv','dz'].forEach(function(k){(inc[k]||[]).forEach(function(x){if(isObj(x))live[x.bill]=1})});
         L.del=L.del||{};if(isObj(inc.del))Object.keys(inc.del).forEach(function(b){if(!live[b]&&!(b in L.del))L.del[b]=inc.del[b]});   /* deleted on the other device */
-        ['rv','dz'].forEach(function(k){var have={};L[k]=L[k].filter(function(x){return x._adm||!L.del[x.bill]||live[x.bill]});L[k].forEach(function(x){if(!x._adm)have[rowKey(x)]=1});
-          (inc[k]||[]).forEach(function(x){if(!isObj(x)||x._adm||L.del[x.bill])return;var q=rowKey(x);if(!have[q]){have[q]=1;L[k].push(x)}})});
+        ['rv','dz'].forEach(function(k){var have={};L[k]=L[k].filter(function(x){return x._adm||!billDeleted(L,x)||live[x.bill]});L[k].forEach(function(x){if(!x._adm)have[rowKey(x)]=1});
+          (inc[k]||[]).forEach(function(x){if(!isObj(x)||x._adm||billDeleted(L,x))return;var q=rowKey(x);if(!have[q]){have[q]=1;L[k].push(x)}})});
         ['ps','pc','pl','px'].forEach(function(k){if(isObj(inc[k])){L[k]=L[k]||{};Object.keys(inc[k]).forEach(function(q){if(!(q in L[k]))L[k][q]=inc[k][q]})}});
         L.ddel=L.ddel||{};if(isObj(inc.ddel))Object.keys(inc.ddel).forEach(function(i){if(!(i in L.ddel))L.ddel[i]=inc.ddel[i]});
         L.dr=(L.dr||[]).filter(function(x){return !(x&&L.ddel[x.id])});var hd={};L.dr.forEach(function(x){if(x)hd[x.id]=1});
@@ -1982,7 +1984,7 @@ function mergeBackups(over,inc){
       if(isLate&&!cutD){late.push(b);return}   /* the user's phone is on an older database and no cut date is known: nothing can be adjusted safely */
       Object.keys(b.data).forEach(function(k){var inc;try{inc=JSON.parse(b.data[k])}catch(e){return}if(inc==null)return;if(k==='rdl.ledger.v1'&&isObj(inc)){delete inc.del;delete inc.dr;delete inc.sd;delete inc.ddel;if(isLate){['rv','dz'].forEach(function(t){if(Array.isArray(inc[t]))inc[t]=inc[t].filter(function(x){return x&&!x._adm&&String(t==='rv'?x.post:x.date)>cutD})})}}   /* older database on the user's phone: only posts AFTER the cut date of the latest upload are still valid; earlier ones are already inside the new database */   /* users' drafts stay with the user */LS.setItem(k,JSON.stringify(mergeVal(jget(k),inc,b.email)))});
       if(b.dcr){try{mergeUserDcr(b.email,JSON.parse(b.dcr))}catch(e){}}
-      (function(){var L=jget('rdl.ledger.v1');if(!L)return;['dr','sd'].forEach(function(k){if(Array.isArray(L[k]))L[k]=L[k].filter(function(x){return !(x&&x._u)})});LS.setItem('rdl.ledger.v1',JSON.stringify(L));L=jget('rdl.ledger.v1');if(!L.del)return;['rv','dz'].forEach(function(k){L[k]=(L[k]||[]).filter(function(x){return !(x._u&&L.del[x.bill])})});LS.setItem('rdl.ledger.v1',JSON.stringify(L))})();
+      (function(){var L=jget('rdl.ledger.v1');if(!L)return;['dr','sd'].forEach(function(k){if(Array.isArray(L[k]))L[k]=L[k].filter(function(x){return !(x&&x._u)})});LS.setItem('rdl.ledger.v1',JSON.stringify(L));L=jget('rdl.ledger.v1');if(!L.del)return;['rv','dz'].forEach(function(k){L[k]=(L[k]||[]).filter(function(x){return !(x._u&&billDeleted(L,x))})});LS.setItem('rdl.ledger.v1',JSON.stringify(L))})();
       if(isLate)b._part=cutD;done.push(b)});sysW=0;
     try{var mm=jget('rdlgate.merged')||{};done.forEach(function(b){mm[b.email]=+new Date(b.at)||0});jset('rdlgate.merged',mm);setTimeout(pullBkStatus,500)}catch(e){}
     var LG=jget('rdl.ledger.v1')||{},fn=function(n){return Math.round(n).toLocaleString('en-IN')};
