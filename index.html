@@ -2834,9 +2834,9 @@ window.RDLGATE={bkRender:bkRender,mergeBackups:mergeBackups,showMergeReport:show
       </div>
     </div>
     <div class="tw2">
-    <button type="button" id="pcHome" class="pch" style="display:none" aria-label="Posting Center"><span class="pch-i"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8z"/><path d="M14 3v5h5M9 14l2 2 4-4"/></svg></span><span class="pch-t"><b>Posting Center</b><small>Smart Post, Drafts, Quick Sales &amp; Collection</small><em id="pcTag" style="display:none"></em></span><span class="pch-g"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4.5 12h15M13.5 6l6 6-6 6" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></button>
+    <button type="button" id="pcHome" class="pch" style="display:none" aria-label="Posting Center"><span class="pch-i"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill-rule="evenodd" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm-1 1.5L18.5 9H13V3.5zM10.9 18l-2.6-2.6 1.1-1.1 1.5 1.5 3.7-3.7 1.1 1.1L10.9 18z"/></svg></span><span class="pch-t"><b>Posting Center</b><small><svg class="pi" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-doc"/></svg><span>Smart Post, Drafts, Quick Sales &amp; Collection</span></small><em id="pcTag" style="display:none"></em></span><span class="pch-g"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4.5 12h15M13.5 6l6 6-6 6" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></button>
     <div class="qa">
-      <div class="card cya"><div class="em"><svg><use href="#i-cust-stmt"/></svg></div><h4>Customer Statement</h4><p>View customer statement details</p><div class="go"><svg class="ar" viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 12h15M13.5 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div></div>
+      <div class="card cya"><div class="em"><svg><use href="#i-cust-stmt"/></svg></div><h4>Customer Statement</h4><p><svg class="pi" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-doc"/></svg><span>View customer statement details</span></p><div class="go"><svg class="ar" viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 12h15M13.5 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div></div>
       <div class="card blu"><div class="em"><svg><use href="#i-recp"/></svg></div><h4>Customer Outstanding</h4><p>Check customer outstanding balance</p><div class="go"><svg class="ar" viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 12h15M13.5 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div></div>
     </div>
     </div>
@@ -10273,31 +10273,53 @@ window.addEventListener('resize',function(){setTimeout(fit,60)});window.addEvent
 [400,1500,3500].forEach(function(t){setTimeout(fit,t)});document.addEventListener('visibilitychange',function(){setTimeout(fit,200)});window.RDL_fitTitles=fit})();
 </script>
 <style id="rdl-tiles-b">
-/* Home: Posting Center + Customer Statement = two equal tiles side by side (Design B). Phone and desktop. Customer Outstanding stays full width below. */
-html body #home .tw2{display:grid;grid-template-columns:1fr;gap:12px;margin:10px 0 0}
+/* Home: Posting Center + Customer Statement = two equal tiles, built like the other dashboard cards:
+   [round 3D icon] [title] [small tinted arrow] on top, tinted rounded "pill" text at the bottom.
+   Icon size = Sales & Collection Register icon, arrow size = Total Overdue arrow (both read live into --rci / --gos by the script below).
+   Posting Center colour (lime): change --pa / --pb / --pt / --pl / --pn here to recolour it. */
+html body #home .tw2{--rci:44px;--gos:24px;--pa:#a3e635;--pb:#4d7c0f;--pt:#e9f8c4;--pl:#b5d96a;--pn:#4d7c0f;--pp:#dcf0a8;--pg:#cfe898;display:grid;grid-template-columns:1fr;gap:12px;margin:10px 0 0}
 html body #home .tw2.two{grid-template-columns:1fr 1fr}
 html body #home .tw2>.qa{display:contents!important}
 html body #home .tw2 .qa .card.blu{grid-column:1/-1}
 html body #home .tw2:not(.two) .pch{margin:0}
-html body #home .tw2.two .pch,html body #home .tw2.two .qa .card.cya{display:flex!important;flex-direction:column!important;align-items:flex-start!important;justify-content:flex-start!important;gap:0!important;height:auto!important;min-height:176px!important;margin:0!important;padding:14px!important;width:auto!important;text-align:left}
-html body #home .tw2.two .qa .card.cya::after{display:none!important}
-html body #home .tw2.two .pch-i,html body #home .tw2.two .qa .card.cya .em{width:48px!important;height:48px!important;border-radius:15px!important;grid-row:auto;grid-column:auto}
-html body #home .tw2.two .pch-t{flex:none!important;border-left:0!important;padding-left:0!important;margin-top:10px;width:100%}
-html body #home .tw2.two .pch-t b,html body #home .tw2.two .qa .card.cya h4{font-size:17px!important;line-height:1.2!important;white-space:normal!important;padding:0!important;margin:10px 0 0!important;text-align:left!important}
-html body #home .tw2.two .pch-t b{margin:0!important}
-html body #home .tw2.two .pch-t small,html body #home .tw2.two .qa .card.cya p{display:block;font-size:12px!important;line-height:1.35!important;margin:4px 0 0!important;padding:0!important}
-html body #home .tw2.two .pch-t em{margin-top:6px}
-html body #home .tw2.two .pch-g,html body #home .tw2.two .qa .card.cya .go{width:36px!important;height:36px!important;margin:auto 0 0 auto!important;grid-row:auto;grid-column:auto}
-html body #home .tw2.two .qa .card.cya{grid-column:auto!important;grid-row:auto!important}
-html body #home .tw2.two .qa .card.cya .em,html body #home .tw2.two .qa .card.cya h4,html body #home .tw2.two .qa .card.cya p,html body #home .tw2.two .pch-i,html body #home .tw2.two .pch-t{align-self:flex-start!important;justify-self:auto!important}
-html body #home .tw2.two .qa .card.cya .go,html body #home .tw2.two .pch-g{align-self:flex-end!important}
-html body #home .tw2.two .qa .card.cya h4,html body #home .tw2.two .qa .card.cya p{width:100%}
+html body #home .tw2.two .pch,html body #home .tw2.two .qa .card.cya{display:grid!important;grid-template-columns:auto minmax(0,1fr) auto;grid-template-rows:auto 1fr;column-gap:8px;row-gap:8px;align-items:center;align-content:stretch;grid-column:auto!important;grid-row:auto!important;height:auto!important;min-height:0!important;width:auto!important;margin:0!important;padding:10px!important;border-radius:20px!important;text-align:left;color:#12306b}
+html body #home .tw2.two .pch{background:linear-gradient(135deg,#fff,var(--pt))!important;border:1px solid var(--pl)!important;box-shadow:0 8px 14px -8px var(--pn),inset 0 1px 0 #fff!important}
+html body #home .tw2.two .pch::before,html body #home .tw2.two .qa .card.cya::after{display:none!important}
+/* icon */
+html body #home .tw2.two .pch-i,html body #home .tw2.two .qa .card.cya .em{grid-column:1!important;grid-row:1!important;align-self:center!important;width:var(--rci)!important;height:var(--rci)!important;border-radius:50%!important;position:relative;overflow:hidden;border:1px solid #ffffff99;display:grid;place-items:center;box-shadow:0 8px 10px -4px var(--pn),0 2px 3px #0000002b,inset 0 2px 3px #ffffffcc,inset 0 -5px 8px #00000030!important}
+html body #home .tw2.two .pch-i{background:linear-gradient(135deg,var(--pa),var(--pb))!important}
+html body #home .tw2.two .qa .card.cya .em{background:linear-gradient(135deg,#38c0f2,#0a7fb8)!important;box-shadow:0 8px 10px -4px #0a7fb8,0 2px 3px #0000002b,inset 0 2px 3px #ffffffcc,inset 0 -5px 8px #00000030!important}
+html body #home .tw2.two .pch-i::after,html body #home .tw2.two .qa .card.cya .em::after{content:"";position:absolute;left:14%;top:8%;width:62%;height:42%;border-radius:50%;background:linear-gradient(180deg,#ffffffd9,#ffffff00);pointer-events:none}
+html body #home .tw2.two .pch-i svg,html body #home .tw2.two .qa .card.cya .em svg{width:calc(var(--rci)*.52)!important;height:calc(var(--rci)*.52)!important;position:relative;z-index:1;fill:#fff!important;stroke:none!important;filter:drop-shadow(0 1px 1px #0000004d)!important}
+/* title */
+html body #home .tw2.two .pch-t{display:contents!important}
+html body #home .tw2.two .pch-t b,html body #home .tw2.two .qa .card.cya h4{grid-column:2!important;grid-row:1!important;align-self:center!important;margin:0!important;padding:0!important;font-size:15px!important;font-weight:700!important;line-height:1.15!important;color:#12306b!important;text-align:left!important;white-space:normal!important;overflow:visible!important;text-shadow:none!important}
+/* small tinted arrow */
+html body #home .tw2.two .pch-g,html body #home .tw2.two .qa .card.cya .go{grid-column:3!important;grid-row:1!important;align-self:center!important;width:var(--gos)!important;height:var(--gos)!important;margin:0!important;border-radius:50%!important;display:grid;place-items:center;border:0!important;position:static!important;box-shadow:none!important}
+html body #home .tw2.two .pch-g{background:var(--pg)!important;color:var(--pn)}
+html body #home .tw2.two .qa .card.cya .go{background:#bfe8f7!important;color:#0a7fb8!important}
+html body #home .tw2.two .pch-g svg,html body #home .tw2.two .qa .card.cya .go svg{width:calc(var(--gos)*.58)!important;height:calc(var(--gos)*.58)!important;stroke:currentColor!important;filter:none!important}
+/* tinted pill text at the bottom, like Total Overdue */
+html body #home .tw2.two .pch-t small,html body #home .tw2.two .qa .card.cya p{grid-column:1/-1!important;grid-row:2!important;align-self:end!important;display:flex!important;align-items:center;gap:6px;margin:0!important;padding:5px 8px!important;border-radius:12px;font-size:11.5px!important;line-height:1.2!important;font-weight:400;opacity:1!important;color:#12306b!important;white-space:normal!important;overflow:visible!important;min-height:34px}
+html body #home .tw2.two .pch-t small{background:var(--pp)}
+html body #home .tw2.two .qa .card.cya p{background:#cdeefa}
+html body #home .tw2.two .pch-t small .pi,html body #home .tw2.two .qa .card.cya p .pi{width:13px;height:13px;flex:none;fill:currentColor}
+html body #home .tw2.two .pch-t small .pi{color:var(--pn)}html body #home .tw2.two .qa .card.cya p .pi{color:#0a7fb8}
+html body #home .tw2.two .pch-g svg path{stroke:currentColor!important}
+html body #home .tw2.two .pch-t em{grid-column:1/-1!important;grid-row:3!important;justify-self:start;margin:0!important}
+html body #home .tw2 .pi{width:13px;height:13px;flex:none}
+html body #home .tw2:not(.two) .pi{display:none!important}
 @media (min-width:1000px){html body #home>.tw2{flex:1.1 1 auto}}
 </style>
 <script>
-/* two-tile layout only while Posting Center is visible (user role); for admin the Customer Statement keeps the full-width bar */
-(function(){var b=document.getElementById('pcHome'),w=b&&b.parentNode;if(!b||!w)return;function s(){w.classList.toggle('two',b.style.display!=='none')}
-new MutationObserver(s).observe(b,{attributes:true,attributeFilter:['style']});s()})();
+/* two-tile layout only while Posting Center is visible (user role); for admin the Customer Statement keeps the full-width bar.
+   Icon / arrow sizes are copied live from the Sales & Collection Register icon and the Total Overdue arrow so they always match. */
+(function(){var b=document.getElementById('pcHome'),w=b&&b.parentNode;if(!b||!w)return;
+function s(){var on=b.style.display!=='none';if(w.classList.contains('two')===on)return;w.classList.toggle('two',on);w.querySelectorAll('.cya h4,.cya p,.pch-t b,.pch-t small').forEach(function(e){e.style.removeProperty('font-size')});setTimeout(function(){if(window.RDL_fitTitles)window.RDL_fitTitles()},60)}
+function z(){var i=document.querySelector('.regcard .rc-i'),g=document.querySelector('.grid .card .go');
+if(i&&i.offsetWidth)w.style.setProperty('--rci',i.offsetWidth+'px');if(g&&g.offsetWidth)w.style.setProperty('--gos',g.offsetWidth+'px')}
+new MutationObserver(s).observe(b,{attributes:true,attributeFilter:['style']});s();z();
+window.addEventListener('resize',function(){setTimeout(z,80)});[500,1500,3500].forEach(function(t){setTimeout(z,t)});document.addEventListener('visibilitychange',function(){setTimeout(z,200)})})();
 </script>
 </body>
 </html>
