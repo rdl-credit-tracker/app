@@ -4172,7 +4172,10 @@ function render(w,rev){window.RDLNav&&RDLNav.level(w,rev?1:0,()=>render(w));if(r
   else{cd.classList.add('wk-box');wkHead('This week',money(tot))}
   if(msg[w]){cd.appendChild(el('div','stt ok',msg[w]))}
   if(rev==='manual'){if(!R.master){P.appendChild(el('div','st-card','Upload the database from Settings first.'));return}if(w==='s'){manualSales(P,ttl,bk);return}if(!mState)mPush(1);manualPage(P,ttl,bk);return}
-  if(!rev&&tab[w]==='search'&&window.RDL.history){window.RDL.history(w,P);return}
+  if(!rev&&tab[w]==='search'&&window.RDL.history){
+    /* Quick Sales / Quick Collection shortcut under the Today box: User login only, never for Admin */
+    if((w==='s'||w==='c')&&window.RDL_ROLE==='user'){const qb=el('button','st-btn qk-go');qb.type='button';qb.textContent=w==='s'?'Quick Sales':'Quick Collection';qb.style.cssText='display:block;width:100%;margin:-4px 0 14px';qb.onclick=()=>openManual(w);P.appendChild(qb)}
+    window.RDL.history(w,P);return}
   if(!R.master||!R.dcr){P.appendChild(el('div','st-card','Upload the database and the Daily Collection & Order file from Settings first.'));return}
   if(rev){review(w,P,L,ttl,bk);return}
   const dc=P.appendChild(el('div','st-card'));dc.appendChild(el('h3',null,'Pick Dates'));dc.appendChild(el('p','hint','Pick the upload dates to review. '+(w==='c'?'Order and collection':'Sales and receipt')+' post together.'));
