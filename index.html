@@ -10242,5 +10242,33 @@ html body #dhub.pg.st,html body #settings.pg.st{max-width:none!important;margin-
 html body #dhub #rgx-hubbody{max-width:none;margin:0}
 }
 </style>
+<style id="rdl-ttl-3d">
+/* Home titles a little bigger (Outstanding Register, Sales & Collection Register, Posting Center, Customer Statement) + a 3D Posting Center bar like the other bars */
+:root{--ttl:clamp(21px,6.2vw,29px)}
+html body .total small,html body .total .tx small{font-size:var(--ttl)!important;line-height:1.15}
+html body .regcard .rc-t h3{font-size:var(--ttl)!important;white-space:normal!important;line-height:1.12!important;text-align:center}
+html body .regcard .rc-h{min-height:64px}
+html body .total{height:98px!important;min-height:98px!important}
+html body .qa:not(.one) .card.cya h4{font-size:var(--ttl)!important}
+html body .pch-t b{font-size:var(--ttl)!important;line-height:1.15;text-shadow:0 1px 2px #05402e66}
+html body .pch{position:relative;overflow:hidden;border:1px solid #ffffff88;border-radius:22px;
+  background:linear-gradient(100deg,#07684c 0%,#0e9a77 55%,#22c79e 100%);
+  box-shadow:0 12px 20px -8px #0b7a5bb3,0 3px 5px #05402e38,inset 0 2px 0 #ffffff77,inset 0 -4px 8px #00000030}
+html body .pch::before{content:"";position:absolute;left:0;right:0;top:0;height:58%;border-radius:22px 22px 0 0;background:linear-gradient(180deg,#ffffff66 0%,#ffffff22 55%,#ffffff00 100%);pointer-events:none}
+html body .pch>*{position:relative;z-index:1}
+html body .pch-i{width:62px;height:62px;position:relative;overflow:hidden;background:radial-gradient(circle at 35% 30%,#8af3d4,#0a7a5b 75%);border:1px solid #ffffffaa;box-shadow:0 5px 10px #05402e77,inset 0 0 0 2px #ffffff40,inset 0 -3px 6px #00000033}
+html body .pch-i::after{content:"";position:absolute;left:14%;top:8%;width:62%;height:42%;border-radius:50%;background:linear-gradient(180deg,#ffffffd9,#ffffff00);pointer-events:none}
+html body .pch-i svg{position:relative;z-index:1;filter:drop-shadow(0 1px 1px #00000055)}
+html body .pch-g{background:linear-gradient(135deg,#6ff0cb,#0a8a68);border:1px solid #ffffffa0;box-shadow:0 5px 8px -3px #05402eaa,inset 0 1.5px 0 #ffffffaa,inset 0 -2px 4px #00000026}
+html body .pch-g svg{filter:drop-shadow(0 1px 1px #00000040)}
+html body .pch-t em{box-shadow:0 2px 4px #05402e44,inset 0 -1px 2px #0b7a5b22}
+</style>
+<script>
+/* shrink a title only if it would not fit on one line (small phones), never below 14px */
+(function(){var Q=['.total .tx small','.pch-t b','.qa .card.cya h4'];
+function fit(){Q.forEach(function(q){var e=document.querySelector(q);if(!e||!e.offsetParent)return;e.style.fontSize='';var f=parseFloat(getComputedStyle(e).fontSize),n=0;while(e.scrollWidth>e.clientWidth+1&&f>14&&n++<40){f-=.5;e.style.setProperty('font-size',f+'px','important')}})}
+window.addEventListener('resize',function(){setTimeout(fit,60)});window.addEventListener('orientationchange',function(){setTimeout(fit,300)});
+[400,1500,3500].forEach(function(t){setTimeout(fit,t)});document.addEventListener('visibilitychange',function(){setTimeout(fit,200)});window.RDL_fitTitles=fit})();
+</script>
 </body>
 </html>
