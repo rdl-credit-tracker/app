@@ -2324,11 +2324,11 @@ function openChangeEmail(){
 
 /* ---------- floating button + menu ---------- */
 function signOut(){
+  if(window.__soBusy)return;window.__soBusy=1;var bt=document.querySelector('#rgx-panel .pc-rd .pc-t');if(bt)bt.textContent='Signing out...';
   var go=function(){if(S.role==='user')wipeUserData();/* the PIN stays on this phone after Sign out, so the next sign-in just asks for it */LS.removeItem('rdlgate.sess');LS.removeItem(SK);LS.removeItem('rdlgate.perms');try{google.accounts.id.disableAutoSelect()}catch(e){}location.reload()};
   if(S.role==='user'){
-    if(!confirm('Sign out? Your work is first saved to the server, then removed from this phone.'))return;
-    sendBackup().then(go).catch(function(e){if(confirm('Backup could not be saved ('+msgOf(e)+').\nSigning out now will LOSE unsaved work. Sign out anyway?'))go()})
-  }else{if(confirm('Sign out?'))go()}}
+    sendBackup().then(go).catch(function(e){window.__soBusy=0;if(bt)bt.textContent='Sign Out';if(confirm('Backup could not be saved ('+msgOf(e)+').\nSigning out now will LOSE unsaved work. Sign out anyway?'))go()})
+  }else go()}
 var PIC={
   usr:'<path d="M8 7a4 4 0 1 0 8 0a4 4 0 0 0 -8 0"/><path d="M6 21v-2a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v2"/>',
   mail:'<path d="M3 7a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v10a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2v-10"/><path d="M3 7l9 6l9 -6"/>',
@@ -2368,6 +2368,7 @@ function panelCss(){if(document.getElementById('pnx'))return;var x=document.crea
  +'#rgx-panel .pc-rd{--bg:linear-gradient(135deg,#fff0ee,#ffd9d4);--bd:#f3b4ac;--tc:#a12418;--dc:#a5584f;--ic:radial-gradient(circle at 35% 30%,#ff9d90,#d63326 75%);--sd:#9a2016;--go:linear-gradient(#ef5a4a,#d63326);margin-bottom:0}';
  document.head.appendChild(x)}
 function renderPanel(){
+  if(window.__pnPress&&panelOn&&document.getElementById('rgx-panel'))return;
   var p=document.getElementById('rgx-panel');if(p)p.remove();if(!panelOn)return;
   panelCss();
   p=h('div','pnx');p.id='rgx-panel';
@@ -10320,6 +10321,20 @@ function z(){var i=document.querySelector('.regcard .rc-i'),g=document.querySele
 if(i&&i.offsetWidth)w.style.setProperty('--rci',i.offsetWidth+'px');if(g&&g.offsetWidth)w.style.setProperty('--gos',g.offsetWidth+'px')}
 new MutationObserver(s).observe(b,{attributes:true,attributeFilter:['style']});s();z();
 window.addEventListener('resize',function(){setTimeout(z,80)});[500,1500,3500].forEach(function(t){setTimeout(z,t)});document.addEventListener('visibilitychange',function(){setTimeout(z,200)})})();
+</script>
+<style id="rdl-panel-fix">
+/* Profile page: section titles centred on the page, taller option rows, tap-friendly buttons */
+html body #rgx-panel .pc-sec{justify-content:center;gap:8px;margin:14px 2px 8px;font-size:15px}
+html body #rgx-panel .pc-sec::before{content:"";flex:1;height:1px;background:linear-gradient(270deg,#c9d9f1,#c9d9f100)}
+html body #rgx-panel .pc-sec b{flex:1}
+html body #rgx-panel button.pc{padding:9px 12px;margin-bottom:8px;touch-action:manipulation;-webkit-user-select:none;user-select:none}
+html body #rgx-panel button.pc *{pointer-events:none}
+</style>
+<script>
+/* remember that a finger is on the profile panel, so it is not rebuilt under the finger (this is why Sign Out needed several taps) */
+(function(){var t;function d(e){if(e.target.closest&&e.target.closest('#rgx-panel')){window.__pnPress=1;clearTimeout(t)}}
+function u(){clearTimeout(t);t=setTimeout(function(){window.__pnPress=0},500)}
+document.addEventListener('pointerdown',d,true);['pointerup','pointercancel','touchend','touchcancel'].forEach(function(n){document.addEventListener(n,u,true)})})();
 </script>
 </body>
 </html>
