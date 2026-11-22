@@ -3462,7 +3462,7 @@ function saveDcr(){
 /* ---- DCR upload: the visits of the user's DCR Excel (every sheet) are added to the DCR entries (rdl.visit.v1), once each ---- */
 let pendV=null;
 async function parseVis(buf){
-  const x=await readXlsx(buf),out=[],t=new Date().toISOString().slice(0,10);let ok=false;
+  const x=await readXlsx(buf),out=[],t=(()=>{const n=new Date();return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0')})();let ok=false;   /* the phone's own date (not UTC: between midnight and 6 am in Bangladesh UTC is still yesterday) */
   for(const sh of x.sheets){const R=await x.rows(sh);let d=null;
     for(const i of keys(R)){if(i<7)continue;const a=R[i];if(!a||typeof a[0]!=='number')continue;ok=true;
       if(typeof a[1]==='number'&&a[1]>30000)d=iso(a[1]);
@@ -7811,7 +7811,7 @@ function dcrExcelCard(B){
     if(!list.length)return say('No visit from '+dd(fr)+' to '+dd(to)+' to put in the Excel','bad');
     say('Making the file…');
     try{if(!window.RDL_SELFX)throw new Error('The Excel maker is not ready, reload the app and try again');
-      const r=await RDL_SELFX('dcr',to,list),f=new File([r.blob],r.name,{type:r.blob.type}),days=new Set(list.map(z=>z.d)).size,info=days+' day'+(days===1?'':'s')+' • '+list.length+' visit'+(list.length===1?'':'s')+' • '+dd(fr)+' to '+dd(to),warn=r.missing?' • Your official name is not in your Profile yet — add it in My profile so it appears in the Excel':'';
+      const r=await RDL_SELFX('dcr',to,list),f=new File([r.blob],r.name,{type:r.blob.type}),days=new Set(list.map(z=>z.d)).size,info=days+' day'+(days===1?'':'s')+' • '+list.length+' visit'+(list.length===1?'':'s')+' • '+dd(fr)+' to '+dd(to),warn=(r.missing?' • Your official name is not in your Profile yet — add it in My profile so it appears in the Excel':'')+(r.partial?' • Earlier months could not be loaded from the server (no internet?) — only what is on this phone is in the file':'');
       if(share&&navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f],title:'DCR '+dd(DV.date),text:'Daily Call Report — '+dd(DV.date)});say('✓ '+info+' • shared'+warn,'ok')}
       else{const a=el('a');a.href=URL.createObjectURL(r.blob);a.download=r.name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);say('✓ '+info+(share?' • sharing is not available here, so the file was downloaded':' • downloaded')+warn,'ok')}
     }catch(e){if(e&&e.name==='AbortError')say('');else say('✗ '+(e&&e.message||'Could not make the file'),'bad')}};
@@ -8054,7 +8054,7 @@ function drawCO(){const B=CP.body;B.textContent='';
       if(!list.length)return say('No entry from '+dd(fr)+' to '+dd(to)+' to put in the Excel','bad');
       if(E.length)coSave(CX.date,E);
       const r=await RDL_SELFX('co',to,list),f=new File([r.blob],r.name,{type:r.blob.type}),days=new Set(list.map(z=>z.d)).size;
-      const tail=' • saved in the app for Smart Post',info=days+' day'+(days===1?'':'s')+' • '+list.length+' entr'+(list.length===1?'y':'ies')+' • '+dd(fr)+' to '+dd(to),warn=r.missing?' • Your official name / SAP ID is not in your Profile yet — add it in My profile so it appears in the Excel':'';
+      const tail=' • saved in the app for Smart Post',info=days+' day'+(days===1?'':'s')+' • '+list.length+' entr'+(list.length===1?'y':'ies')+' • '+dd(fr)+' to '+dd(to),warn=(r.missing?' • Your official name / SAP ID is not in your Profile yet — add it in My profile so it appears in the Excel':'')+(r.partial?' • Earlier months could not be loaded from the server (no internet?) — only what is on this phone is in the file':'');
       if(mode==='share'&&navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f],title:'Collection & Order '+dd(CX.date),text:'Daily Sales Order & Collection Statements — '+dd(CX.date)});say('✓ '+info+' • shared'+tail+warn,'ok')}
       else{const a=el('a');a.href=URL.createObjectURL(r.blob);a.download=r.name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);say('✓ '+info+(mode==='share'?' • sharing is not available here, so the file was downloaded':' • downloaded')+tail+warn,'ok')}
     }catch(x){if(x&&x.name==='AbortError')say('');else say('✗ '+(x&&x.message||'Could not make the file'),'bad')}};
@@ -9750,16 +9750,22 @@ function delKeys(keys){
   if(a.length>6000)a=a.slice(a.length-5000);LS.setItem('rdl.etdel.v1',JSON.stringify(a));
   var X=J('rdl.coe.v1',{}),ch=0;Object.keys(X).forEach(function(d){var n=(X[d]||[]).filter(function(e){return !set[ckey(d,e)]});if(n.length!==(X[d]||[]).length){X[d]=n;ch=1}});if(ch)LS.setItem('rdl.coe.v1',JSON.stringify(X));
   var V=J('rdl.visit.v1',{});if(Array.isArray(V.visits)){var n2=V.visits.filter(function(e){return !set[vkey(e)]});if(n2.length!==V.visits.length){V.visits=n2;LS.setItem('rdl.visit.v1',JSON.stringify(V))}}}
-function coRows(){var X=J('rdl.coe.v1',{}),out=[],T=tomb(),have={};
-  function push(d,e){if(T[ckey(d,e)])return;var w=who(e._u);
+/* rows kept on the server (Records sheet): [{d,em,dp,e}] -> entries with _u, minus the ones this phone already has */
+function srvEntries(extra,localKeys){var o=[];(extra||[]).forEach(function(r){if(!r||!r.e||!r.d)return;var e=Object.assign({},r.e,{_u:String(r.em||'').toLowerCase(),_dp:r.dp||''});if(!e.date)e.date=r.d;o.push({d:r.d,e:e})});return o}
+function coRows(extra){var X=J('rdl.coe.v1',{}),out=[],T=tomb(),have={},LK={};
+  Object.keys(X).forEach(function(d){(X[d]||[]).forEach(function(e){LK[ckey(d,Object.assign({},e,{_u:String(e._u||'').toLowerCase()}))]=1})});
+  function push(d,e){if(T[ckey(d,e)])return;var w=who(e._u);if(w.depot==='—'&&e._dp)w={name:w.name,depot:e._dp};
     COL7.forEach(function(k){var o=+(e.o||{})[k]||0,c=+(e.c||{})[k]||0;if(o||c)out.push({d:d,k:ckey(d,e),em:String(e._u||'').toLowerCase(),cu:String(e.cu||''),dp:w.depot,u:w.name,b:k,nm:e.nm||'',rm:e.rm||'',o:o,c:c,r:[fd(d),w.depot,w.name,k,e.nm||'',o,c]})})}
   Object.keys(X).forEach(function(d){(X[d]||[]).forEach(function(e){have[String(e._u||'').toLowerCase()+'|'+d+'|'+String(e.nm||'').toLowerCase()]=1;push(d,e)})});
+  srvEntries(extra).forEach(function(r){if(LK[ckey(r.d,r.e)])return;have[r.e._u+'|'+r.d+'|'+String(r.e.nm||'').toLowerCase()]=1;push(r.d,r.e)});
   /* uploaded Daily Collection & Order files: added when the same user/date/customer is not already there from an app entry */
   var U=J('rdl.coup.v1',{});Object.keys(U).forEach(function(em){var m=U[em]||{};Object.keys(m).forEach(function(k){var r=m[k];if(have[em+'|'+r.d+'|'+String(r.n).toLowerCase()])return;push(r.d,{_u:em,id:'up|'+r.d+'|'+String(r.n).toLowerCase(),nm:r.n,o:r.o,c:r.c,rm:r.rm})})});
   return out}
 function vm(e){if(+e.mn>0)return +e.mn;var a=/^(\d{1,2}):(\d{2})$/.exec(e.tin||''),b=/^(\d{1,2}):(\d{2})$/.exec(e.tout||'');if(!a||!b)return 0;var m=(+b[1]*60+ +b[2])-(+a[1]*60+ +a[2]);return m>0?m:0}
-function dcrRows(){var x=J('rdl.visit.v1',{}),v=Array.isArray(x.visits)?x.visits:[],T=tomb();
-  return v.filter(function(e){return !T[vkey(e)]}).map(function(e){var w=who(e._u),t=e.tin?e.tin+(e.tout?' – '+e.tout:''):(e.mn?e.mn+' Minutes':'—');
+function dcrRows(extra){var x=J('rdl.visit.v1',{}),v=Array.isArray(x.visits)?x.visits:[],T=tomb(),LK={};
+  v.forEach(function(e){LK[vkey(Object.assign({},e,{_u:String(e._u||'').toLowerCase()}))]=1});
+  v=v.concat(srvEntries(extra).map(function(r){return r.e}).filter(function(e){return !LK[vkey(e)]}));
+  return v.filter(function(e){return !T[vkey(e)]}).map(function(e){var w=who(e._u);if(w.depot==='—'&&e._dp)w={name:w.name,depot:e._dp};t=e.tin?e.tin+(e.tout?' – '+e.tout:''):(e.mn?e.mn+' Minutes':'—');
     return{d:e.date,k:vkey(e),em:String(e._u||'').toLowerCase(),cu:String(e.cu||''),nmv:e.nm||'',mnv:vm(e),vpv:e.vp||'Visit',vwv:e.vw||'',notev:e.note||'',dp:w.depot,u:w.name,b:'',t:e.tin||'99',r:[fd(e.date),w.depot,w.name,e.nm||'',t,e.vp||'Visit',e.vw||'',e.note||'']}})}
 /* ---- one-sheet xlsx ---- */
 function xlsx(sheet,head,rows){
@@ -9883,15 +9889,31 @@ function dcrSheet(S,info,vis){
     sh.put(r,3,v.nm,l);sh.put(r,4,v.hr,l);sh.put(r,5,v.vp,l);sh.put(r,6,v.vw,l);sh.put(r,7,v.note,l);sh.height(r,cnt[v.d]>1?16:31)});
   if(vis.length>1&&6+vis.length-1>6+gs){sh.merge(6+gs,1,6+vis.length-1,1);sh.merge(6+gs,2,6+vis.length-1,2)}
   sh.freeze(5,0);return sh}
+/* a user's own DCR sheet (the layout of the hand-made file): title lines, Territory, Month, header on row 6, visits from row 7 */
+function dcrSheetMine(S,info,vis,ml){
+  var sh=new Sheet(),X=function(o){return S.xf(o)};
+  [4.1,11,17,30.7,12.3,20.1,13,12.3].forEach(function(w,i){sh.width(i,w)});
+  var t1=X({b:1,sz:16,fill:'FFFFFF',h:'center'}),t2=X({b:1,sz:14,fill:'FFFFFF',h:'center'}),t3=X({b:1,sz:11,fill:'FFFFFF',h:'center'});
+  [['Institutional Order & Credit Management',t1],['Daily Call Report',t2],['Territory: '+(info.depot||'')+(info.name?', '+info.name:''),t3],['Month: '+ml,t3]].forEach(function(a,i){sh.put(i+1,0,a[0],a[1]);sh.box(i+1,0,i+1,7,a[1]);sh.merge(i+1,0,i+1,7)});
+  sh.height(1,21);sh.height(2,18.75);
+  var hd=X({b:1,sz:11,fill:'F2F2F2',bd:'all',h:'center',v:'center',wrap:1});
+  ['SL No.','Date','Name of Employee & Territory','Name of Institute','Visiting Hour','Visit Point','Visited With (If any)','Remarks'].forEach(function(t,i){sh.put(6,i,t,hd)});sh.height(6,45);
+  var c=X({sz:11,bd:'all',h:'center'}),l=X({sz:11,bd:'all',h:'left'}),dt=X({sz:11,bd:'all',h:'center',nf:'date'}),wr=X({sz:11,bd:'all',h:'center',wrap:1}),rk=X({sz:9,bd:'all',h:'left',wrap:1});
+  var emp=(info.name||'')+(info.depot?'\n'+info.depot:''),prev='',gs=0,R0=7;
+  vis.forEach(function(v,ix){var r=R0+ix;sh.put(r,0,ix+1,c);
+    if(v.d!==prev){if(prev&&ix>gs+1){sh.merge(R0+gs,1,R0+ix-1,1);sh.merge(R0+gs,2,R0+ix-1,2)}gs=ix;prev=v.d;sh.put(r,1,ser(v.d),dt);sh.put(r,2,emp,wr)}else{sh.put(r,1,null,dt);sh.put(r,2,null,wr)}
+    sh.put(r,3,v.nm,l);sh.put(r,4,v.hr,l);sh.put(r,5,v.vp,l);sh.put(r,6,v.vw,l);sh.put(r,7,v.note,rk);sh.height(r,15)});
+  if(vis.length>1&&vis.length-1>gs+0&&R0+vis.length-1>R0+gs){sh.merge(R0+gs,1,R0+vis.length-1,1);sh.merge(R0+gs,2,R0+vis.length-1,2)}
+  return sh}
 /* ---- workbook ---- */
-function zipBook(JS,S,sheets){
+function zipBook(JS,S,sheets,act){act=act||0;
   var zip=new JS(),H='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',n=sheets.length;
   zip.file('[Content_Types].xml',H+'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>'+sheets.map(function(s,i){return '<Override PartName="/xl/worksheets/sheet'+(i+1)+'.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'}).join('')+'</Types>');
   zip.file('_rels/.rels',H+'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>');
-  zip.file('xl/workbook.xml',H+'<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><bookViews><workbookView activeTab="0"/></bookViews><sheets>'+sheets.map(function(s,i){return '<sheet name="'+esc(s.name)+'" sheetId="'+(i+1)+'" r:id="rId'+(i+1)+'"/>'}).join('')+'</sheets><calcPr calcId="191029" fullCalcOnLoad="1"/></workbook>');
+  zip.file('xl/workbook.xml',H+'<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><bookViews><workbookView activeTab="'+act+'"/></bookViews><sheets>'+sheets.map(function(s,i){return '<sheet name="'+esc(s.name)+'" sheetId="'+(i+1)+'" r:id="rId'+(i+1)+'"/>'}).join('')+'</sheets><calcPr calcId="191029" fullCalcOnLoad="1"/></workbook>');
   zip.file('xl/_rels/workbook.xml.rels',H+'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+sheets.map(function(s,i){return '<Relationship Id="rId'+(i+1)+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet'+(i+1)+'.xml"/>'}).join('')+'<Relationship Id="rId'+(n+1)+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>');
   zip.file('xl/styles.xml',S.xml());
-  sheets.forEach(function(s,i){zip.file('xl/worksheets/sheet'+(i+1)+'.xml',s.sh.xml(i===0))});
+  sheets.forEach(function(s,i){zip.file('xl/worksheets/sheet'+(i+1)+'.xml',s.sh.xml(i===act))});
   return zip.generateAsync({type:'blob',compression:'DEFLATE',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})}
 function sheetName(base,used){var n=String(base||'User').replace(/[\[\]:*?\/\\]/g,' ').replace(/\s+/g,' ').trim().slice(0,31)||'User',b=n,q=2;while(used[n.toLowerCase()]){var sfx=' '+(q++);n=b.slice(0,31-sfx.length)+sfx}used[n.toLowerCase()]=1;return n}
 function monthLabel(from,to){if(from&&to&&from.slice(0,7)===to.slice(0,7))return MON[+to.slice(5,7)-1]+'-'+to.slice(0,4);var f=function(s){return s?s.slice(8,10)+' '+MON[+s.slice(5,7)-1]+' '+s.slice(0,4):''};return f(from)+' to '+f(to)}
@@ -9903,7 +9925,16 @@ function buildReport(JS,people,ent,from,to){var S=new Sty(),used={'top sheet':1}
 function buildDcr(JS,people,vis){var S=new Sty(),used={},sheets=[];
   people.forEach(function(p){var nm=sheetName((p.official||p.name||'User').replace(/^(Md\.?|Mst\.?|Mohammad|Muhammad)\s+/i,'').split(' ')[0]||p.name,used);sheets.push({name:nm,sh:dcrSheet(S,{depot:p.depot,name:p.official||p.name},vis[p.key]||[])})});
   return zipBook(JS,S,sheets)}
-return{buildReport:buildReport,buildDcr:buildDcr,hourText:hourText,monthLabel:monthLabel}})();
+/* a user's own Collection & Order file: one sheet per month (January up to the chosen month), named  Md.Omito-November-2026 ; no Top Sheet. months: [{ym:'2026-11',ent:[...]}] */
+var FULLMON=['January','February','March','April','May','June','July','August','September','October','November','December'];
+function buildMine(JS,p,months){var S=new Sty(),used={},sheets=[],nm0=String(p.official||p.name||'User').replace(/[\[\]:*?\/\\]/g,' ').trim().split(/\s+/).slice(0,2).join('')||'User';
+  months.forEach(function(m){var lab=FULLMON[+m.ym.slice(5,7)-1]+'-'+m.ym.slice(0,4),nm=sheetName(nm0.slice(0,Math.max(3,30-lab.length))+'-'+lab,used),us=userSheet(S,{depot:p.depot,name:p.official||p.name},m.ent,lab);sheets.push({name:nm,sh:us.sh})});
+  return zipBook(JS,S,sheets,sheets.length-1)}
+function buildMineDcr(JS,p,months){var S=new Sty(),used={},sheets=[],nm0=String(p.official||p.name||'User').replace(/[\[\]:*?\/\\]/g,' ').trim().split(/\s+/).slice(0,2).join(' ')||'User';
+  months.forEach(function(m){var lab=FULLMON[+m.ym.slice(5,7)-1]+'-'+m.ym.slice(0,4),nm=sheetName(nm0.slice(0,Math.max(3,30-lab.length))+'-'+lab,used);
+    sheets.push({name:nm,sh:dcrSheetMine(S,{depot:p.depot,name:p.official||p.name},m.ent,lab)})});
+  return zipBook(JS,S,sheets,sheets.length-1)}
+return{buildMineDcr:buildMineDcr,buildMine:buildMine,buildReport:buildReport,buildDcr:buildDcr,hourText:hourText,monthLabel:monthLabel}})();
 
 
 /* ---- Team Excel: the same files the team makes by hand — Report (Top Sheet + one sheet per user) and DCR (one sheet per user) ---- */
@@ -9943,8 +9974,16 @@ function teamDownload(kind,rowsAll,msg){
       msg.className='stt ok';msg.textContent='✓ '+ppl.length+' user sheet'+(ppl.length===1?'':'s')+' ('+withData+' with entries)'+(miss?' • '+miss+' user(s) have no official name / SAP ID in their profile yet':'')})})
   .catch(function(e){msg.className='stt bad';msg.textContent='✗ '+(e&&e.message||'Could not make the file')})}
 /* ---- the page ---- */
-var ST={tab:'co',from:td().slice(0,8)+'01',to:td(),dp:'',u:'',b:''};
+var ST={tab:'co',from:td().slice(0,8)+'01',to:td(),dp:'',u:'',b:'',q:''};
+/* server records of the asked days (cached while the page is open): key tab|from|to|q -> {st:'load'|'ok'|'err',rows,trunc} */
+var SRV={};
+function srvKey(tab,f,t,q){return tab+'|'+f+'|'+t+'|'+(q||'')}
+function srvGet(tab,f,t,q,done){var k=srvKey(tab,f,t,q),c=SRV[k];if(c)return c;c=SRV[k]={st:'load',rows:[]};
+  if(!(window.RDLGATE&&RDLGATE.api)){c.st='err';return c}
+  RDLGATE.api('listRecords',{kind:tab,from:f,to:t,q:q||''},true).then(function(j){if(j&&j.ok&&Array.isArray(j.rows)){c.st='ok';c.rows=j.rows;c.trunc=!!j.truncated}else c.st='err'}).catch(function(){c.st='err'}).then(function(){if(done)done()});
+  return c}
 function open(){
+  SRV={};ST.q='';
   /* every time the table is opened it starts with ONE day only (the sales day users enter for); older days: change From / To */
   try{var d0=(window.RDL&&RDL.salesDay)?RDL.salesDay():td();ST.from=ST.to=(d0&&d0<=td())?d0:td()}catch(e){ST.from=ST.to=td()}
   var old=document.getElementById('et-pg');if(old)old.remove();
@@ -9957,23 +9996,26 @@ function open(){
   var box=el('div','st-card');ov.appendChild(box);document.body.appendChild(ov);
   function draw(){
     tabs.textContent='';[['co','Collection & Order'],['dcr','DCR']].forEach(function(t){var b=el('button','st-btn',t[1]);b.type='button';b.style.marginTop='0';b.style.flex='1';if(ST.tab!==t[0]){b.style.background='#e8f0fe';b.style.color='#0a49b5'}b.onclick=function(){ST.tab=t[0];ST.b='';ST.dp='';ST.u='';draw()};tabs.appendChild(b)});
-    box.textContent='';var all=ST.tab==='co'?coRows():dcrRows();
+    box.textContent='';var sc=srvGet(ST.tab,ST.from,ST.to,ST.q,function(){if(document.getElementById('et-pg'))draw()});
+    var all=ST.tab==='co'?coRows(sc.rows):dcrRows(sc.rows);
     function sel(label,key,list){var w=el('div');w.style.marginBottom='8px';w.appendChild(el('small',null,label));var s=el('select','list-search');s.appendChild(new Option('All',''));list.forEach(function(x){s.appendChild(new Option(x,x))});s.value=ST[key]||'';s.onchange=function(){ST[key]=s.value;if(key==='dp')ST.u='';draw()};w.appendChild(s);return w}
     function uniq(a){var o={};a.forEach(function(x){if(x&&x!=='—')o[x]=1});return Object.keys(o).sort()}
     var g=el('div');g.style.cssText='display:grid;grid-template-columns:1fr 1fr;gap:8px';
     var dW=el('div'),d1=el('input','list-search'),d2=el('input','list-search');d1.type=d2.type='date';d1.value=ST.from;d2.value=ST.to;d1.max=d2.max=td();
     var w1=el('div');w1.appendChild(el('small',null,'From'));w1.appendChild(d1);var w2=el('div');w2.appendChild(el('small',null,'To'));w2.appendChild(d2);g.appendChild(w1);g.appendChild(w2);box.appendChild(g);
     d1.onchange=d2.onchange=function(){ST.from=d1.value;ST.to=d2.value;draw()};
+    var qW=el('div');qW.style.margin='8px 0';qW.appendChild(el('small',null,'Customer (code or name)'));var qi=el('input','list-search');qi.type='search';qi.placeholder='Search a customer…';qi.value=ST.q;qi.autocomplete='off';
+    var qgo=function(){var v=qi.value.trim();if(v!==ST.q){ST.q=v;draw()}};qi.onchange=qgo;qi.onkeydown=function(ev){if(ev.key==='Enter'){ev.preventDefault();qgo()}};qW.appendChild(qi);box.appendChild(qW);
     box.appendChild(sel('Depot','dp',uniq(all.map(function(x){return x.dp}))));
     box.appendChild(sel('User','u',uniq(all.filter(function(x){return !ST.dp||x.dp===ST.dp}).map(function(x){return x.u}))));
     if(ST.tab==='co')box.appendChild(sel('Business','b',COL7));
-    var rows=all.filter(function(x){return !((ST.from&&x.d<ST.from)||(ST.to&&x.d>ST.to)||(ST.dp&&x.dp!==ST.dp)||(ST.u&&x.u!==ST.u)||(ST.b&&x.b!==ST.b))});
+    var rows=all.filter(function(x){return !((ST.from&&x.d<ST.from)||(ST.to&&x.d>ST.to)||(ST.dp&&x.dp!==ST.dp)||(ST.u&&x.u!==ST.u)||(ST.b&&x.b!==ST.b)||(ST.q&&(String(x.cu).toLowerCase()+' '+String(x.nm||x.nmv||'').toLowerCase()).indexOf(ST.q.toLowerCase())<0))});
     rows.sort(function(a,b){return a.d===b.d?(a.dp+a.u>b.dp+b.u?1:-1):(a.d<b.d?1:-1)});
     var head=ST.tab==='co'?['Date','Depot','User','Business','Customer','Order','Collection']:['Date','Depot','User','Customer','Time','Visit Point','Visited With','Remarks'];
     var data=rows.map(function(x){return x.r}),tot=null;
     if(ST.tab==='co')tot=['Total','','','','',rows.reduce(function(a,x){return a+x.r[5]},0),rows.reduce(function(a,x){return a+x.r[6]},0)];
     else tot=['Total',rows.length+' visit'+(rows.length===1?'':'s'),'','','','','',''];
-    var info=el('div','stt',rows.length+' row'+(rows.length===1?'':'s')+' • '+(umap()&&Object.keys(umap()).length?Object.keys(umap()).length+' user(s) merged':'no user merged yet'));info.style.margin='6px 0';box.appendChild(info);
+    var info=el('div','stt',rows.length+' row'+(rows.length===1?'':'s')+' • '+(sc.st==='load'?'loading saved records from the server…':sc.st==='ok'?'server records included'+(sc.trunc?' (too many — narrow the dates)':''):'server not reachable: only entries on this phone are shown'));info.style.margin='6px 0';box.appendChild(info);
     var wrap=el('div');wrap.style.cssText='overflow-x:auto;margin:8px 0';box.appendChild(wrap);
     if(!rows.length){wrap.appendChild(el('div','mv-empty','No entry for this filter. Users’ entries come here after their backup is merged (it happens by itself on the Home page, or use Data Hub).'))}
     else{var tb=el('table','mv-tbl'),th=el('tr');head.forEach(function(x){th.appendChild(el('th',null,x))});th.appendChild(el('th',null,''));tb.appendChild(th);
@@ -9982,7 +10024,9 @@ function open(){
           xb.onclick=function(){if(!confirm('Delete this entry?\n\n'+rx.u+' \u2022 '+rx.r[0]+(ST.tab==='co'?' \u2022 '+rx.r[4]+'\n(all businesses of this customer entry are removed)':'')+'\n\nIt is also removed when the user\u2019s backup is merged again.'))return;delKeys([rx.k]);draw()};dc.appendChild(xb)}
         tr.appendChild(dc);tb.appendChild(tr)});wrap.appendChild(tb)}
     var dl=el('button','st-btn',ST.tab==='co'?'Add to my own Excel file (old way)':'Download plain table (one sheet)');dl.type='button';var msg=el('div','stt');
-    var tm=el('button','st-btn',ST.tab==='co'?'Download Report Excel (Top Sheet + every user)':'Download DCR Excel (every user, one sheet each)');tm.type='button';tm.style.marginTop='12px';tm.onclick=function(){teamDownload(ST.tab,all,msg)};box.appendChild(tm);
+    var tm=el('button','st-btn',ST.tab==='co'?'Download Report Excel (Top Sheet + every user)':'Download DCR Excel (every user, one sheet each)');tm.type='button';tm.style.marginTop='12px';tm.onclick=function(){var ms=(ST.to||td()).slice(0,8)+'01',f0=(ST.from&&ST.from<ms)?ST.from:ms;msg.className='stt';msg.textContent='Collecting the records…';
+      var c2=srvGet(ST.tab,f0,ST.to||td(),'',function(){var c3=SRV[srvKey(ST.tab,f0,ST.to||td(),'')];go(c3)});if(c2.st!=='load')go(c2);
+      function go(c){var a2=ST.tab==='co'?coRows(c.rows):dcrRows(c.rows);teamDownload(ST.tab,a2,msg)}};box.appendChild(tm);
     if(ST.tab==='co'||true){dl.style.cssText='background:#e8f0fe;color:#0a49b5;margin-top:10px'}
     if(rows.length){var da=el('button','st-btn','Delete all '+rows.length+' shown row'+(rows.length===1?'':'s'));da.type='button';da.style.cssText='background:#fde8e6;color:#c0392b;margin-top:10px';
       da.onclick=function(){if(!confirm('Delete all '+rows.length+' shown row(s)?\n\nOnly what is shown with the current filter (depot / user / dates) is deleted. This cannot be undone.'))return;var ks={};rows.forEach(function(x){ks[x.k]=1});delKeys(Object.keys(ks));draw()};box.appendChild(da)}
@@ -10013,13 +10057,31 @@ window.RDL_ENTRYTABLES=open;
 /* ---- a user's own Excel in the team format (same files the Admin gets): the details come from the Profile (official name, SAP ID, designation) and the depot, so no Excel file has to be chosen. kind 'co' = Report (Top Sheet + the user's sheet), 'dcr' = DCR. upto = last date: every date of that month up to it is included, nothing after. ---- */
 window.RDL_SELFX=function(kind,upto,list){
   var S0=J('rdlgate.session',{}),em=String(S0.email||'').toLowerCase(),from=upto.slice(0,8)+'01';
-  function prof(){return (window.RDLGATE&&RDLGATE.api?RDLGATE.api('getProfile',null,true):Promise.reject(new Error('no gate'))).then(function(j){var p=j&&j.profile;if(p){try{LS.setItem('rdlgate.selfprof',JSON.stringify(p))}catch(e){}}return p}).catch(function(){return J('rdlgate.selfprof',null)})}
+  function prof(){return (window.RDLGATE&&RDLGATE.api?RDLGATE.api('getProfile',null,true):Promise.reject(new Error('no gate'))).then(function(j){var p=j&&j.profile;if(p){try{var q={};Object.keys(p).forEach(function(k){if(k!=='photo')q[k]=p[k]});LS.setItem('rdlgate.selfprof',JSON.stringify(q))}catch(e){}}return p}).catch(function(){return J('rdlgate.selfprof',null)})}
   return prof().then(function(P){P=P||{};
     var per={key:em,name:P.username||S0.name||em,official:P.official||'',sap:P.sap||'',desig:P.designation||'',depot:P.depot||S0.depot||''},bag={};
-    var pr;if(kind==='co'){bag[em]=list;pr=TX.buildReport(JSZip,[per],bag,from,upto)}
-    else{bag[em]=list.map(function(v){return{d:v.d,nm:v.nm,hr:TX.hourText(v.mn),vp:v.vp,vw:v.vw,note:v.note,t:v.t||'99'}});pr=TX.buildDcr(JSZip,[per],bag)}
+    var pr,partial=false;
+    if(kind==='co'){
+      /* earlier months of the year: the entries on this phone + the user's own rows from the server (older months are not kept on the phone) */
+      var Y0=upto.slice(0,4)+'-01-01',old={},add=function(d,e,src){if(d<Y0||d>=from)return;if(!COL7.some(function(k){return (+(e.o||{})[k]||0)>0||(+(e.c||{})[k]||0)>0}))return;
+          var sig=d+'|'+(e.id||(String(e.cu||'')+'|'+String(e.nm||'').toLowerCase()));if(old[sig])return;
+          var lb=e.nm||('Customer '+e.cu);if(e.cu&&lb.indexOf(e.cu)<0)lb+='-'+e.cu;var o={},c={};COL7.forEach(function(k){if(+(e.o||{})[k]>0)o[k]=+e.o[k];if(+(e.c||{})[k]>0)c[k]=+e.c[k]});old[sig]={d:d,label:lb,o:o,c:c,rm:e.rm||''}};
+      var X=J('rdl.coe.v1',{});Object.keys(X).forEach(function(d){(X[d]||[]).forEach(function(e){add(d,e)})});
+      var sp=(window.RDLGATE&&RDLGATE.api&&from>Y0)?RDLGATE.api('myRecords',{kind:'co',from:Y0,to:upto},true).then(function(j){if(!(j&&j.ok&&Array.isArray(j.rows)))throw new Error('x');j.rows.forEach(function(r){if(r&&r.e)add(r.d,r.e)})}).catch(function(){partial=true}):Promise.resolve();
+      pr=sp.then(function(){var by={};Object.keys(old).forEach(function(k){var x=old[k],ym=x.d.slice(0,7);(by[ym]=by[ym]||[]).push(x)});by[from.slice(0,7)]=list;
+        var yms=Object.keys(by).sort().map(function(ym){by[ym].sort(function(a,b){return a.d===b.d?(a.label>b.label?1:-1):(a.d>b.d?1:-1)});return{ym:ym,ent:by[ym]}});
+        return TX.buildMine(JSZip,per,yms)})}
+    else{
+      var Y1=upto.slice(0,4)+'-01-01',od={},addV=function(d,v){if(d<Y1||d>=from)return;var sig=d+'|'+(v.id||(String(v.nm||'').toLowerCase()+'|'+(v.tin||'')+'|'+(v.mn||'')));if(od[sig])return;
+          var lb=v.nm||'';if(v.cu&&lb.indexOf(v.cu)<0)lb+='-'+v.cu;od[sig]={d:d,nm:lb,hr:TX.hourText(vm(v)),vp:v.vp||v.purpose||'Visit',vw:v.vw||'',note:v.note||'',t:v.tin||'99'}};
+      var V0=J('rdl.visit.v1',{});(Array.isArray(V0.visits)?V0.visits:[]).forEach(function(v){addV(v.date,v)});
+      var sv=(window.RDLGATE&&RDLGATE.api&&from>Y1)?RDLGATE.api('myRecords',{kind:'dcr',from:Y1,to:upto},true).then(function(j){if(!(j&&j.ok&&Array.isArray(j.rows)))throw new Error('x');j.rows.forEach(function(r){if(r&&r.e)addV(r.d,r.e)})}).catch(function(){partial=true}):Promise.resolve();
+      pr=sv.then(function(){var by={};Object.keys(od).forEach(function(k){var x=od[k],ym=x.d.slice(0,7);(by[ym]=by[ym]||[]).push(x)});
+        by[from.slice(0,7)]=list.map(function(v){return{d:v.d,nm:v.nm,hr:TX.hourText(v.mn),vp:v.vp,vw:v.vw,note:v.note,t:v.t||'99'}});
+        var yms=Object.keys(by).sort().map(function(ym){by[ym].sort(function(a,b){return a.d===b.d?(a.t>b.t?1:-1):(a.d>b.d?1:-1)});return{ym:ym,ent:by[ym]}});
+        return TX.buildMineDcr(JSZip,per,yms)})}
     return pr.then(function(blob){var who=String(per.official||per.name).replace(/[^A-Za-z0-9\u0980-\u09FF]+/g,'_').replace(/^_+|_+$/g,'');
-      return{blob:blob,name:(kind==='co'?'Report_':'DCR_')+TX.monthLabel(from,upto).replace(/\s+/g,'')+(who?'_'+who:'')+'.xlsx',from:from,missing:!P.official||(kind==='co'&&!P.sap)}})})};
+      return{blob:blob,name:(kind==='co'?'Report_':'DCR_')+TX.monthLabel(from,upto).replace(/\s+/g,'')+(who?'_'+who:'')+'.xlsx',from:from,missing:!P.official||(kind==='co'&&!P.sap),partial:partial}})})};
 /* ---- the tile, inside Daily Work Tools (admins only) ---- */
 function addTile(){
   if(role()!=='admin')return;
