@@ -2833,10 +2833,12 @@ window.RDLGATE={bkRender:bkRender,mergeBackups:mergeBackups,showMergeReport:show
         <button type="button" class="rc-p c" data-k="DZ"><small>Collection</small><b class="rc-ca">৳ 0.00/=</b><i class="rc-cn"><span><svg class="mi"><use href="#i-person"/></svg> 00 Customers</span><span><svg class="mi"><use href="#i-building"/></svg> 00 Companies</span></i><em class="rc-ar" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/></svg></em></button>
       </div>
     </div>
+    <div class="tw2">
     <button type="button" id="pcHome" class="pch" style="display:none" aria-label="Posting Center"><span class="pch-i"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8z"/><path d="M14 3v5h5M9 14l2 2 4-4"/></svg></span><span class="pch-t"><b>Posting Center</b><small>Smart Post, Drafts, Quick Sales &amp; Collection</small><em id="pcTag" style="display:none"></em></span><span class="pch-g"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4.5 12h15M13.5 6l6 6-6 6" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></button>
     <div class="qa">
       <div class="card cya"><div class="em"><svg><use href="#i-cust-stmt"/></svg></div><h4>Customer Statement</h4><p>View customer statement details</p><div class="go"><svg class="ar" viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 12h15M13.5 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div></div>
       <div class="card blu"><div class="em"><svg><use href="#i-recp"/></svg></div><h4>Customer Outstanding</h4><p>Check customer outstanding balance</p><div class="go"><svg class="ar" viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 12h15M13.5 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div></div>
+    </div>
     </div>
 
   </div>
@@ -10269,6 +10271,29 @@ html body .pch-t em{box-shadow:0 2px 4px #05402e44,inset 0 -1px 2px #0b7a5b22}
 function fit(){Q.forEach(function(q){var e=document.querySelector(q);if(!e||!e.offsetParent)return;e.style.fontSize='';var f=parseFloat(getComputedStyle(e).fontSize),n=0;while(e.scrollWidth>e.clientWidth+1&&f>14&&n++<40){f-=.5;e.style.setProperty('font-size',f+'px','important')}})}
 window.addEventListener('resize',function(){setTimeout(fit,60)});window.addEventListener('orientationchange',function(){setTimeout(fit,300)});
 [400,1500,3500].forEach(function(t){setTimeout(fit,t)});document.addEventListener('visibilitychange',function(){setTimeout(fit,200)});window.RDL_fitTitles=fit})();
+</script>
+<style id="rdl-tiles-b">
+/* Home: Posting Center + Customer Statement = two equal tiles side by side (Design B). Phone and desktop. Customer Outstanding stays full width below. */
+html body #home .tw2{display:grid;grid-template-columns:1fr;gap:12px;margin:10px 0 0}
+html body #home .tw2.two{grid-template-columns:1fr 1fr}
+html body #home .tw2>.qa{display:contents!important}
+html body #home .tw2 .qa .card.blu{grid-column:1/-1}
+html body #home .tw2:not(.two) .pch{margin:0}
+html body #home .tw2.two .pch,html body #home .tw2.two .qa .card.cya{display:flex!important;flex-direction:column!important;align-items:flex-start!important;justify-content:flex-start!important;gap:0!important;height:auto!important;min-height:176px!important;margin:0!important;padding:14px!important;width:auto!important;text-align:left}
+html body #home .tw2.two .qa .card.cya::after{display:none!important}
+html body #home .tw2.two .pch-i,html body #home .tw2.two .qa .card.cya .em{width:48px!important;height:48px!important;border-radius:15px!important;grid-row:auto;grid-column:auto}
+html body #home .tw2.two .pch-t{flex:none!important;border-left:0!important;padding-left:0!important;margin-top:10px;width:100%}
+html body #home .tw2.two .pch-t b,html body #home .tw2.two .qa .card.cya h4{font-size:17px!important;line-height:1.2!important;white-space:normal!important;padding:0!important;margin:10px 0 0!important;text-align:left!important}
+html body #home .tw2.two .pch-t b{margin:0!important}
+html body #home .tw2.two .pch-t small,html body #home .tw2.two .qa .card.cya p{display:block;font-size:12px!important;line-height:1.35!important;margin:4px 0 0!important;padding:0!important}
+html body #home .tw2.two .pch-t em{margin-top:6px}
+html body #home .tw2.two .pch-g,html body #home .tw2.two .qa .card.cya .go{width:36px!important;height:36px!important;margin:auto 0 0 auto!important;grid-row:auto;grid-column:auto}
+@media (min-width:1000px){html body #home>.tw2{flex:1.1 1 auto}}
+</style>
+<script>
+/* two-tile layout only while Posting Center is visible (user role); for admin the Customer Statement keeps the full-width bar */
+(function(){var b=document.getElementById('pcHome'),w=b&&b.parentNode;if(!b||!w)return;function s(){w.classList.toggle('two',b.style.display!=='none')}
+new MutationObserver(s).observe(b,{attributes:true,attributeFilter:['style']});s()})();
 </script>
 </body>
 </html>
