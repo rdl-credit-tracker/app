@@ -7671,7 +7671,7 @@ const DS={rows:null,commit:null,vh:0};
 (function(){const s=document.createElement('style');s.textContent='.co-tbl.dc-tbl{min-width:760px}.dc-kt{width:96px}.dc-kv{width:170px}.dc-kw{width:120px}.dc-kr{width:190px}.co-n.dc-l{text-align:left}select.co-n{padding:6px 4px;-webkit-appearance:menulist;appearance:menulist}@media(min-width:1000px){.co-tbl.dc-tbl{min-width:0}.co-tbl.dc-tbl .co-k0{width:28%}.dc-kt{width:10%}.dc-kv{width:18%}.dc-kw{width:14%}.dc-kr{width:26%}}';document.head.appendChild(s)})();
 function drawD(){const B=DP.body;B.textContent='';
   /* two ways to do the daily work: type the visits in the table (this page) or upload the DCR Excel file (Settings page, unchanged) */
-  {const sw=el('div','od-actions'),a=el('button','st-btn','Entry'),u=el('button','st-btn od-clear','Upload');a.type=u.type='button';
+  {const sw=el('div','od-actions'),a=el('button','st-btn','Manual Entry'),u=el('button','st-btn od-clear','Excel Upload');a.type=u.type='button';
    u.onclick=()=>{if(DS.commit)try{DS.commit()}catch(e){}if(window.RDL_openSet){window.RDL_upMode='dcr';window.RDL_openSet('setdcr')}};sw.appendChild(a);sw.appendChild(u);B.appendChild(sw)}
   const di=el('input','list-search');di.type='date';di.value=DV.date;di.max=today();di.onchange=()=>{if(!di.value)return;if(DS.commit)try{DS.commit()}catch(e){}DV.date=di.value;DCT.from=DCT.to=DV.date;DS.open=false;drawD()};di.classList.add('co-dt');
   const CL=custs(),blank=()=>({id:'',cu:'',nm:'',txt:'',t:'',vp:VP[0],vw:'Self',rm:'',saved:false,dirty:false}),
@@ -7985,8 +7985,9 @@ function dcrTable(B){entTable(B,{noDl:true,title:'My DCR table',sheet:'DCR',file
 const CP=mkPage('coep','Collection & Order Manual Entry',()=>{if(CX.commit)try{CX.commit()}catch(e){}if(R.openDailyEntry)R.openDailyEntry();else if(R.openUpload)R.openUpload()});
 function drawCO(){const B=CP.body;B.textContent='';
   /* two ways to do the daily work: type business-wise entries (this page) or upload the Excel file (old page, unchanged) */
-  {const sw=el('div','od-actions'),a=el('button','st-btn','Entry'),u=el('button','st-btn od-clear','Upload');a.type=u.type='button';
-   u.onclick=()=>{if(window.RDL_openSet){window.RDL_upMode='co';window.RDL_openSet('setdcr')}};sw.appendChild(a);sw.appendChild(u);B.appendChild(sw)}
+  {const sw=el('div','od-actions'),sx=el('button','st-btn od-clear','SAP Excel Upload'),a=el('button','st-btn','Manual Entry'),u=el('button','st-btn od-clear','Excel Upload');sx.type=a.type=u.type='button';
+   sx.onclick=()=>{if(CX.commit)try{CX.commit()}catch(e){}if(R.openSapUpload)R.openSapUpload()};
+   u.onclick=()=>{if(window.RDL_openSet){window.RDL_upMode='co';window.RDL_openSet('setdcr')}};sw.appendChild(sx);sw.appendChild(a);sw.appendChild(u);B.appendChild(sw)}
   const di=el('input','list-search');di.type='date';di.value=CX.date;di.max=today();di.onchange=()=>{if(!di.value)return;if(CX.commit)try{CX.commit()}catch(e){}CX.date=di.value;COT.from=COT.to=CX.date;CX.rows=null;CX.dirty=false;CX.open=false;drawCO()};di.classList.add('co-dt');
   const E=coList(CX.date);
   /* ---- Business Wise Order & Collection: ONE input table. A row = one customer; every business has its own column, Order on top, Collection below ---- */
@@ -8103,13 +8104,12 @@ function drawDE(){const B=DE.body;B.textContent='';const s=entryStatus();
   const C={v:['#f8f4ff','#e3d8fb','#d0c0f3','#9a88f5','#6a52d9','#33248a','#6a52d966'],b:['#fff','#dbeafe','#a9c9f5','#4f9bff','#1650d8','#0f3ca3','#1650d855'],g:['#fff','#d8f7ea','#a5e6cb','#34d399','#0b9a62','#065f46','#0b9a6255']};
   const pl=(n,w)=>n+' '+w+(n===1?'':'s');
   const g=B.appendChild(el('div','up-grid'));
-  [['Collection & Order Manual Entry','Type business wise order & collection, or upload the Excel file','v','i-upl',()=>{if(R.openCOE)R.openCOE()},s.man?'✓ Today’s entry done • '+pl(s.man,'customer'):''],
-   ['Collection & Order SAP Entry','Upload the SAP sales file — bills go to Drafts with their real document numbers','b','i-upl',()=>{if(R.openSapUpload)R.openSapUpload()},(s.sap||s.sb)?'✓ Today’s upload done • '+(s.sb?pl(s.sb,'bill'):pl(s.sap,'customer')):''],
+  [['Collection & Order Entry','SAP Excel Upload, Manual Entry or Excel Upload','v','i-upl',()=>{if(R.openCOE)R.openCOE()},[s.man?'✓ Today’s entry done • '+pl(s.man,'customer'):'',(s.sap||s.sb)?'✓ Today’s upload done • '+(s.sb?pl(s.sb,'bill'):pl(s.sap,'customer')):'']],
    ['DCR Entry','Daily Call Report — customers visited, time spent','g','i-clock',()=>{if(R.openVisitsPC)R.openVisitsPC()},s.vis?'✓ Today’s entry done • '+pl(s.vis,'visit'):'']].forEach(([t,sub,k,ic,fn,st])=>{
     const K=C[k],b=el('button','up-b wide');b.type='button';
     b.style.cssText='color:'+K[5]+';background:linear-gradient(135deg,'+K[0]+','+K[1]+');border-color:'+K[2]+';box-shadow:0 8px 14px -9px '+K[6]+',inset 0 2px 0 #ffffffcc';
     const i=el('span','up-i');i.style.cssText='background:linear-gradient(135deg,'+K[3]+','+K[4]+');box-shadow:0 3px 0 '+K[4]+'66';i.innerHTML='<svg viewBox="0 0 24 24"><use href="#'+ic+'"/></svg>';
-    const tx=el('span','up-t');tx.appendChild(el('b',null,t));tx.appendChild(el('small',null,sub));if(st)tx.appendChild(el('small','up-st',st));
+    const tx=el('span','up-t');tx.appendChild(el('b',null,t));tx.appendChild(el('small',null,sub));[].concat(st||[]).filter(Boolean).forEach(x=>tx.appendChild(el('small','up-st',x)));
     b.appendChild(i);b.appendChild(tx);b.onclick=fn;g.appendChild(b)})}
 R.openDailyEntry=()=>{if(window.RDL_ROLE==='admin')return;drawDE();show('dcen')};
 /* ---- the two Excel files (this month up to a date), made in the team format ---- */
