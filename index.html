@@ -10736,5 +10736,18 @@ html body .st-card.ob-card h3.tt-h .tt-name{text-align:center;flex:0 1 auto}
 html body .arr-ok{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;vertical-align:middle;background:linear-gradient(135deg,#4ade80,#15a34a);box-shadow:0 2px 4px #15a34a66,inset 0 1px 1px #ffffffaa,inset 0 -2px 3px #0b6b3055}
 html body .arr-ok svg{width:12px;height:12px;fill:none;stroke:#fff;stroke-width:3.6;stroke-linecap:round;stroke-linejoin:round;display:block}
 </style>
+<style id="rdl-card-sizes">
+/* Phone: Total Overdue + Upcoming Overdue a little smaller; Posting Center + Customer Statement a little bigger.
+   (icon and arrow sizes of the Overdue cards are not touched: the tiles copy the icon size from them) */
+@media (max-width:999px){
+html body #home .grid .card.red,html body #home .grid .card.amb{padding:8px!important}
+html body #home .grid .card.red .amt,html body #home .grid .card.amb .amt{margin:3px 0 1px!important;font-size:clamp(15px,4.25vw,18px)!important}
+html body #home .grid .card.red .cnt,html body #home .grid .card.amb .cnt{font-size:12.5px!important}
+html body #home .grid .card.red .pill,html body #home .grid .card.amb .pill{margin-top:4px!important;padding:3px 8px!important}
+html body #home .tw2.two .pch,html body #home .tw2.two .qa .card.cya{padding:17px 8px 14px!important;row-gap:14px!important;column-gap:6px!important;min-height:132px!important}
+html body #home .tw2.two .pch-t b,html body #home .tw2.two .qa .card.cya h4{font-size:clamp(14.5px,4.1vw,16.5px)!important}
+html body #home .tw2.two .pch-t small,html body #home .tw2.two .qa .card.cya p{min-height:46px!important;padding:7px 9px!important}
+}
+</style>
 </body>
 </html>
