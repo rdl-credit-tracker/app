@@ -3282,7 +3282,7 @@ document.addEventListener('click',e=>{const t=e.target&&e.target.closest&&e.targ
   const c=document.createElement('button');c.type='button';c.textContent='Cancel';c.style.cssText='display:block;width:100%;padding:12px;border:0;background:none;color:#4a6a9f;font:inherit';c.onclick=()=>ov.remove();bx.appendChild(c);
   ov.appendChild(bx);ov.onclick=ev=>{if(ev.target===ov)ov.remove()};document.body.appendChild(ov)},true);
 let _gv=-1,_gm=null;
-window.RDL={get master(){if(_gv===window.__rdlV)return _gm;const v=window.__rdlV,m=depotView(store.get('m'));_gm=m;_gv=v;return m},get dcr(){return store.get('d')},fmt,curStatus:()=>curStatus()};
+window.RDL={get master(){if(_gv===window.__rdlV)return _gm;const v=window.__rdlV,m=depotView(store.get('m'));_gm=m;_gv=v;return m},get dcr(){return store.get('d')},fmt,curStatus:()=>curStatus()};window.RDL.readXlsx=readXlsx;
 /* company display: RPL(1000), RNL(2000) ...; every list of companies runs from 1000 up to 9000 */
 (function(){let cm=null,cmM=null;
   window.RDL.coName=c=>{c=String(c);const m=window.RDL.master;if(!m)return c;if(cmM!==m){cmM=m;cm=new Map();m.cr.forEach(r=>{const k=String(r.co);if(r.cn&&!cm.get(k))cm.set(k,String(r.cn).trim());else if(!cm.has(k))cm.set(k,'')})}
@@ -4299,7 +4299,7 @@ function salesDrafts(P){
   const L=ld(),sd=(L.sd||[]).slice().sort((a,b)=>b.at-a.at),t=ymd(new Date()),dm=v=>v?v.slice(8,10)+'/'+v.slice(5,7)+'/'+v.slice(0,4):'\u2014';
   const card0=P.appendChild(el('div','st-card hubf hub-s')),h0=el('h3',null,'Sales Drafts');h0.style.cssText='text-align:center;font-size:18px;font-weight:800';card0.appendChild(h0);
   if(!sd.length){card0.appendChild(el('p','hint','No sales drafts. Bills typed in with Quick Sales wait here until you post them.'));return}
-  card0.appendChild(el('p','hint dr-c',sd.length+' draft'+(sd.length===1?'':'s')+' \u2022 '+money(sd.reduce((a,d)=>a+(+d.amt||0),0))+'. Check each bill, then Post. The RV number is given when you post.'));
+  card0.appendChild(el('p','hint dr-c',sd.length+' draft'+(sd.length===1?'':'s')+' \u2022 '+money(sd.reduce((a,d)=>a+(+d.amt||0),0))+'. Check each bill, then Post. A manual bill gets its RV number when you post; a bill from the SAP file keeps its SAP number.'));
   const groups=new Map();
   sd.forEach(d=>{const k=String(d.cu);let g=groups.get(k);if(!g){g={cu:d.cu,nm:d.nm||('Customer '+d.cu),cos:new Map()};groups.set(k,g)}const ck=String(d.co);let c=g.cos.get(ck);if(!c){c={co:d.co,list:[]};g.cos.set(ck,c)}c.list.push(d)});
   groups.forEach(g=>{const gx=card0.appendChild(el('div','cg cu-sale')),gh=el('div','cg-h'),cks=[],gck=mkCk();gh.appendChild(gck);gh.appendChild(el('b',null,g.nm+' \u2022 '+g.cu));gh.appendChild(el('span','cg-n',g.cos.size+(g.cos.size===1?' company':' companies')));gx.appendChild(gh);
@@ -4309,22 +4309,26 @@ function salesDrafts(P){
       const totUp=()=>{const L3=ld(),mine=(L3.sd||[]).filter(e=>String(e.cu)===String(g.cu)&&String(e.co)===String(c.co));ftV.textContent=money(mine.reduce((x,e)=>x+(+e.amt||0),0))};totUp();
       c.list.forEach(d=>{
         const blk=el('div','cl-card'),age=Math.floor((Date.now()-d.at)/864e5),head=el('div','cl-head');body.appendChild(blk);blks.push(blk);
-        head.appendChild(el('b',null,'Sales bill (RV)'));head.appendChild(el('div',null,'Manual entry \u2022 '+(age?age+' day'+(age===1?'':'s')+' in draft':'saved today')));blk.appendChild(head);
+        head.appendChild(el('b',null,d.doc?'Sales bill (RV) \u2022 SAP '+d.doc:'Sales bill (RV)'));head.appendChild(el('div',null,(d.sap?'From the SAP file':'Manual entry')+' \u2022 '+(age?age+' day'+(age===1?'':'s')+' in draft':'saved today')));blk.appendChild(head);
         const bd=el('div','cl-body');blk.appendChild(bd);
         const F=(lab,node)=>{const x=el('div','cl-f');x.appendChild(el('small',null,lab));x.appendChild(node);bd.appendChild(x);return node},I=(type,val)=>{const i=el('input','list-search');i.type=type;i.value=val;return i};
         const am=F('Sales amount',I('number',d.amt)),pd=F('Posting date (cannot be after today)',I('date',d.post)),dl=F('Days Limit',I('number',d.days));
-        am.step='any';am.min='0';pd.max=t;dl.min='1';dl.step='1';if(window.RDLCalc)RDLCalc.attach(am,{label:'Sales amount'});
+        am.step='any';am.min='0';pd.max=t;dl.min='1';dl.step='1';if(d.sap){am.readOnly=pd.readOnly=dl.readOnly=true}else if(window.RDLCalc)RDLCalc.attach(am,{label:'Sales amount'});
         const info=el('div','hint');bd.appendChild(info);const up=()=>{info.textContent=pd.value&&+dl.value>0?'Payment date: '+dm(addD(pd.value,parseInt(dl.value))):''};pd.addEventListener('input',up);dl.addEventListener('input',up);up();
         const stt=el('div','stt'),act=el('div','od-actions'),mkB=(tx,cls)=>{const b=el('button',cls,tx);b.type='button';act.appendChild(b);return b},bad=x=>{stt.className='stt bad';stt.textContent=x;return null};
         let dupOk=false;
         const read=()=>{const a=+am.value,dys=parseInt(dl.value),f=pd.value;if(!(a>0))return bad('Enter a sales amount greater than zero');if(!f)return bad('Choose a posting date');if(f>t)return bad('Posting date cannot be after today');if(!(dys>0))return bad('Enter the Days Limit');return{a,dys,f}};
         const upd=(L2,v)=>{const x=(L2.sd||[]).find(e=>e.id===d.id);if(!x)return null;x.amt=v.a;x.post=v.f;x.days=v.dys;return x};
-        mkB('Save','st-btn od-clear').onclick=()=>{const v=read();if(!v)return;const L2=ld();if(!upd(L2,v))return;try{sv(L2)}catch(e){return bad('Could not save')}totUp();stt.className='stt ok';stt.textContent='\u2713 Saved'};
+        if(!d.sap)mkB('Save','st-btn od-clear').onclick=()=>{const v=read();if(!v)return;const L2=ld();if(!upd(L2,v))return;try{sv(L2)}catch(e){return bad('Could not save')}totUp();stt.className='stt ok';stt.textContent='\u2713 Saved'};
         const pb=mkB('Post','st-btn');
         const doPost=()=>{const v=read();if(!v)return false;const L2=ld(),x=upd(L2,v);if(!x)return false;
-          if(!dupOk&&L2.rv.some(z=>String(z.cu)===String(x.cu)&&String(z.co)===String(x.co)&&z.post===v.f&&+z.amt===v.a)){dupOk=true;pb.textContent='Post anyway';stt.className='stt warn';stt.textContent='\u26a0 A bill with the same customer, company, date and amount is already posted. Press Post anyway only if this is a different bill.';return false}
-          window.RDLDDEL&&RDLDDEL(L2,[d.id]);L2.sd=L2.sd.filter(e=>e.id!==d.id);const n=nextNo(L2,'RV');blk._res={k:'RV',cu:x.cu,doc:'RV-'+String(n).padStart(6,'0'),d:x.post};   /* used by Post selected to open the register on this bill */
-          L2.rv.push({bill:'RV-'+String(n).padStart(6,'0'),doc:'RV',pt:Date.now(),co:x.co,cu:x.cu,nm:x.nm,amt:x.amt,post:x.post,due:addD(x.post,x.days),days:x.days,manual:1});
+          if(d.sap&&d.doc){const mo=(()=>{try{return JSON.parse(localStorage.getItem('rdl.master.v1')||'null')||{}}catch(e){return{}}})(),same=z=>String(z.bill)===String(d.doc)&&String(z.co)===String(x.co)&&String(z.cu)===String(x.cu);
+            if(L2.rv.some(same)||(mo.out||[]).some(same)){stt.className='stt bad';stt.textContent='\u2717 This SAP bill ('+d.doc+') is already in the app. Delete this draft.';return false}}
+          if(!d.sap&&!dupOk&&L2.rv.some(z=>String(z.cu)===String(x.cu)&&String(z.co)===String(x.co)&&z.post===v.f&&+z.amt===v.a)){dupOk=true;pb.textContent='Post anyway';stt.className='stt warn';stt.textContent='\u26a0 A bill with the same customer, company, date and amount is already posted. Press Post anyway only if this is a different bill.';return false}
+          window.RDLDDEL&&RDLDDEL(L2,[d.id]);L2.sd=L2.sd.filter(e=>e.id!==d.id);
+          if(d.sap&&d.doc){blk._res={k:'RV',cu:x.cu,doc:String(d.doc),d:x.post};L2.rv.push({bill:String(d.doc),doc:'RV',pt:Date.now(),co:x.co,cu:x.cu,nm:x.nm,amt:x.amt,post:x.post,due:d.due||addD(x.post,x.days),days:x.days,sap:1})}
+          else{const n=nextNo(L2,'RV');blk._res={k:'RV',cu:x.cu,doc:'RV-'+String(n).padStart(6,'0'),d:x.post};   /* used by Post selected to open the register on this bill */
+          L2.rv.push({bill:'RV-'+String(n).padStart(6,'0'),doc:'RV',pt:Date.now(),co:x.co,cu:x.cu,nm:x.nm,amt:x.amt,post:x.post,due:addD(x.post,x.days),days:x.days,manual:1})}
           try{sv(L2)}catch(e){return bad('Could not save on this device')}return true};
         blk._post=()=>doPost();blk._amt=()=>+am.value||0;pb.onclick=()=>{if(doPost()){cards();document.dispatchEvent(new Event('visibilitychange'));buildDrafts('Sales')}};
         mkB('Delete','st-btn od-clear').onclick=async()=>{const ok=window.RDLUI&&RDLUI.ask?await RDLUI.ask({title:'Delete this draft?',msg:(d.nm||d.cu)+' \u2022 '+money(d.amt)+'.',ok:'Delete'}):confirm('Delete this draft?');if(!ok)return;const L2=ld();window.RDLDDEL&&RDLDDEL(L2,[d.id]);L2.sd=(L2.sd||[]).filter(e=>e.id!==d.id);try{sv(L2)}catch(e){return}buildDrafts('Sales')};
@@ -4598,6 +4602,7 @@ function buildUpload(){
    ['Quick Sales','Type a sales bill in by hand','g','i-sales',()=>openManual('s')],
    ['Drafts ('+(dr.length+sdN)+')',dr.length+sdN?dr.length+' collection'+(dr.length===1?'':'s')+' \u2022 '+sdN+' sales waiting to be posted':'Collections and sales waiting to be posted','a','i-stmt',()=>window.RDL.openDrafts(),1],
    ['Daily Collection & Order','Every day: upload the Excel file, or enter business wise sales & collection and make the Excel','v','i-upl',()=>{if(window.RDL.openCOE)window.RDL.openCOE();else if(window.RDL_openSet)window.RDL_openSet('setdcr')},1],
+   ['Daily Collection & Order (SAP)','Upload the SAP sales file: bills go to Drafts with their real document numbers, and the same Excel is made','b','i-upl',()=>{if(window.RDL.openSapUpload)window.RDL.openSapUpload()},1],
    ['DCR Entry','Daily Call Report \u2014 customers visited, time spent, Excel','g','i-clock',()=>{if(window.RDL.openVisitsPC)window.RDL.openVisitsPC()},1]].forEach(([t,sub,k,ic,fn,wide])=>{
     const K=C[k],b=el('button','up-b'+(wide?' wide':''));b.type='button';
     b.style.cssText='color:'+K[5]+';background:linear-gradient(135deg,'+K[0]+','+K[1]+');border-color:'+K[2]+';box-shadow:0 8px 14px -9px '+K[6]+',inset 0 2px 0 #ffffffcc';
@@ -8068,7 +8073,7 @@ function drawCO(){const B=CP.body;B.textContent='';
     try{if(!window.RDL_SELFX)throw new Error('The Excel maker is not ready, reload the app and try again');
       /* the user's own Excel in the team format: every date of this month up to the chosen date (nothing after it); name, SAP ID and designation come from the Profile */
       const to=CX.date,fr=to.slice(0,8)+'01',X=coGet(),list=[];
-      Object.keys(X).sort().forEach(d=>{if(d<fr||d>to)return;(X[d]||[]).forEach(e=>{if(!COL7.some(k=>(+(e.o||{})[k]||0)>0||(+(e.c||{})[k]||0)>0))return;let lb=e.nm||('Customer '+e.cu);if(e.cu&&lb.indexOf(e.cu)<0)lb+='-'+e.cu;
+      Object.keys(X).sort().forEach(d=>{if(d<fr||d>to)return;(X[d]||[]).forEach(e=>{if(!COL7.some(k=>(+(e.o||{})[k]||0)>0||(+(e.c||{})[k]||0)>0))return;let lb=e.nm||('Customer '+e.cu);
         const o={},c={};COL7.forEach(k=>{if(+(e.o||{})[k]>0)o[k]=+e.o[k];if(+(e.c||{})[k]>0)c[k]=+e.c[k]});list.push({d,label:lb,o,c,rm:e.rm||''})})});
       list.sort((a,b)=>a.d===b.d?(a.label>b.label?1:-1):(a.d>b.d?1:-1));
       if(!list.length)return say('No entry from '+dd(fr)+' to '+dd(to)+' to put in the Excel','bad');
@@ -9869,9 +9874,9 @@ function Sty(){
         fl=o.fill?reg(fills,'<fill><patternFill patternType="solid"><fgColor rgb="FF'+o.fill+'"/><bgColor indexed="64"/></patternFill></fill>'):0,
         t='<left style="thin"><color auto="1"/></left><right style="thin"><color auto="1"/></right><top style="thin"><color auto="1"/></top><bottom style="thin"><color auto="1"/></bottom><diagonal/>',
         b=o.bd==='all'?reg(bds,'<border>'+t+'</border>'):(o.bd==='bottom'?reg(bds,'<border><left/><right/><top/><bottom style="thin"><color auto="1"/></bottom><diagonal/></border>'):0),
-        nf=o.nf==='acc'?164:(o.nf==='date'?165:0);
+        nf=o.nf==='acc'?164:(o.nf==='date'?165:(o.nf==='dmy'?166:0));
     return reg(xfs,'<xf numFmtId="'+nf+'" fontId="'+f+'" fillId="'+fl+'" borderId="'+b+'" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyNumberFormat="1" applyAlignment="1"><alignment horizontal="'+(o.h||'general')+'" vertical="'+(o.v||'center')+'"'+(o.wrap?' wrapText="1"':'')+'/></xf>')};
-  this.xml=function(){return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="2"><numFmt numFmtId="164" formatCode="_(* #,##0.00_);_(* \\(#,##0.00\\);_(* \\-??_);_(@_)"/><numFmt numFmtId="165" formatCode="m/d/yyyy"/></numFmts><fonts count="'+fonts.length+'">'+fonts.join('')+'</fonts><fills count="'+fills.length+'">'+fills.join('')+'</fills><borders count="'+bds.length+'">'+bds.join('')+'</borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="'+xfs.length+'">'+xfs.join('')+'</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>'}}
+  this.xml=function(){return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="3"><numFmt numFmtId="164" formatCode="_(* #,##0.00_);_(* \\(#,##0.00\\);_(* \\-??_);_(@_)"/><numFmt numFmtId="165" formatCode="m/d/yyyy"/><numFmt numFmtId="166" formatCode="dd-mm-yy"/></numFmts><fonts count="'+fonts.length+'">'+fonts.join('')+'</fonts><fills count="'+fills.length+'">'+fills.join('')+'</fills><borders count="'+bds.length+'">'+bds.join('')+'</borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="'+xfs.length+'">'+xfs.join('')+'</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>'}}
 /* ---- a worksheet ---- */
 function Sheet(){
   var rows={},merges=[],cols=[],hts={},freeze=null;
@@ -9913,7 +9918,7 @@ function userSheet(S,info,ent,monthLabel){
   var tg=X({b:1,sz:8,color:'FF0000',fill:'99CC00',bd:'all',h:'center',nf:'acc',wrap:1}),sumO=0,sumC=0;
   for(var i=0;i<7;i++){sh.put(7,3+i,{f:'SUM('+cl(3+i)+'8:'+cl(3+i)+end+')',v:r2(tot.o[i])},tg);sh.put(7,12+i,{f:'SUM('+cl(12+i)+'8:'+cl(12+i)+end+')',v:r2(tot.c[i])},tg);sumO+=tot.o[i];sumC+=tot.c[i]}
   sh.put(7,10,{f:'SUM(K8:K'+end+')',v:r2(sumO)},tg);sh.put(7,19,{f:'SUM(T8:T'+end+')',v:r2(sumC)},tg);
-  var sl=X({b:1,sz:8,fill:'FFFFFF',bd:'all',h:'center'}),dt=X({b:1,sz:8,bd:'all',h:'center',nf:'date'}),cu=X({b:1,sz:8,fill:'FFFFFF',bd:'all',h:'left'}),oy=X({sz:8,fill:'FFFF99',bd:'all',h:'center',nf:'acc'}),ob=X({sz:8,fill:'99CCFF',bd:'all',h:'center',nf:'acc'}),ty=X({b:1,sz:8,fill:'FFFF99',bd:'all',h:'center',nf:'acc'}),tb=X({b:1,sz:8,fill:'99CCFF',bd:'all',h:'center',nf:'acc'}),rk=X({sz:8,fill:'FFFFFF',bd:'all',h:'center'});
+  var sl=X({b:1,sz:8,fill:'FFFFFF',bd:'all',h:'center'}),dt=X({b:1,sz:8,bd:'all',h:'center',nf:'dmy'}),cu=X({b:1,sz:8,fill:'FFFFFF',bd:'all',h:'left'}),oy=X({sz:8,fill:'FFFF99',bd:'all',h:'center',nf:'acc'}),ob=X({sz:8,fill:'99CCFF',bd:'all',h:'center',nf:'acc'}),ty=X({b:1,sz:8,fill:'FFFF99',bd:'all',h:'center',nf:'acc'}),tb=X({b:1,sz:8,fill:'99CCFF',bd:'all',h:'center',nf:'acc'}),rk=X({sz:8,fill:'FFFFFF',bd:'all',h:'center'});
   var prev='',gs=0;
   ent.forEach(function(e,ix){var r=8+ix,to=0,tc=0;sh.height(r,18);
     sh.put(r,0,ix+1,sl);
@@ -10037,7 +10042,7 @@ function teamDownload(kind,rowsAll,msg){
     ppl=ppl.filter(function(p){return (!ST.dp||(p.depot||'').split(', ').indexOf(ST.dp)>=0||rows.some(function(x){return x.em===p.key}))&&(!ST.u||rows.some(function(x){return x.em===p.key}))});
     ppl.sort(function(a,b){return ((a.depot||'')+(a.official||a.name))>((b.depot||'')+(b.official||b.name))?1:-1});
     var ent={},vis={};
-    if(kind==='co'){var g={};rows.forEach(function(x){var k=x.em+'\u0001'+x.d+'\u0001'+(x.cu||x.nm.toLowerCase());var e=g[k];if(!e){var lab=x.nm||('Customer '+x.cu);if(x.cu&&lab.indexOf(x.cu)<0)lab=lab+'-'+x.cu;e=g[k]={d:x.d,label:lab,o:{},c:{},rm:x.rm};(ent[x.em]=ent[x.em]||[]).push(e)}if(x.o)e.o[x.b]=x.o;if(x.c)e.c[x.b]=x.c;if(!e.rm&&x.rm)e.rm=x.rm});
+    if(kind==='co'){var g={};rows.forEach(function(x){var k=x.em+'\u0001'+x.d+'\u0001'+(x.cu||x.nm.toLowerCase());var e=g[k];if(!e){var lab=x.nm||('Customer '+x.cu);e=g[k]={d:x.d,label:lab,o:{},c:{},rm:x.rm};(ent[x.em]=ent[x.em]||[]).push(e)}if(x.o)e.o[x.b]=x.o;if(x.c)e.c[x.b]=x.c;if(!e.rm&&x.rm)e.rm=x.rm});
       Object.keys(ent).forEach(function(k){ent[k].sort(function(a,b){return a.d===b.d?(a.label>b.label?1:-1):(a.d>b.d?1:-1)})})}
     else{rows.forEach(function(x){var lab=x.nmv||'';if(x.cu&&lab.indexOf(x.cu)<0)lab=lab+'-'+x.cu;(vis[x.em]=vis[x.em]||[]).push({d:x.d,nm:lab,hr:TX.hourText(x.mnv),vp:x.vpv,vw:x.vwv,note:x.notev,t:x.t})});
       Object.keys(vis).forEach(function(k){vis[k].sort(function(a,b){return a.d===b.d?(a.t>b.t?1:-1):(a.d>b.d?1:-1)})})}
@@ -10139,7 +10144,7 @@ window.RDL_SELFX=function(kind,upto,list){
       /* earlier months of the year: the entries on this phone + the user's own rows from the server (older months are not kept on the phone) */
       var Y0=upto.slice(0,4)+'-01-01',old={},add=function(d,e,src){if(d<Y0||d>=from)return;if(!COL7.some(function(k){return (+(e.o||{})[k]||0)>0||(+(e.c||{})[k]||0)>0}))return;
           var sig=d+'|'+(e.id||(String(e.cu||'')+'|'+String(e.nm||'').toLowerCase()));if(old[sig])return;
-          var lb=e.nm||('Customer '+e.cu);if(e.cu&&lb.indexOf(e.cu)<0)lb+='-'+e.cu;var o={},c={};COL7.forEach(function(k){if(+(e.o||{})[k]>0)o[k]=+e.o[k];if(+(e.c||{})[k]>0)c[k]=+e.c[k]});old[sig]={d:d,label:lb,o:o,c:c,rm:e.rm||''}};
+          var lb=e.nm||('Customer '+e.cu);var o={},c={};COL7.forEach(function(k){if(+(e.o||{})[k]>0)o[k]=+e.o[k];if(+(e.c||{})[k]>0)c[k]=+e.c[k]});old[sig]={d:d,label:lb,o:o,c:c,rm:e.rm||''}};
       var X=J('rdl.coe.v1',{});Object.keys(X).forEach(function(d){(X[d]||[]).forEach(function(e){add(d,e)})});
       var sp=(window.RDLGATE&&RDLGATE.api&&from>Y0)?RDLGATE.api('myRecords',{kind:'co',from:Y0,to:upto},true).then(function(j){if(!(j&&j.ok&&Array.isArray(j.rows)))throw new Error('x');j.rows.forEach(function(r){if(r&&r.e)add(r.d,r.e)})}).catch(function(){partial=true}):Promise.resolve();
       pr=sp.then(function(){var by={};Object.keys(old).forEach(function(k){var x=old[k],ym=x.d.slice(0,7);(by[ym]=by[ym]||[]).push(x)});by[from.slice(0,7)]=list;
@@ -10391,6 +10396,214 @@ html body #rgx-panel button.pc *{pointer-events:none}
 (function(){var t;function d(e){if(e.target.closest&&e.target.closest('#rgx-panel')){window.__pnPress=1;clearTimeout(t)}}
 function u(){clearTimeout(t);t=setTimeout(function(){window.__pnPress=0},500)}
 document.addEventListener('pointerdown',d,true);['pointerup','pointercancel','touchend','touchcancel'].forEach(function(n){document.addEventListener(n,u,true)})})();
+</script>
+
+<script id="sap-js">
+/* ===== Daily Collection & Order (SAP): the SAP sales file (RV bills) -> Drafts with the real Billing Document numbers + the day's Collection & Order entries (so the same Excel is made).
+   Nothing is posted here. Bills wait in Drafts until the user presses Post. ===== */
+(function(){
+'use strict';
+var R=window.RDL;if(!R)return;
+var LKEY='rdl.ledger.v1',SKEY='rdl.sap.v1',CKEY='rdl.coe.v1',MKEY='rdl.master.v1';
+var COMAP={'1000':'RPL','2000':'RNL','3000':'PCL','5000':'RBCL','6000':'Jenphar','7000':'NLS','9000':'REXIME'};
+function J(k,d){try{var x=JSON.parse(localStorage.getItem(k));return x==null?d:x}catch(e){return d}}
+function el(t,c,x){var e=document.createElement(t);if(c)e.className=c;if(x!=null)e.textContent=x;return e}
+function pad(n){return String(n).padStart(2,'0')}
+function ymd(d){return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())}
+function today(){return ymd(new Date())}
+function addD(s,n){var d=new Date(s+'T00:00:00');d.setDate(d.getDate()+n);return ymd(d)}
+function dmy(v){return v?v.slice(8,10)+'/'+v.slice(5,7)+'/'+v.slice(0,4):'—'}
+function norm(x){return String(x==null?'':x).toLowerCase().replace(/\s+/g,' ').trim()}
+function nk(v){return typeof v==='string'?v.toLowerCase().replace(/\s+/g,' ').trim():''}
+function r2(x){return Math.round(x*100)/100}
+function money(n){return window.__m?window.__m(n):(+n||0).toLocaleString('en-IN')}
+function fm(n){return (+n||0).toLocaleString('en-IN',{maximumFractionDigits:2})}
+function str(v){return v==null?'':String(v).trim()}
+function code(v){var s=str(v);return /^\d+\.0+$/.test(s)?s.replace(/\.0+$/,''):s}
+function dateOf(v){
+  if(typeof v==='number'&&isFinite(v)&&v>20000&&v<80000)return new Date(Math.round((v-25569)*864e5)).toISOString().slice(0,10);
+  var s=str(v),m;
+  if((m=/^(\d{4})-(\d{2})-(\d{2})/.exec(s)))return m[1]+'-'+m[2]+'-'+m[3];
+  if((m=/^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$/.exec(s)))return m[3]+'-'+pad(+m[2])+'-'+pad(+m[1]);
+  return ''}
+function validDate(s){return /^\d{4}-\d{2}-\d{2}$/.test(s)&&ymd(new Date(s+'T00:00:00'))===s}
+function dayDiff(a,b){return Math.round((new Date(b+'T00:00:00')-new Date(a+'T00:00:00'))/864e5)}
+function ledger(){var x=J(LKEY,null);if(x&&x.rv){x.sd=x.sd||[];x.pl=x.pl||{};x.dz=x.dz||[];return x}return{rv:[],dz:[],n:{RV:0,DZ:0},ps:{},pc:{},pl:{},sd:[]}}
+function nowId(){return 'sap-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,7)}
+
+/* ---- 1. read the SAP file ---- */
+var ALI={co:['company code'],cu:['customer'],nm:['customer name'],doc:['document type'],amt:['amount in local currency','amount local currency'],post:['posting date'],due:['payment date'],d1:['days 1'],dl:['days limit'],bill:['billing document']};
+function parseSap(Rw){
+  var ks=Object.keys(Rw).map(Number).sort(function(a,b){return a-b}),h=null,i,k;
+  for(var q=0;q<ks.length&&q<20&&!h;q++){i=ks[q];var a=Rw[i];if(!a)continue;var m={};a.forEach(function(v,j){var n=nk(v);if(n&&!(n in m))m[n]=j});
+    var c={};for(k in ALI){var f=ALI[k].filter(function(n){return n in m})[0];c[k]=f==null?-1:m[f]}
+    if(c.co>=0&&c.cu>=0&&c.bill>=0&&c.amt>=0&&c.post>=0)h={i:i,c:c}}
+  if(!h)return null;
+  var c2=h.c,rows=[],bad=[],seen={};
+  ks.forEach(function(i){if(i<=h.i)return;var a=Rw[i];if(!a)return;
+    var cu=code(a[c2.cu]),bl=code(a[c2.bill]),am=a[c2.amt];
+    if(!cu&&!bl)return;                       /* the total line / empty line at the end */
+    var nm=str(c2.nm>=0?a[c2.nm]:'');
+    var no=function(why){bad.push({line:i,cu:cu,nm:nm,bill:bl,why:why})};
+    if(!bl)return no('no Billing Document number');
+    if(c2.doc>=0&&str(a[c2.doc]).toUpperCase()!=='RV')return no('document type "'+str(a[c2.doc])+'" is not a sales bill (RV)');
+    if(typeof am!=='number'||!(am>0))return no('amount is missing or not above zero');
+    var co=code(a[c2.co]);if(!co)return no('no Company Code');if(!cu)return no('no Customer code');
+    var post=dateOf(a[c2.post]);if(!validDate(post))return no('Posting date is not a valid date');
+    var d1=c2.d1>=0?a[c2.d1]:null,dl=c2.dl>=0?a[c2.dl]:null,due=c2.due>=0?dateOf(a[c2.due]):'',days=0;
+    if(typeof d1==='number'&&d1>0)days=Math.round(d1);else if(typeof dl==='number'&&dl>0)days=Math.round(dl);else if(validDate(due)&&dayDiff(post,due)>0)days=dayDiff(post,due);
+    if(!(days>0))return no('no Days Limit (Days 1 / Payment Date)');
+    if(!validDate(due))due=addD(post,days);
+    var key=bl+'|'+co+'|'+cu;if(seen[key])return no('same Billing Document appears twice in the file');seen[key]=1;
+    rows.push({line:i,bill:bl,co:co,cu:cu,nm:nm,amt:am,post:post,due:due,days:days})});
+  return{rows:rows,bad:bad}}
+
+/* ---- 2. check every bill against the app ---- */
+function analyze(P){
+  var m=R.master||{cr:[],out:[]},raw=J(MKEY,{})||{},L=ledger(),t0=today();
+  var names=new Map(),cos=new Map(),line=new Set();
+  (m.cr||[]).forEach(function(r){var k=String(r.bp);if(!names.has(k))names.set(k,{cu:r.bp,nm:r.nm});var c=String(r.co);if(!cos.has(c))cos.set(c,r.co);line.add(k+'|'+c)});
+  (m.out||[]).forEach(function(r){var k=String(r.cu);if(!names.has(k))names.set(k,{cu:r.cu,nm:r.nm});var c=String(r.co);if(!cos.has(c))cos.set(c,r.co)});
+  var ledK=new Set((L.rv||[]).map(function(z){return z.bill+'|'+z.co+'|'+z.cu})),
+      outK=new Set((raw.out||[]).map(function(z){return z.bill+'|'+z.co+'|'+z.cu})),
+      sdK=new Set((L.sd||[]).filter(function(z){return z.doc}).map(function(z){return z.doc+'|'+z.co+'|'+z.cu})),
+      man={};
+  (L.rv||[]).forEach(function(z){if(z.sap||!/^RV-\d/.test(String(z.bill)))return;var k=z.cu+'|'+z.co+'|'+z.post+'|'+z.amt;man[k]=(man[k]||0)+1});
+  var out=P.rows.map(function(r){
+    var o=Object.assign({},r),lb=COMAP[r.co],cu=names.get(r.cu);o.lb=lb||'';
+    if(!lb){o.st='badco';o.why='Company Code '+r.co+' is not one of the 7 companies';return o}
+    if(!cu){o.st='nocust';o.why='This customer ('+r.cu+') is not in your customer list';return o}
+    o.cuT=cu.cu;o.nmApp=cu.nm||r.nm;o.coT=cos.has(r.co)?cos.get(r.co):(isFinite(+r.co)?+r.co:r.co);
+    o.noLine=!line.has(String(o.cuT)+'|'+String(o.coT));
+    if(r.post>t0){o.st='future';o.why='Posting date is after today';return o}
+    var k3=r.bill+'|'+o.coT+'|'+o.cuT,k3b=r.bill+'|'+r.co+'|'+r.cu;
+    if(ledK.has(k3)||ledK.has(k3b)){o.st='posted';o.why='Already posted';return o}
+    if(sdK.has(k3)||sdK.has(k3b)){o.st='indraft';o.why='Already in Drafts';return o}
+    if(outK.has(k3)||outK.has(k3b)){o.st='inout';o.why='Already in the Outstanding data';return o}
+    var mk=o.cuT+'|'+o.coT+'|'+r.post+'|'+r.amt;if(man[mk]>0){man[mk]--;o.st='manual';o.why='Same customer, company, date and amount is already posted by hand';return o}
+    o.st='new';o.why='';return o});
+  return out}
+var STL={new:['Will go to Drafts','#0b6b3a','#d8f7ea'],posted:['Already posted','#555','#eee'],indraft:['Already in Drafts','#555','#eee'],inout:['Already in Outstanding','#555','#eee'],manual:['Posted by hand already','#8a5a00','#fff1cf'],nocust:['Customer not found','#a11','#fde8e6'],badco:['Unknown company','#a11','#fde8e6'],future:['Future date','#a11','#fde8e6']};
+
+/* ---- 3. save: Drafts + Collection & Order entries ---- */
+function counted(r){return r.st==='new'||r.st==='posted'||r.st==='indraft'||r.st==='inout'||r.st==='manual'}
+function apply(rows){
+  var L=ledger(),nw=rows.filter(function(r){return r.st==='new'}),all=rows.filter(counted),i;
+  nw.forEach(function(r){L.sd.push({id:nowId(),co:r.coT,cu:r.cuT,nm:r.nmApp,amt:r.amt,post:r.post,days:r.days,due:r.due,doc:r.bill,sap:1,ds:today(),at:Date.now()})});
+  all.forEach(function(r){L.pl['o|'+r.post+'|'+norm(r.nmApp)+'|'+r.lb.toLowerCase()]=1});
+  var S=J(SKEY,null);if(!S||!S.b)S={b:{}};
+  all.forEach(function(r){S.b[r.coT+'|'+r.bill+'|'+r.cuT]={d:r.post,cu:r.cuT,nm:r.nmApp,lb:r.lb,amt:r.amt}});
+  var aff={};all.forEach(function(r){aff[r.post+'|'+r.cuT]={d:r.post,cu:r.cuT,nm:r.nmApp}});
+  var sums={};Object.keys(S.b).forEach(function(k){var b=S.b[k],g=b.d+'|'+b.cu;if(!aff[g])return;var o=sums[g]||(sums[g]={});o[b.lb]=(o[b.lb]||0)+b.amt});
+  var X=J(CKEY,{}),ord=J('rdl.coe.ord.v1',[]);if(!Array.isArray(ord))ord=[];
+  Object.keys(aff).forEach(function(g){var a=aff[g],o={};Object.keys(sums[g]||{}).forEach(function(k){o[k]=r2(sums[g][k])});
+    var list=X[a.d]||(X[a.d]=[]),e=null;
+    for(i=0;i<list.length;i++){if(String(list[i].cu)===String(a.cu)||norm(list[i].nm)===norm(a.nm)){e=list[i];break}}
+    if(e){e.o=Object.assign({},e.o||{},o);if(!e.cu)e.cu=a.cu}else list.push({id:'sap|'+a.d+'|'+a.cu,cu:a.cu,nm:a.nm,o:o,c:{},rm:''});
+    if(ord.indexOf(a.d)<0)ord.push(a.d)});
+  /* write: the ledger first (the important one); nothing else is touched if it fails */
+  try{localStorage.setItem(LKEY,JSON.stringify(L))}catch(e){throw new Error('Could not save on this device (storage full?). Nothing was changed.')}
+  try{localStorage.setItem(SKEY,JSON.stringify(S));localStorage.setItem(CKEY,JSON.stringify(X));localStorage.setItem('rdl.coe.ord.v1',JSON.stringify(ord))}
+  catch(e){throw new Error('The bills are in Drafts, but the Excel entries could not be saved on this device.')}
+  return{drafts:nw.length,entries:Object.keys(aff).length,dates:Object.keys(aff).map(function(g){return aff[g].d}).filter(function(d,i,a){return a.indexOf(d)===i}).sort()}}
+
+/* ---- 4. the Excel (same maker as the Collection & Order page) ---- */
+async function makeExcel(to){
+  if(!window.RDL_SELFX)throw new Error('The Excel maker is not ready, reload the app and try again');
+  var fr=to.slice(0,8)+'01',X=J(CKEY,{}),list=[],COL7=['RPL','RNL','PCL','REXIME','RBCL','Jenphar','NLS'];
+  Object.keys(X).sort().forEach(function(d){if(d<fr||d>to)return;(X[d]||[]).forEach(function(e){
+    if(!COL7.some(function(k){return (+(e.o||{})[k]||0)>0||(+(e.c||{})[k]||0)>0}))return;
+    var lb=e.nm||('Customer '+e.cu);var o={},c={};
+    COL7.forEach(function(k){if(+(e.o||{})[k]>0)o[k]=+e.o[k];if(+(e.c||{})[k]>0)c[k]=+e.c[k]});list.push({d:d,label:lb,o:o,c:c,rm:e.rm||''})})});
+  list.sort(function(a,b){return a.d===b.d?(a.label>b.label?1:-1):(a.d>b.d?1:-1)});
+  if(!list.length)throw new Error('No entry to put in the Excel');
+  var r=await RDL_SELFX('co',to,list),a=el('a');a.href=URL.createObjectURL(r.blob);a.download=r.name;document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(a.href)},4000);
+  return{n:list.length,days:list.filter(function(z,i,a){return a.findIndex(function(y){return y.d===z.d})===i}).length,r:r}}
+
+/* ---- 5. the page ---- */
+var PG=null;
+function page(){
+  if(PG&&PG.isConnected)return PG;
+  var up=document.getElementById('upl');if(!up)return null;
+  PG=el('div','pg st');PG.id='sapp';up.parentNode.appendChild(PG);return PG}
+function showPg(){document.querySelectorAll('.pg').forEach(function(x){x.classList.remove('on')});document.querySelectorAll('.nav button').forEach(function(x){x.classList.remove('on')});
+  PG.classList.add('on');var nb=document.querySelector('.nav button[data-p="more"]');if(nb)nb.classList.add('on');window.scrollTo(0,0)}
+function back(){if(R.openUpload)R.openUpload()}
+function chip(st){var s=STL[st],c=el('span',null,s[0]);c.style.cssText='display:inline-block;padding:2px 8px;border-radius:999px;font-size:11.5px;font-weight:700;white-space:nowrap;color:'+s[1]+';background:'+s[2];return c}
+function draw(state){
+  var P=page();if(!P)return;P.textContent='';
+  var top=el('div','st-top'),bk=el('button');bk.type='button';bk.setAttribute('aria-label','Back');
+  bk.innerHTML='<svg class="bk-ar" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 12h-15M10.5 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="4.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';bk.onclick=back;
+  top.appendChild(bk);top.appendChild(el('h2',null,'Daily Collection & Order (SAP)'));P.appendChild(top);
+  var c=el('div','st-card');P.appendChild(c);
+  c.appendChild(el('h3',null,'SAP Sales File'));
+  c.appendChild(el('p','hint','Upload the sales file downloaded from SAP (Document type RV). Every bill keeps its real Billing Document number and goes to Drafts. The day’s Collection & Order entries are made from it, so you get the same Excel. Nothing is posted until you press Post in Drafts.'));
+  var fi=el('input');fi.type='file';fi.accept='.xlsx';fi.hidden=true;
+  var pick=el('button','st-btn',state&&state.rows?'Choose another file':'Choose the SAP sales file');pick.type='button';pick.onclick=function(){fi.click()};c.appendChild(pick);c.appendChild(fi);
+  var msg=el('div','stt');c.appendChild(msg);
+  var say=function(t,k){msg.className='stt'+(k?' '+k:'');msg.textContent=t};
+  fi.onchange=async function(){var f=fi.files[0];fi.value='';if(!f)return;say('Reading…');
+    try{if(!R.readXlsx)throw new Error('The reader is not ready, reload the app and try again');
+      var x=await R.readXlsx(await f.arrayBuffer()),Rw=await x.rows(x.sheets[0]),P1=parseSap(Rw);
+      if(!P1)return say('✗ Wrong file — the columns of the SAP sales file (Company Code, Customer, Billing Document, Amount in Local Currency, Posting Date) were not found.','bad');
+      if(!P1.rows.length)return say('✗ No usable sales bill in this file.'+(P1.bad.length?' First problem: row '+P1.bad[0].line+' — '+P1.bad[0].why:''),'bad');
+      draw({name:f.name,rows:analyze(P1),bad:P1.bad})}
+    catch(e){say('✗ This is not a readable Excel (.xlsx) file.'+(e&&e.message&&!/zip|corrupt|end of data|central directory/i.test(e.message)?' '+e.message:''),'bad')}};
+  if(state&&state.done){done(P,state);return}
+  if(state&&state.rows)preview(P,state)}
+function cnt(rows,st){return rows.filter(function(r){return r.st===st}).length}
+function preview(P,S){
+  var rows=S.rows,ok=rows.filter(counted),nw=rows.filter(function(r){return r.st==='new'}),skipBad=rows.filter(function(r){return !counted(r)}),tot=function(a){return a.reduce(function(s,r){return s+r.amt},0)};
+  var c=el('div','st-card');P.appendChild(c);c.appendChild(el('h3',null,S.name));
+  var sm=el('div','hint');sm.style.cssText='font-size:14px;line-height:1.7';
+  var lines=[rows.length+' bill'+(rows.length===1?'':'s')+' read from the file • '+money(tot(rows)),
+    nw.length+' new bill'+(nw.length===1?'':'s')+' → Drafts • '+money(tot(nw))];
+  var oth=ok.length-nw.length;if(oth)lines.push(oth+' already in the app (not added again) — still counted in the Excel');
+  if(skipBad.length||S.bad.length)lines.push('⚠ '+(skipBad.length+S.bad.length)+' line'+(skipBad.length+S.bad.length===1?'':'s')+' NOT taken (see the red lines below)');
+  lines.forEach(function(t){var d=el('div',null,t);if(t.charAt(0)==='⚠'){d.style.color='#a11';d.style.fontWeight='700'}sm.appendChild(d)});c.appendChild(sm);
+  var noLine=nw.filter(function(r){return r.noLine}).length;if(noLine)c.appendChild(el('div','stt warn','⚠ '+noLine+' new bill'+(noLine===1?' has':'s have')+' no Credit Limit line for that customer and company. They are still taken.'));
+  /* company totals */
+  var cs={};ok.forEach(function(r){cs[r.lb]=(cs[r.lb]||0)+r.amt});
+  var ct=el('table','mv-tbl'),h=el('tr');['Company','Bills','Amount'].forEach(function(x){h.appendChild(el('th',null,x))});ct.appendChild(h);
+  Object.keys(cs).forEach(function(k){var tr=el('tr');tr.appendChild(el('td',null,k));tr.appendChild(el('td',null,String(ok.filter(function(r){return r.lb===k}).length)));var a=el('td',null,fm(cs[k]));a.style.textAlign='right';tr.appendChild(a);ct.appendChild(tr)});
+  var tr=el('tr','tot');tr.appendChild(el('td',null,'Total'));tr.appendChild(el('td',null,String(ok.length)));var ta=el('td',null,fm(tot(ok)));ta.style.textAlign='right';tr.appendChild(ta);ct.appendChild(tr);
+  var cw=el('div');cw.style.cssText='overflow-x:auto;margin:10px 0';cw.appendChild(ct);c.appendChild(cw);
+  /* every bill */
+  var wrap=el('div');wrap.style.cssText='overflow-x:auto;margin:10px 0';var tb=el('table','mv-tbl'),hh=el('tr');
+  ['Customer','Company','Document no.','Amount','Posting date','Payment date','Days','Status'].forEach(function(x){hh.appendChild(el('th',null,x))});tb.appendChild(hh);
+  rows.slice().sort(function(a,b){return (a.nmApp||a.nm)>(b.nmApp||b.nm)?1:(a.nmApp||a.nm)<(b.nmApp||b.nm)?-1:(a.lb>b.lb?1:-1)}).forEach(function(r){
+    var tr=el('tr');tr.appendChild(el('td',null,(r.nmApp||r.nm)+' • '+r.cu));tr.appendChild(el('td',null,r.lb||r.co));tr.appendChild(el('td',null,r.bill));
+    var a=el('td',null,fm(r.amt));a.style.textAlign='right';tr.appendChild(a);tr.appendChild(el('td',null,dmy(r.post)));tr.appendChild(el('td',null,dmy(r.due)));tr.appendChild(el('td',null,String(r.days)));
+    var s=el('td');s.appendChild(chip(r.st));if(r.why&&r.st!=='new'){var w=el('div',null,r.why);w.style.cssText='font-size:11px;opacity:.8';s.appendChild(w)}tr.appendChild(s);tb.appendChild(tr)});
+  wrap.appendChild(tb);c.appendChild(wrap);
+  if(S.bad.length){var bx=el('div','stt bad');bx.style.textAlign='left';bx.appendChild(el('div',null,'These lines of the file are NOT taken:'));
+    S.bad.forEach(function(b){bx.appendChild(el('div',null,'• Row '+b.line+(b.bill?' • '+b.bill:'')+(b.nm?' • '+b.nm:'')+' — '+b.why))});c.appendChild(bx)}
+  var act=el('div','od-actions');c.appendChild(act);
+  var go=el('button','st-btn',nw.length?'Save '+nw.length+' bill'+(nw.length===1?'':'s')+' to Drafts + make Excel entries':'Make the Excel entries only (nothing new for Drafts)');go.type='button';
+  if(!ok.length){go.disabled=true;go.textContent='Nothing to save'}
+  var cn=el('button','st-btn od-clear','Cancel');cn.type='button';cn.onclick=function(){draw(null)};act.appendChild(go);act.appendChild(cn);
+  var st=el('div','stt');c.appendChild(st);
+  go.onclick=async function(){
+    var ds=ok.map(function(r){return r.post}).filter(function(d,i,a){return a.indexOf(d)===i}).sort();
+    var q='Bills to Drafts: '+nw.length+' ('+money(tot(nw))+')\nCollection & Order entries for: '+ds.map(dmy).join(', ')+'\n\nNothing is posted now. You post each bill from Drafts.';
+    var yes=window.RDLUI&&RDLUI.ask?await RDLUI.ask({title:'Save this SAP file?',msg:q,ok:'Save'}):confirm(q);if(!yes)return;
+    go.disabled=true;
+    try{var res=apply(rows);try{window.dispatchEvent(new Event('rdl:dcr'))}catch(e){}try{document.dispatchEvent(new Event('visibilitychange'))}catch(e){}
+      draw({done:res,rows:rows,name:S.name,bad:S.bad})}
+    catch(e){go.disabled=false;st.className='stt bad';st.textContent='✗ '+(e&&e.message||'Could not save')}}}
+function done(P,S){
+  var c=el('div','st-card');P.appendChild(c);var r=S.done,to=r.dates[r.dates.length-1];
+  c.appendChild(el('h3',null,'✓ Saved'));
+  c.appendChild(el('p','hint',r.drafts+' bill'+(r.drafts===1?'':'s')+' saved in Drafts • '+r.entries+' customer entr'+(r.entries===1?'y':'ies')+' made for '+r.dates.map(dmy).join(', ')+'.'));
+  var act=el('div','od-actions');c.appendChild(act);var st=el('div','stt');
+  var dl=el('button','st-btn','Download Excel');dl.type='button';
+  dl.onclick=async function(){st.className='stt';st.textContent='Making the file…';try{var x=await makeExcel(to);st.className='stt ok';st.textContent='✓ '+x.days+' day'+(x.days===1?'':'s')+' • '+x.n+' entr'+(x.n===1?'y':'ies')+' downloaded'+(x.r.missing?' • Your official name / SAP ID is not in your Profile yet':'')+(x.r.partial?' • Earlier months could not be loaded from the server':'')}catch(e){st.className='stt bad';st.textContent='✗ '+(e&&e.message||'Could not make the file')}};
+  var dr=el('button','st-btn od-clear','Open Drafts');dr.type='button';dr.onclick=function(){if(R.openDrafts)R.openDrafts()};
+  var co=el('button','st-btn od-clear','Open Collection & Order');co.type='button';co.onclick=function(){if(R.openCOE)R.openCOE()};
+  act.appendChild(dl);act.appendChild(dr);act.appendChild(co);c.appendChild(st)}
+R.openSapUpload=function(){if(window.RDL_ROLE==='admin')return;if(!page())return;draw(null);showPg()};
+window.RDL_SAP={parse:parseSap,analyze:analyze,apply:apply,makeExcel:makeExcel};
+})();
 </script>
 
 </body>
