@@ -3981,7 +3981,7 @@ function manualPage(P,ttl,bk){
     /* Combined (optional): only for Cheque / BEFTN */
     const cw=el('label','cl-comb');cw.appendChild(el('span',null,'Combined'));const ck=el('input');ck.type='checkbox';cw.appendChild(ck);cw.style.display='none';body.appendChild(cw);
     const cdet=el('details','od-company-box'),csum=el('summary'),copt=el('div','od-company-options');cdet.appendChild(csum);cdet.appendChild(copt);const cF=G('Company Code (tick every company this payment covers)',cdet,true);
-    const bdet=el('details','od-company-box'),bsum=el('summary'),bopt=el('div','od-company-options');bdet.appendChild(bsum);bdet.appendChild(bopt);G('Against Bill',bdet);
+    const bdet=el('details','od-company-box'),bsum=el('summary'),bopt=el('div','od-company-options');bdet.appendChild(bsum);if(window.RDLSelUI)bdet.appendChild(RDLSelUI.btns(()=>RDLSelUI.tick(bopt,true),()=>RDLSelUI.tick(bopt,false)));bdet.appendChild(bopt);G('Against Bill',bdet);
     /* Selected Amount (fixed) -> Collected Amount (+ tick: same as Selected) -> status -> TDS (auto, red minus) */
     const sa=el('input','list-search');sa.type='text';sa.readOnly=true;sa.placeholder='Tick bills to see the selected amount';G('Selected Amount',sa);
     const am=el('input','list-search');am.type='number';am.step='any';am.placeholder='Collected amount';
@@ -4293,7 +4293,7 @@ function buildDrafts(kind){const P=$('#drf');P.textContent='';const L=ld(),all0=
         mkB('Delete','st-btn od-clear').onclick=async()=>{const ok=window.RDLUI&&RDLUI.ask?await RDLUI.ask({title:'Delete this draft?',msg:(d.nm||d.cu)+' • '+money(d.col+d.tds)+'. The bill stays open.',ok:'Delete'}):confirm('Delete this draft?');if(!ok)return;const L2=ld();window.RDLDDEL&&RDLDDEL(L2,[d.id]);L2.dr=(L2.dr||[]).filter(e=>e.id!==d.id);try{sv(L2)}catch(e){return}buildDrafts(kind)};
         bd.appendChild(act);bd.appendChild(stt)});
       row.appendChild(ft);gx.appendChild(row);cks.push({ck:cck,blks,row,totUp})});
-    gx.appendChild(bulkBar(gx,gck,cks,()=>buildDrafts(kind)));card0.appendChild(gx)})}
+    gx.appendChild(bulkBar(gx,gck,cks,()=>buildDrafts(kind)));card0.appendChild(gx)});window.RDLSelUI&&RDLSelUI.bar(card0)}
 /* ===== SALES DRAFTS: Quick Sales bills wait here; the RV number is given only when you press Post ===== */
 function salesDrafts(P){
   const L=ld(),sd=(L.sd||[]).slice().sort((a,b)=>b.at-a.at),t=ymd(new Date()),dm=v=>v?v.slice(8,10)+'/'+v.slice(5,7)+'/'+v.slice(0,4):'\u2014';
@@ -4334,7 +4334,7 @@ function salesDrafts(P){
         mkB('Delete','st-btn od-clear').onclick=async()=>{const ok=window.RDLUI&&RDLUI.ask?await RDLUI.ask({title:'Delete this draft?',msg:(d.nm||d.cu)+' \u2022 '+money(d.amt)+'.',ok:'Delete'}):confirm('Delete this draft?');if(!ok)return;const L2=ld();window.RDLDDEL&&RDLDDEL(L2,[d.id]);L2.sd=(L2.sd||[]).filter(e=>e.id!==d.id);try{sv(L2)}catch(e){return}buildDrafts('Sales')};
         bd.appendChild(act);bd.appendChild(stt)});
       row.appendChild(ft);gx.appendChild(row);cks.push({ck:cck,blks,row,totUp})});
-    gx.appendChild(bulkBar(gx,gck,cks,()=>buildDrafts('Sales')))})}
+    gx.appendChild(bulkBar(gx,gck,cks,()=>buildDrafts('Sales')))});window.RDLSelUI&&RDLSelUI.bar(card0)}
 function draftHub(P,all0){
   const money0=v=>money(v),PAL={g:['#fff','#d8f7ea','#a5e6cb','#34d399','#0b9a62','#065f46','#0b9a6255'],b:['#fff','#dbeafe','#a9c9f5','#4f9bff','#1650d8','#0f3ca3','#1650d855'],v:['#f8f4ff','#e3d8fb','#d0c0f3','#9a88f5','#6a52d9','#33248a','#6a52d966']};
   const sd0=(ld().sd||[]),box=(title,n,tot,none)=>{const c=P.appendChild(el('div','st-card hubf '+(title==='Sales'?'hub-s':'hub-c'))),h=el('h3',null,title);h.style.cssText='text-align:center;font-size:18px;font-weight:800';c.appendChild(h);
@@ -10749,5 +10749,55 @@ html body #home .tw2.two .pch-t b,html body #home .tw2.two .qa .card.cya h4{font
 html body #home .tw2.two .pch-t small,html body #home .tw2.two .qa .card.cya p{min-height:46px!important;padding:7px 9px!important}
 }
 </style>
+<style id="sapSkin">/* SAP Fiori style skin: Quick Collection, Review Collection Draft, Pending Drafts, Pending Collections (soft colours, no logic changes) */
+html body .sap .st-top{background:linear-gradient(#e8f1fd,#d3e4f7);border-bottom:2px solid #2f7fd0;border-radius:10px 10px 0 0;padding:10px 12px;margin:0 0 10px}
+html body .sap .st-top h2{font-size:17px;font-weight:700;color:#1d3b5c}
+html body .sap .st-top button{border-radius:6px;border:1px solid #bcd3ee;background:#fff;color:#2f7fd0}
+html body .sap .st-card{background:#fff;border:1px solid #dde5ee;border-radius:10px;box-shadow:0 1px 2px #0000000d;padding:12px}
+html body .sap .st-card h3,html body .sap .st-card h3.rv-ttl,html body .sap .hubf>h3{font-size:15px!important;font-weight:700;color:#24303c;text-align:left!important}
+html body .sap .st-card .hint,html body .sap .cl-head div{color:#66727f}
+html body .sap .st-btn{background:#2f7fd0;border-radius:6px;padding:10px;font-size:14px;font-weight:600;box-shadow:none}
+html body .sap .st-btn.od-clear{background:#fff;color:#2f7fd0;border:1px solid #2f7fd0}
+html body .sap .st-btn.danger{background:#fde8e8!important;color:#b3261e;border:1px solid #b3261e}
+html body .sap .list-search{border:1px solid #c5cfda;border-radius:6px;background:#fff;box-shadow:none}
+html body .sap .cl-f small{color:#66727f;font-weight:600}
+html body .sap .cg{border:1px solid #dde5ee;border-radius:10px;box-shadow:0 1px 2px #0000000d;padding:0;overflow:hidden}
+html body .sap .cg>.cg-h{background:#e3eefc;border:0;border-radius:0;margin:0;padding:10px 12px;flex-direction:row;justify-content:flex-start;text-align:left;box-shadow:none}
+html body .sap .cg>.cg-h b{color:#1d3b5c!important;text-align:left;width:auto;font-size:15px;flex:1}
+html body .sap .cg>.cg-h .cg-n{color:#2f7fd0;align-self:center}
+html body .sap .cg-co{border:0;border-top:1px solid #dde5ee;border-radius:0;box-shadow:none;margin:0;background:#fff}
+html body .sap .cg-co>.cg-ch{background:#efeafb}
+html body .sap .cg-co>.cg-ch b,html body .sap .cg-co .cg-ck{color:#5a3f9c}
+html body .sap .cg-ft{background:#e3f4e8;color:#1f6b3a}
+html body .sap .cl-card,html body .sap .cg-co>.cg-b .cl-card{background:#fff;border:1px solid #e4e9f0;border-radius:8px}
+html body .sap .cl-head b{color:#24303c}
+html body .sap .dr-bulk{background:#eef5fd;border-top:2px solid #2f7fd0}
+html body .sap .dr-bi{color:#24303c}
+html body .sap .dr-ck{accent-color:#2f7fd0}
+html body .sap .dr-c{text-align:left}
+html body .sap .hubf,html body .sap .hub-s{background:#fff;border:1px solid #dde5ee;box-shadow:0 1px 2px #0000000d;border-radius:10px}
+html body .sap .hubf>div[style*="grid"]>.st-btn{background:#fff!important;border:1px solid #dde5ee!important;border-left:4px solid #2f7fd0!important;border-radius:8px!important;box-shadow:none!important;padding:10px 12px!important;font-size:15px!important}
+html body .sap .hubf>div[style*="grid"]>.st-btn>span:first-child{background:#2f7fd0!important;box-shadow:none!important;width:34px!important;height:34px!important}
+html body .sap .hub-c>div[style*="grid"]>.st-btn:nth-child(1){border-left-color:#4cb36b!important}
+html body .sap .hub-c>div[style*="grid"]>.st-btn:nth-child(2){border-left-color:#4a90d9!important}
+html body .sap .hub-c>div[style*="grid"]>.st-btn:nth-child(3){border-left-color:#8a6fdc!important}
+html body .sap .hub-s>div[style*="grid"]>.st-btn{border-left-color:#e0a030!important}
+html body .sap .rv-b{--bg:#e6f0fc;--bd:#c8dcf5;--dv:#9bbbe6;--tx:#1c5aa8}
+html body .sap .rv-a{--bg:#fdf3dc;--bd:#f1dca0;--dv:#e0b44a;--tx:#8a5a00}
+html body .sap .rv-i{--bg:#e3f4e8;--bd:#bfe3c9;--dv:#7cc592;--tx:#1f6b3a}
+html body .sap .rv-v{--bg:#ece6fb;--bd:#d3c8f3;--dv:#a590e0;--tx:#5a3f9c}
+html body .sap .rv-t{--bg:#e0f3f2;--bd:#b5e0dd;--dv:#6fc4bf;--tx:#1d6f6a}
+html body .sap .rv-r{--bg:#fde8ec;--bd:#f5c3cd;--dv:#e58aa0;--tx:#b3261e}
+html body .sap .st-card.wk-box{background:#e8f1fd;border:1px solid #c8dcf5;border-left:4px solid #2f7fd0;box-shadow:none}
+html body .sap .st-card.wk-box.today{background:#e3f4e8;border-color:#bfe3c9;border-left-color:#4cb36b}
+.sel-bar{display:flex;gap:8px;margin:6px 0 10px;padding:0 2px}
+.sel-b{flex:none;border:1px solid #2f7fd0;background:#e6f1fd;color:#2f7fd0;border-radius:6px;padding:6px 12px;font-size:12.5px;font-weight:600}
+</style>
+<script>(function(){var mk=function(t,c,x){var e=document.createElement(t);if(c)e.className=c;if(x)e.textContent=x;return e};
+window.RDLSelUI={
+btns:function(a,n){var b=mk('div','sel-bar');[['Select all',a],['Deselect all',n]].forEach(function(p){var x=mk('button','sel-b',p[0]);x.type='button';x.onclick=function(e){e.preventDefault();e.stopPropagation();p[1]()};b.appendChild(x)});return b},
+tick:function(root,v,sel){root.querySelectorAll(sel||'input[type=checkbox]').forEach(function(i){if(i.disabled||i.checked===v)return;i.checked=v;i.dispatchEvent(new Event('change'))})},
+bar:function(card){var s=this,f=card.querySelector('.cg');if(!f||card.querySelector('.sel-bar'))return;card.insertBefore(s.btns(function(){s.tick(card,true,'.cg>.cg-h .dr-ck')},function(){s.tick(card,false,'.cg>.cg-h .dr-ck')}),f)}};
+['collection','drf'].forEach(function(i){var e=document.getElementById(i);if(e)e.classList.add('sap')})})();</script>
 </body>
 </html>
