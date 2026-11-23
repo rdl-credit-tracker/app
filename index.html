@@ -7717,6 +7717,15 @@ function drawD(){const B=DP.body;B.textContent='';
     tx.appendChild(x);tr.appendChild(tx);return tr}
   rows.forEach(r=>tb.appendChild(mkRow(r)));
   tcard.appendChild(msg);
+  /* Save DCR button: saves every finished row, then opens the DCR report of that date */
+  {const sc=el('div','st-card'),srow=el('div','od-actions'),svb=el('button','st-btn co-b co-p');svb.type='button';
+   svb.innerHTML='<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h11l3 3v13H5zM8 4v5h7M8 20v-6h8v6"/></svg><span>Save DCR</span>';
+   svb.onclick=()=>{
+     for(let i=0;i<rows.length;i++){const r=rows[i];if(isBlank(r)||(r.saved&&!r.dirty))continue;const c=chk(r);if(!c.ok){setMsg('\u2717 Row '+(i+1)+': '+c.err+' \u2014 not saved yet','bad');return}}
+     commit();
+     if(!vOf(DV.date).length){setMsg('\u2717 No DCR visit to save for '+dd(DV.date),'bad');return}
+     const d=DV.date;if(R.openDailyReport)R.openDailyReport();RP.tab='dcr';RP.date=d;DCT.from=DCT.to=d;drawRP()};
+   srow.appendChild(svb);sc.appendChild(srow);B.appendChild(sc)}
   /* ---- automatic saving (no Submit): a finished visit row is added to "My DCR table" below as soon as the next row is started, when the table is left, or when the date is changed ---- */
   const tw=el('div'),sumEl=el('div','mv-day');
   const paintSum=()=>{const L=vOf(DV.date),s=stats(L);sumEl.textContent=dow(DV.date)+', '+dd(DV.date)+(DV.date===today()?' • Today':'')+' • '+s.n+' visit'+(s.n===1?'':'s')+' • '+s.c+' customer'+(s.c===1?'':'s')+' • '+dur(s.m)};
@@ -7736,6 +7745,9 @@ function drawD(){const B=DP.body;B.textContent='';
     commit(k)});
   tcard.addEventListener('focusout',e=>{const n=e.relatedTarget;if(n&&tcard.contains(n))return;setTimeout(()=>commit(),0)});
   DS.commit=()=>commit();
+  /* SAFETY: a finished row is also saved (1) shortly after typing stops and (2) the moment any button outside the table is pressed (Back arrow, bottom menu, tabs) - before the app leaves this page */
+  {let sdt=0;tcard.addEventListener('input',()=>{clearTimeout(sdt);sdt=setTimeout(()=>{try{commit()}catch(e){}},700)})}
+  if(!DS.gd){DS.gd=1;window.addEventListener('pointerdown',e=>{const pg=document.getElementById('dcrp');if(!pg||!pg.classList.contains('on')||!DS.commit)return;const t=e.target;if(t&&t.closest&&t.closest('#dcrp .co-tcard'))return;try{DS.commit()}catch(x){}},true)}
   if(!DS.vh){DS.vh=1;document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'&&DS.commit)try{DS.commit()}catch(e){}})}
   }
 function openDF(v,edit){v=v||{};const B=DF.body;B.textContent='';DF.h.textContent=edit?'Edit visit':'Add visit';const box=el('div','st-card');B.appendChild(box);
