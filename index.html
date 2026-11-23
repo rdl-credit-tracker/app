@@ -325,6 +325,33 @@ button.cu-chip.od{cursor:pointer}
 .rq::-webkit-scrollbar{display:none}
 .rq button{flex:none;scroll-snap-align:start;border:1px solid #cfe0f6;background:#fff;color:#12306b;border-radius:18px;padding:8px 15px;font-size:13.5px;font-weight:600;font-family:inherit;white-space:nowrap;cursor:pointer}
 .rq button.on{background:linear-gradient(135deg,#0a49b5,#1a73e8);color:#fff;border-color:transparent;box-shadow:0 2px 8px -2px #0a49b5aa}
+/* ===== SAP-STYLE COMPACT SKIN (shared): Quick Collection, Review Draft, Pending Collections/Drafts. Scoped to .sap ===== */
+.sap{font-size:12px}
+.sap .st-card,.sap .ci2{border-radius:6px!important;padding:8px 10px!important;margin:0 0 6px!important;box-shadow:none!important;border:1px solid #b9c7d8!important}
+.sap h3{font-size:13px!important;margin:0 0 4px!important;text-align:left!important;padding:2px 6px;background:#dbe6f2;border-radius:3px;color:#1b3a5c}
+.sap .cl-f{margin:0 0 4px!important}.sap .cl-f small,.sap label{font-size:10.5px!important}
+.sap .list-search,.sap select,.sap input:not([type=checkbox]){height:28px!important;min-height:0!important;font-size:12px!important;padding:2px 8px!important;border-radius:3px!important}
+.sap .stt{font-size:11px!important;padding:3px 8px!important;margin:3px 0!important;border-radius:3px!important}
+.sap .rvx>div{padding:4px 8px!important;border-radius:3px!important}.sap .rvx small{font-size:10px!important}.sap .rvx strong{font-size:12px!important}
+.sap .cg-co,.sap .cg-b,.sap .cg-h{border-radius:4px!important;padding-top:4px!important;padding-bottom:4px!important;margin-top:4px!important}
+.sap .st-btn{position:sticky;bottom:84px;z-index:6;height:32px!important;font-size:13px!important;border-radius:4px!important;padding:0 12px!important}
+.sap .od-company-box summary{padding:4px 8px!important;font-size:12px!important}
+.sap-tbl{width:100%;border-collapse:collapse;font-size:12px}.sap-tbl th{background:#dbe6f2;color:#1b3a5c;text-align:left;padding:3px 6px;position:sticky;top:0}
+.sap-tbl td{padding:3px 6px;height:30px;border-bottom:1px solid #d5dfeb;white-space:nowrap}.sap-tbl td.n{text-align:right;font-variant-numeric:tabular-nums}
+.sap-tbl tr.tot td{font-weight:700;border-top:2px solid #1b3a5c}.sap-tbl td:first-child,.sap-tbl th:first-child{position:sticky;left:0;background:#eef3f9}
+.sap-wrap{overflow-x:auto}
+/* --- SAP table look for existing lists --- */
+.sap .od-company-box{border:1px solid #b9c7d8!important;border-radius:3px!important;background:#fff!important}
+.sap .od-company-options{padding:0!important;max-height:none!important}
+.sap .od-company-options>label.pb-row{display:flex!important;flex-wrap:wrap;align-items:center;gap:4px 8px;min-height:30px;padding:3px 8px!important;margin:0!important;border:0!important;border-bottom:1px solid #d5dfeb!important;border-radius:0!important;background:#fff!important;font-size:12px!important;font-variant-numeric:tabular-nums}
+.sap .od-company-options>label.pb-row:nth-child(even){background:#f1f5fa!important}
+.sap .od-company-options>label.pb-row input[type=checkbox]{width:16px;height:16px;margin:0}
+.sap .od-company-options>label.pb-row:has(input:checked){background:#dbe6f2!important;font-weight:600}
+.sap .cl-card{border-radius:4px!important;padding:6px 8px!important;margin:4px 0!important;box-shadow:none!important;border:1px solid #b9c7d8!important}
+.sap .cl-head{padding:0 0 4px!important}.sap .cl-head b{font-size:12.5px!important}.sap .cl-head div{font-size:10.5px!important;margin:0!important}
+.sap .cl-body{display:grid!important;grid-template-columns:1fr 1fr;gap:2px 8px}
+.sap .cl-body>.stt,.sap .cl-body>.hint,.sap .cl-body>.od-actions,.sap .cl-body>.cl-f:nth-child(1){grid-column:1/-1}
+.sap .cg-ft{font-size:12px!important;font-weight:700;padding:4px 8px!important;border-top:2px solid #1b3a5c!important}
 </style>
 <style>
 /* ===== CARD ARROWS: bold SVG arrow, exactly centred in its circle ===== */
@@ -3950,7 +3977,7 @@ window.addEventListener('popstate',()=>{
   mState=0;render('c')});
 /* ---------- Collection By Manually: the same options as the Collection & Order collection update, but typed in by hand ---------- */
 function manualPage(P,ttl,bk){
-  const m=R.master,EPS=0.005,t0=today();const formBack=()=>mState===1?history.back():window.RDL.openUpload();ttl.textContent='Quick Collection';bk.onclick=formBack;
+  P.classList.add('sap');const m=R.master,EPS=0.005,t0=today();const formBack=()=>mState===1?history.back():window.RDL.openUpload();ttl.textContent='Quick Collection';bk.onclick=formBack;
   const form=P.appendChild(el('div')),pv=P.appendChild(el('div'));pv.style.display='none';
   const byDue=(a,b)=>(a.post||'')<(b.post||'')?-1:(a.post||'')>(b.post||'')?1:(a.due||'')<(b.due||'')?-1:(a.due||'')>(b.due||'')?1:String(a.bill)<String(b.bill)?-1:1;  /* oldest Posting date first, same as the date shown in the list */
   const dmy=v=>v?v.slice(8,10)+'/'+v.slice(5,7)+'/'+v.slice(0,4):'—';
@@ -3981,7 +4008,7 @@ function manualPage(P,ttl,bk){
     /* Combined (optional): only for Cheque / BEFTN */
     const cw=el('label','cl-comb');cw.appendChild(el('span',null,'Combined'));const ck=el('input');ck.type='checkbox';cw.appendChild(ck);cw.style.display='none';body.appendChild(cw);
     const cdet=el('details','od-company-box'),csum=el('summary'),copt=el('div','od-company-options');cdet.appendChild(csum);cdet.appendChild(copt);const cF=G('Company Code (tick every company this payment covers)',cdet,true);
-    const bdet=el('details','od-company-box'),bsum=el('summary'),bopt=el('div','od-company-options');bdet.appendChild(bsum);bdet.appendChild(bopt);G('Against Bill',bdet);
+    const bdet=el('details','od-company-box'),bsum=el('summary'),bopt=el('div','od-company-options');bdet.appendChild(bsum);bdet.appendChild(bopt);G('Against Bill',bdet);bdet.open=true;
     /* Selected Amount (fixed) -> Collected Amount (+ tick: same as Selected) -> status -> TDS (auto, red minus) */
     const sa=el('input','list-search');sa.type='text';sa.readOnly=true;sa.placeholder='Tick bills to see the selected amount';G('Selected Amount',sa);
     const am=el('input','list-search');am.type='number';am.step='any';am.placeholder='Collected amount';
@@ -4075,7 +4102,7 @@ function manualPage(P,ttl,bk){
       groups.push({o,nm,col,tds,ps});ps.forEach(x=>parts.push(x))}
     if(!groups.length)return err('Nothing to post');
     st.textContent='';st.className='stt';
-    form.style.display='none';pv.style.display='';pv.textContent='';ttl.textContent='Review Collection Draft';mBack=back;window.RDLNav&&RDLNav.level('c',2,back);const detBack=()=>mState===2?history.back():back();bk.onclick=detBack;
+    P.classList.add('sap');form.style.display='none';pv.style.display='';pv.textContent='';ttl.textContent='Review Collection Draft';mBack=back;window.RDLNav&&RDLNav.level('c',2,back);const detBack=()=>mState===2?history.back():back();bk.onclick=detBack;
     /* ---------- Manually Collection Details: same layout as Sales & Collection Details ---------- */
     let gc=0,gt=0;groups.forEach(g=>{gc+=g.col;gt+=g.tds});
     const cd0=P.querySelector('.st-card');if(cd0&&!pv.contains(cd0))cd0.style.display='none';  /* the form's top box is replaced by the two boxes below */
@@ -4240,7 +4267,7 @@ function bulkBar(gx,gck,cks,rebuild){
     msg.className='stt warn';msg.textContent=done+' posted • '+left+' could not be posted and stay in draft (see the red message under each one).';upd()};
   upd();return bar}
 function buildDrafts(kind){const P=$('#drf');P.textContent='';const L=ld(),all0=(L.dr||[]).slice().sort((a,b)=>b.at-a.at),dr=kind?all0.filter(e=>String(e.type||'').toLowerCase()===kind.toLowerCase()):all0,m=R.master,t=ymd(new Date()),EPS=0.005,dm=v=>v?v.slice(8,10)+'/'+v.slice(5,7)+'/'+v.slice(0,4):'—';
-  const top=el('div','st-top'),bb=el('button');bb.type='button';bb.innerHTML=BKS;bb.setAttribute('aria-label','Back');bb.onclick=kind?()=>buildDrafts():()=>window.RDL.openUpload();top.appendChild(bb);top.appendChild(el('h2',null,kind==='Sales'?'Pending Sales':kind?'Pending Collections ('+kind+')':'Pending Drafts'));P.appendChild(top);
+  P.classList.add('sap');const top=el('div','st-top'),bb=el('button');bb.type='button';bb.innerHTML=BKS;bb.setAttribute('aria-label','Back');bb.onclick=kind?()=>buildDrafts():()=>window.RDL.openUpload();top.appendChild(bb);top.appendChild(el('h2',null,kind==='Sales'?'Pending Sales':kind?'Pending Collections ('+kind+')':'Pending Drafts'));P.appendChild(top);
   if(!kind){draftHub(P,all0);return}
   if(kind==='Sales'){salesDrafts(P);return}
   if(!dr.length){P.appendChild(el('p','hint','No '+kind+' drafts. '+kind+' collections from Review Upload wait here until you post them.'));return}
