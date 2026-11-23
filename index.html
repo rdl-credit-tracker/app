@@ -6232,11 +6232,17 @@ function openDF(label,cur,items,apply){
   sh.style.cssText='--th:#4d7c0f;--t1:#f7fee7;--t2:#ecfccb;--tbd:#8fba4a';h4.style.color='#365314';   /* same colours as the Customer Statement tables */
   const sel=new Set(cur||[]),ls=el('div','fp-ls');ls.style.borderColor='#8fba4a';
   if(!items.length)ls.appendChild(el('div','cu-empty','Nothing to select.'));
-  items.forEach(([v,lab,sub,col],n)=>{const l=el('label'),i=el('input');i.type='checkbox';i.checked=sel.has(v);i.onchange=()=>{if(i.checked)sel.add(v);else sel.delete(v)};
+  const cbs=[];let syncAll=()=>{};
+  items.forEach(([v,lab,sub,col],n)=>{const l=el('label'),i=el('input');i.type='checkbox';i.checked=sel.has(v);cbs.push([i,v]);i.onchange=()=>{if(i.checked)sel.add(v);else sel.delete(v);syncAll()};
     l.style.cssText='background:'+(n%2?'#ecfccb':'#f7fee7')+';border-bottom:1px solid #cfe3a6;margin:0 -10px;padding:9px 10px';i.style.accentColor='#4d7c0f';l.appendChild(i);
     const tx=el('span',null,Array.isArray(lab)?lab[0]:lab);tx.style.cssText='font-weight:700;color:'+(col||'#10285c');l.appendChild(tx);
     if(Array.isArray(lab)&&lab[1]){const co=el('span',null,lab[1]);co.style.cssText='font-weight:700;font-size:12.5px;color:'+(col==='#c0182f'||col==='#9a6200'||col==='#b5122f'?col:'#10285c');l.appendChild(el('span',null,'\u2022')).style.color='#8fa3c4';l.appendChild(co)}   /* company name: the table's company colour */
     if(sub){const sm=el('small',null,sub);sm.style.cssText='margin-left:auto;color:#0a3f9e;font-size:11px;font-weight:700;text-align:right';l.appendChild(sm)}ls.appendChild(l)});
+  if(items.length){const al=el('label','fp-all'),ai=el('input');ai.type='checkbox';ai.style.accentColor='#4d7c0f';
+    al.style.cssText='background:#d9f99d;border-bottom:2px solid #8fba4a;margin:-4px -10px 0;padding:10px 10px;position:sticky;top:-4px;z-index:2;font-weight:800;color:#365314';
+    al.appendChild(ai);al.appendChild(el('span',null,'Select All'));ls.insertBefore(al,ls.firstChild);
+    syncAll=()=>{ai.checked=cbs.length>0&&cbs.every(c=>c[0].checked)};syncAll();
+    ai.onchange=()=>{cbs.forEach(c=>{c[0].checked=ai.checked;if(ai.checked)sel.add(c[1]);else sel.delete(c[1])})}}   /* tap once = everything ticked; then un-tick the few you do not want */
   sh.appendChild(ls);
   const bt=el('div','fp-bt'),ap=el('button','st-btn','Submit'),cl=el('button','st-btn od-clear','Clear'),cx=el('button','st-btn od-clear','Close');[ap,cl,cx].forEach(x=>{x.type='button';bt.appendChild(x)});sh.appendChild(bt);
   ap.style.cssText='background:#4d7c0f!important;color:#fff!important;border:0';
@@ -6362,7 +6368,7 @@ function showResult(res){
       const q=el('tr','row-ok cs-tot');nameCell(q,'Total');td(q,'',{});
       if(isS){td(q,'',{});td(q,money(dt.ra),{chip:'cn2 cb',cls:'num'});td(q,money(list.reduce((s0,x)=>s0+(x.col||0),0)),{chip:'cn2',cls:'num'});td(q,money(list.reduce((s0,x)=>s0+(x.tds||0),0)),{chip:'cn2',cls:'num'});td(q,money(sb),{chip:'cn2 cb',cls:'num'});td(q,'',{})}else{td(q,'',{});td(q,'',{});td(q,'',{});td(q,'',{});td(q,money(dt.col),{chip:'cn2',cls:'num'});td(q,money(dt.tds),{chip:'cn2',cls:'num'});td(q,'',{});td(q,money(dt.col+dt.tds),{chip:'cn2 cb',cls:'num'})}
       db.appendChild(q);if(isS)totalSummary(db,list)};
-    render();detHost.scrollIntoView({behavior:'smooth',block:'nearest'})}};
+    render()}};
   const pc=(a,t)=>(t?Math.round(a/t*1000)/10:0)+'%';
 
   const compact=n=>{n=Math.round(n||0);const a=Math.abs(n),t=v=>v.toFixed(2).replace(/\.?0+$/,'');return a>=1e7?t(n/1e7)+' Cr':a>=1e5?t(n/1e5)+' L':a>=1e3?t(n/1e3)+'k':String(n)};
@@ -6509,7 +6515,7 @@ function showResult(res){
           if(b.due){const dv=Math.round((new Date(TD+'T00:00:00')-new Date(b.due+'T00:00:00'))/864e5);td(q,__d(dv),{chip:dv>0?'g3':dv>=-7?'g1':'g0',cls:'c-arr'})}else td(q,'—',{chip:'cl',cls:'c-arr'});
           let ex='—';const av=avOf(b);if(av!=null&&b.post){const e=new Date(b.post+'T00:00:00');e.setDate(e.getDate()+av);ex=dd(ymd(e))}td(q,ex,{chip:'cd'});ob2.appendChild(q)});
         const q=el('tr','row-ok cs-tot');nameCell(q,'Total');td(q,'',{});td(q,'',{});td(q,money(tb),{chip:'cn2 cb',cls:'num'});td(q,'',{});td(q,'',{});ob2.appendChild(q)}
-      detHost.scrollIntoView({behavior:'smooth',block:'nearest'})};
+      };
     {const first=res.querySelector('.st-card');if(first&&first!==pcard)res.insertBefore(pcard,first)}
     if(ana){res.insertBefore(ana,pcard);pcard._pair=ana}   /* Collection Analysis is the first table */
     if(strip.children.length>1)(REG?pcard:ana).appendChild(strip);   /* Payment Type now sits under Collection Analysis */
@@ -7720,10 +7726,9 @@ function drawD(){const B=DP.body;B.textContent='';
   rows.forEach(r=>tb.appendChild(mkRow(r)));
   tcard.appendChild(msg);
   /* Save DCR = keep it on this phone and look at the report (still editable). Post DCR = final: sent to the admin and locked */
-  {const sc=el('div','st-card'),srow=el('div','od-actions'),svb=el('button','st-btn co-b co-s'),pob=el('button','st-btn co-b co-p');svb.type=pob.type='button';
+  {const sc=el('div','st-card'),srow=el('div','co-acts'),svb=el('button','st-btn co-b co-s'),pob=el('button','st-btn co-b co-s');svb.type=pob.type='button';
    const ic='<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none">';
    svb.innerHTML=ic+'<path d="M5 4h11l3 3v13H5zM8 4v5h7M8 20v-6h8v6"/></svg><span>Save to app only</span>';pob.innerHTML=ic+'<path d="M4 12l16-8-6 16-3-7z"/></svg><span>Send to Admin</span>';
-   svb.style.cssText=pob.style.cssText='display:inline-flex;align-items:center;justify-content:center;gap:6px';
    const bad=()=>{for(let i=0;i<rows.length;i++){const r=rows[i];if(isBlank(r)||(r.saved&&!r.dirty))continue;const c=chk(r);if(!c.ok){setMsg('✗ Row '+(i+1)+': '+c.err+' — not saved yet','bad');return true}}return false};
    svb.onclick=()=>{
      if(bad())return;
@@ -8123,7 +8128,7 @@ function openD(){if(window.RDL_ROLE==='admin')return;dcrPC=0;DS.open=false;DV.da
 /* ===== Posting Center: "Daily CO & DCR Entry" (entry / upload only, with today's status) and "Daily CO & DCR Report" (tables, reports, Excel). User accounts only. ===== */
 const DE=mkPage('dcen','Daily CO & DCR Entry',()=>{if(R.openUpload)R.openUpload()}),DRP=mkPage('dcre','Daily CO & DCR Report',()=>{if(R.openUpload)R.openUpload()});
 const RP={date:'',tab:'co'};
-(function(){const s=document.createElement('style');s.textContent='.co-tbl tr.co-hid{display:none}.co-pb{background:#dcf5e7!important;color:#0b7a4b!important}.co-x.co-ok{background:#16a34a!important;color:#fff!important;border-radius:50%!important;font-size:16px!important}.co-tbl.co-show tr.co-hid{display:table-row}.co-tg{display:block;width:100%;box-sizing:border-box;margin:0;padding:10px 12px;border:0;border-bottom:1px solid #c9d9f1;background:#eaf2ff;color:#0a3fa8;font:inherit;font-size:13px;font-weight:800;text-align:left;cursor:pointer}.up-st{display:block;margin-top:5px;font-size:12px;font-weight:800;color:#0b7a4b}.up-st.no{color:#8a6d00}.rp-tt{font-size:13px;font-weight:700;margin:2px 0 6px}';document.head.appendChild(s)})();
+(function(){const s=document.createElement('style');s.textContent='.co-tbl tr.co-hid{display:none}.co-pb{background:#dcf5e7!important;color:#0b7a4b!important}.co-x.co-ok{background:#16a34a!important;color:#fff!important;border-radius:50%!important;font-size:10px!important;width:16px!important;height:16px!important;min-width:0!important;padding:0!important;display:inline-flex!important;align-items:center;justify-content:center;line-height:1!important;cursor:default}.co-tbl.co-show tr.co-hid{display:table-row}.co-tg{display:block;width:100%;box-sizing:border-box;margin:0;padding:10px 12px;border:0;border-bottom:1px solid #c9d9f1;background:#eaf2ff;color:#0a3fa8;font:inherit;font-size:13px;font-weight:800;text-align:left;cursor:pointer}.up-st{display:block;margin-top:5px;font-size:12px;font-weight:800;color:#0b7a4b}.up-st.no{color:#8a6d00}.rp-tt{font-size:13px;font-weight:700;margin:2px 0 6px}';document.head.appendChild(s)})();
 /* what has been entered / uploaded today (the sales day the entry pages open on counts as today's work) */
 function entryStatus(){
   const t=today(),sd=R.salesDay?R.salesDay():t,days=[t,sd].filter((d,i,a)=>a.indexOf(d)===i),X=coGet();let man=0,sap=0,sb=0;
