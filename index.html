@@ -4601,9 +4601,8 @@ function buildUpload(){
    ['Quick Collection','Type a collection in by hand','b','i-wal',()=>openManual('c')],
    ['Quick Sales','Type a sales bill in by hand','g','i-sales',()=>openManual('s')],
    ['Drafts ('+(dr.length+sdN)+')',dr.length+sdN?dr.length+' collection'+(dr.length===1?'':'s')+' \u2022 '+sdN+' sales waiting to be posted':'Collections and sales waiting to be posted','a','i-stmt',()=>window.RDL.openDrafts(),1],
-   ['Daily Collection & Order','Every day: upload the Excel file, or enter business wise sales & collection and make the Excel','v','i-upl',()=>{if(window.RDL.openCOE)window.RDL.openCOE();else if(window.RDL_openSet)window.RDL_openSet('setdcr')},1],
-   ['Daily Collection & Order (SAP)','Upload the SAP sales file: bills go to Drafts with their real document numbers, and the same Excel is made','b','i-upl',()=>{if(window.RDL.openSapUpload)window.RDL.openSapUpload()},1],
-   ['DCR Entry','Daily Call Report \u2014 customers visited, time spent, Excel','g','i-clock',()=>{if(window.RDL.openVisitsPC)window.RDL.openVisitsPC()},1]].forEach(([t,sub,k,ic,fn,wide])=>{
+   ['Daily CO & DCR Entry','Collection & Order (manual or SAP) and DCR \u2014 entry and upload only','v','i-upl',()=>{if(window.RDL.openDailyEntry)window.RDL.openDailyEntry()},1],
+   ['Daily CO & DCR Report','Collection & Order and DCR tables, reports and Excel','g','i-doc',()=>{if(window.RDL.openDailyReport)window.RDL.openDailyReport()},1]].forEach(([t,sub,k,ic,fn,wide])=>{
     const K=C[k],b=el('button','up-b'+(wide?' wide':''));b.type='button';
     b.style.cssText='color:'+K[5]+';background:linear-gradient(135deg,'+K[0]+','+K[1]+');border-color:'+K[2]+';box-shadow:0 8px 14px -9px '+K[6]+',inset 0 2px 0 #ffffffcc';
     const i=el('span','up-i');i.style.cssText='background:linear-gradient(135deg,'+K[3]+','+K[4]+');box-shadow:0 3px 0 '+K[4]+'66';i.innerHTML='<svg viewBox="0 0 24 24"><use href="#'+ic+'"/></svg>';
@@ -7664,7 +7663,7 @@ function openS(){drawS();show('sched')}
 const PUR=['Collection','Order','Meeting','Courtesy visit','Complaint / issue','TDS challan','Other'];
 const DV={date:today(),days:15};
 let dcrPC=0;
-const DP=mkPage('dcrp','DCR Entry',()=>{if(DS.commit)try{DS.commit()}catch(e){}if(dcrPC){dcrPC=0;if(R.openUpload)R.openUpload()}else goMore()}),DF=mkPage('dcrf','Add visit',()=>{show('dcrp');drawD()});
+const DP=mkPage('dcrp','DCR Entry',()=>{if(DS.commit)try{DS.commit()}catch(e){}if(dcrPC){dcrPC=0;if(R.openDailyEntry)R.openDailyEntry();else if(R.openUpload)R.openUpload()}else goMore()}),DF=mkPage('dcrf','Add visit',()=>{show('dcrp');drawD()});
 const vOf=d=>getV().visits.filter(v=>v.date===d&&dpShow(v)).sort((a,b)=>(a.tin||'99')>(b.tin||'99')?1:-1);
 const key=v=>v.cu||String(v.nm||'').toLowerCase();
 function stats(L){return{n:L.length,c:new Set(L.map(key)).size,m:L.reduce((s,v)=>s+vmin(v),0)}}
@@ -7720,7 +7719,7 @@ function drawD(){const B=DP.body;B.textContent='';
   /* ---- automatic saving (no Submit): a finished visit row is added to "My DCR table" below as soon as the next row is started, when the table is left, or when the date is changed ---- */
   const tw=el('div'),sumEl=el('div','mv-day');
   const paintSum=()=>{const L=vOf(DV.date),s=stats(L);sumEl.textContent=dow(DV.date)+', '+dd(DV.date)+(DV.date===today()?' • Today':'')+' • '+s.n+' visit'+(s.n===1?'':'s')+' • '+s.c+' customer'+(s.c===1?'':'s')+' • '+dur(s.m)};
-  const redraw=()=>{tw.textContent='';dcrTable(tw);paintSum()};
+  const redraw=()=>{};
   const commit=upto=>{if(upto==null)upto=rows.length;const pgx=document.getElementById('dcrp');if(!pgx||!pgx.classList.contains('on'))return false;
     const date=DV.date;if(!date||date>today())return false;
     const V=getV();let changed=false;
@@ -7737,9 +7736,7 @@ function drawD(){const B=DP.body;B.textContent='';
   tcard.addEventListener('focusout',e=>{const n=e.relatedTarget;if(n&&tcard.contains(n))return;setTimeout(()=>commit(),0)});
   DS.commit=()=>commit();
   if(!DS.vh){DS.vh=1;document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'&&DS.commit)try{DS.commit()}catch(e){}})}
-  B.appendChild(tw);dcrTable(tw);   /* My DCR table sits right under the entry table */
-  paintSum();B.appendChild(sumEl);
-  dcrExcelCard(B)}
+  }
 function openDF(v,edit){v=v||{};const B=DF.body;B.textContent='';DF.h.textContent=edit?'Edit visit':'Add visit';const box=el('div','st-card');B.appendChild(box);
   const dt=el('input','list-search');dt.type='date';dt.value=v.date||today();dt.max=today();field(box,'Date',dt);
   box.appendChild(el('label','od-label','Customer visited'));const pk=picker(box,v);
@@ -7832,7 +7829,7 @@ function dcrExcelCard(B){
   const st=el('div','stt'),say=(t,k)=>{st.className='stt'+(k?' '+k:'');st.textContent=t};
   /* the DCR Excel is made in the team format: every visit of this month up to the chosen date (nothing after it); name, SAP ID and designation come from the Profile. No Excel file has to be chosen. */
   const run=async share=>{const to=DV.date,fr=to.slice(0,8)+'01';
-    const list=getV().visits.filter(dpShow).filter(v=>v.date>=fr&&v.date<=to).map(v=>{let lb=v.nm||'';if(v.cu&&lb.indexOf(v.cu)<0)lb+='-'+v.cu;return{d:v.date,nm:lb,mn:vmin(v),vp:v.vp||v.purpose||'Visit',vw:v.vw||'',note:v.note||'',t:v.tin||'99'}}).sort((a,b)=>a.d===b.d?(a.t>b.t?1:-1):(a.d>b.d?1:-1));
+    const list=getV().visits.filter(dpShow).filter(v=>v.date>=fr&&v.date<=to).map(v=>{let lb=v.nm||'';return{d:v.date,nm:lb,mn:vmin(v),vp:v.vp||v.purpose||'Visit',vw:v.vw||'',note:v.note||'',t:v.tin||'99'}}).sort((a,b)=>a.d===b.d?(a.t>b.t?1:-1):(a.d>b.d?1:-1));
     if(!list.length)return say('No visit from '+dd(fr)+' to '+dd(to)+' to put in the Excel','bad');
     say('Making the file…');
     try{if(!window.RDL_SELFX)throw new Error('The Excel maker is not ready, reload the app and try again');
@@ -7981,10 +7978,10 @@ const COT={from:addD(today(),-30),to:today(),biz:''},DCT={from:addD(today(),-30)
 function coTable(B){entTable(B,{noDl:true,title:'My Collection & Order table',sheet:'Collection & Order',file:'Collection_Order_table',st:COT,bizList:COL7,head:['Date','Business','Customer','Order','Collection'],
   rows:S=>{const X=coGet(),out=[];Object.keys(X).sort().reverse().forEach(d=>{if((S.from&&d<S.from)||(S.to&&d>S.to))return;(X[d]||[]).forEach(e=>COL7.forEach(k=>{if(S.biz&&S.biz!==k)return;const o=+(e.o||{})[k]||0,c=+(e.c||{})[k]||0;if(o||c)out.push([dd(d),k,e.nm,o,c])}))});return out},
   total:rows=>['Total','','',rows.reduce((a,r)=>a+r[3],0),rows.reduce((a,r)=>a+r[4],0)]})}
-function dcrTable(B){entTable(B,{title:'My DCR table',sheet:'DCR',file:'DCR_table',st:DCT,head:['Date','Customer','Time','Purpose'],
+function dcrTable(B){entTable(B,{noDl:true,title:'My DCR table',sheet:'DCR',file:'DCR_table',st:DCT,head:['Date','Customer','Time','Purpose'],
   rows:S=>getV().visits.filter(dpShow).filter(v=>!((S.from&&v.date<S.from)||(S.to&&v.date>S.to))).sort((a,b)=>a.date===b.date?((a.tin||'99')>(b.tin||'99')?1:-1):(a.date<b.date?1:-1)).map(v=>[dd(v.date),v.nm||'',(v.tin?hm(v.tin)+(v.tout?' \u2013 '+hm(v.tout):''):'')+(vmin(v)>0?(v.tin?' \u2022 ':'')+dur(vmin(v)):(v.tin?'':'\u2014')),v.vp||v.purpose||'Visit']),
   total:rows=>['Total',rows.length+' visit'+(rows.length===1?'':'s'),'','']})}
-const CP=mkPage('coep','Collection & Order',()=>{if(CX.commit)try{CX.commit()}catch(e){}if(R.openUpload)R.openUpload()});
+const CP=mkPage('coep','Collection & Order Manual Entry',()=>{if(CX.commit)try{CX.commit()}catch(e){}if(R.openDailyEntry)R.openDailyEntry();else if(R.openUpload)R.openUpload()});
 function drawCO(){const B=CP.body;B.textContent='';
   /* two ways to do the daily work: type business-wise entries (this page) or upload the Excel file (old page, unchanged) */
   {const sw=el('div','od-actions'),a=el('button','st-btn','Entry'),u=el('button','st-btn od-clear','Upload');a.type=u.type='button';
@@ -8038,7 +8035,7 @@ function drawCO(){const B=CP.body;B.textContent='';
   /* ---- automatic saving (no Submit): a finished customer row is added to the table below as soon as the next row is started, when the table is left, or when the date is changed ---- */
   const tw=el('div'),sumEl=el('div','mv-day');
   const paintSum=()=>{const L=coList(CX.date),t=k=>L.reduce((a,e)=>a+COL7.reduce((b,x)=>b+(+(e[k]||{})[x]||0),0),0);sumEl.textContent=dow(CX.date)+', '+dd(CX.date)+' • '+L.length+' entr'+(L.length===1?'y':'ies')+' • Order '+fm2(t('o'))+' • Collection '+fm2(t('c'))};
-  const redraw=()=>{tw.textContent='';coTable(tw);paintSum()};
+  const redraw=()=>{};
   const okRow=r=>!!r.cu&&(Object.keys(r.o).length>0||Object.keys(r.c).length>0);
   const commit=upto=>{if(upto==null)upto=rows.length;const pgx=document.getElementById('coep');if(!pgx||!pgx.classList.contains('on'))return false;
     const date=CX.date;if(!date||date>today())return false;
@@ -8056,9 +8053,7 @@ function drawCO(){const B=CP.body;B.textContent='';
   tcard.addEventListener('focusout',e=>{const n=e.relatedTarget;if(n&&tcard.contains(n))return;setTimeout(()=>commit(),0)});
   CX.commit=()=>commit();
   if(!CX.vh){CX.vh=1;document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'&&CX.commit)try{CX.commit()}catch(e){}})}
-  B.appendChild(tw);coTable(tw);   /* My Collection & Order table sits right under the entry table */
-  /* the day's list */
-  paintSum();B.appendChild(sumEl);
+    /* the day's list */
   /* Excel + app */
   const c=el('div','st-card');
   const fi=el('input');fi.type='file';fi.accept='.xlsx';fi.hidden=true;
@@ -8087,10 +8082,74 @@ function drawCO(){const B=CP.body;B.textContent='';
   const IC={dl:'<path d="M12 3v11m0 0l-4-4m4 4l4-4M5 19h14"/>',sh:'<path d="M4 6h16v12H4zM4 7l8 6 8-6"/>',sv:'<path d="M5 4h11l3 3v13H5zM8 4v5h7M8 20v-6h8v6"/>',op:'<path d="M5 12h14m0 0l-5-5m5 5l-5 5"/>'};
   const mb=(t,k,cls)=>{const b=el('button','st-btn co-b '+cls);b.type='button';b.innerHTML='<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+IC[k]+'</svg><span>'+t+'</span>';return b};
   const dl=mb('Download Excel','dl','co-p'),sh=mb('Share to Outlook','sh','co-p'),sp=mb('Save to app only','sv','co-s'),op=mb('Open Smart Post','op','co-s');dl.onclick=()=>run('dl');sh.onclick=()=>run('share');sp.onclick=()=>run('app');op.onclick=()=>{if(R.openTab)R.openTab('s','post')};
-  [sp,op,dl,sh].forEach(b=>row.appendChild(b));
+  [sp,op].forEach(b=>row.appendChild(b));
   c.appendChild(row);c.appendChild(st);B.appendChild(c)}
 R.openCOE=()=>{if(window.RDL_ROLE==='admin')return;CX.date=R.salesDay?R.salesDay():today();COT.from=COT.to=CX.date;COT.biz='';drawCO();show('coep')};   /* the file made today is for the sales day (yesterday; Thursday on Saturday), same as Today Sales and the uploaded file */
 function openD(){if(window.RDL_ROLE==='admin')return;dcrPC=0;DV.date=R.salesDay?R.salesDay():today();DCT.from=DCT.to=DV.date;drawD();show('dcrp')}
+/* ===== Posting Center: "Daily CO & DCR Entry" (entry / upload only, with today's status) and "Daily CO & DCR Report" (tables, reports, Excel). User accounts only. ===== */
+const DE=mkPage('dcen','Daily CO & DCR Entry',()=>{if(R.openUpload)R.openUpload()}),DRP=mkPage('dcre','Daily CO & DCR Report',()=>{if(R.openUpload)R.openUpload()});
+const RP={date:''};
+(function(){const s=document.createElement('style');s.textContent='.up-st{display:block;margin-top:5px;font-size:12px;font-weight:800;color:#0b7a4b}.up-st.no{color:#8a6d00}.rp-tt{font-size:13px;font-weight:700;margin:2px 0 6px}';document.head.appendChild(s)})();
+/* what has been entered / uploaded today (the sales day the entry pages open on counts as today's work) */
+function entryStatus(){
+  const t=today(),sd=R.salesDay?R.salesDay():t,days=[t,sd].filter((d,i,a)=>a.indexOf(d)===i),X=coGet();let man=0,sap=0,sb=0;
+  days.forEach(d=>(X[d]||[]).forEach(e=>{if(String(e.id||'').indexOf('sap|')===0)sap++;else man++}));
+  try{const L=JSON.parse(localStorage.getItem('rdl.ledger.v1')||'null');((L&&L.sd)||[]).forEach(s=>{if(s&&s.sap&&s.ds===t)sb++})}catch(e){}
+  const vis=getV().visits.filter(dpShow).filter(v=>days.indexOf(v.date)>=0).length;
+  return{man,sap,sb,vis}}
+function drawDE(){const B=DE.body;B.textContent='';const s=entryStatus();
+  const C={v:['#f8f4ff','#e3d8fb','#d0c0f3','#9a88f5','#6a52d9','#33248a','#6a52d966'],b:['#fff','#dbeafe','#a9c9f5','#4f9bff','#1650d8','#0f3ca3','#1650d855'],g:['#fff','#d8f7ea','#a5e6cb','#34d399','#0b9a62','#065f46','#0b9a6255']};
+  const pl=(n,w)=>n+' '+w+(n===1?'':'s');
+  const g=B.appendChild(el('div','up-grid'));
+  [['Collection & Order Manual Entry','Type business wise order & collection, or upload the Excel file','v','i-upl',()=>{if(R.openCOE)R.openCOE()},s.man?'✓ Today’s entry done • '+pl(s.man,'customer'):''],
+   ['Collection & Order SAP Entry','Upload the SAP sales file — bills go to Drafts with their real document numbers','b','i-upl',()=>{if(R.openSapUpload)R.openSapUpload()},(s.sap||s.sb)?'✓ Today’s upload done • '+(s.sb?pl(s.sb,'bill'):pl(s.sap,'customer')):''],
+   ['DCR Entry','Daily Call Report — customers visited, time spent','g','i-clock',()=>{if(R.openVisitsPC)R.openVisitsPC()},s.vis?'✓ Today’s entry done • '+pl(s.vis,'visit'):'']].forEach(([t,sub,k,ic,fn,st])=>{
+    const K=C[k],b=el('button','up-b wide');b.type='button';
+    b.style.cssText='color:'+K[5]+';background:linear-gradient(135deg,'+K[0]+','+K[1]+');border-color:'+K[2]+';box-shadow:0 8px 14px -9px '+K[6]+',inset 0 2px 0 #ffffffcc';
+    const i=el('span','up-i');i.style.cssText='background:linear-gradient(135deg,'+K[3]+','+K[4]+');box-shadow:0 3px 0 '+K[4]+'66';i.innerHTML='<svg viewBox="0 0 24 24"><use href="#'+ic+'"/></svg>';
+    const tx=el('span','up-t');tx.appendChild(el('b',null,t));tx.appendChild(el('small',null,sub));if(st)tx.appendChild(el('small','up-st',st));
+    b.appendChild(i);b.appendChild(tx);b.onclick=fn;g.appendChild(b)})}
+R.openDailyEntry=()=>{if(window.RDL_ROLE==='admin')return;drawDE();show('dcen')};
+/* ---- the two Excel files (this month up to a date), made in the team format ---- */
+function dlBlob(blob,name){const a=el('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000)}
+async function coMake(to){
+  if(!window.RDL_SELFX)throw new Error('The Excel maker is not ready, reload the app and try again');
+  const fr=to.slice(0,8)+'01',X=coGet(),list=[];
+  Object.keys(X).sort().forEach(d=>{if(d<fr||d>to)return;(X[d]||[]).forEach(e=>{if(!COL7.some(k=>(+(e.o||{})[k]||0)>0||(+(e.c||{})[k]||0)>0))return;const lb=e.nm||('Customer '+e.cu),o={},c={};
+    COL7.forEach(k=>{if(+(e.o||{})[k]>0)o[k]=+e.o[k];if(+(e.c||{})[k]>0)c[k]=+e.c[k]});list.push({d,label:lb,o,c,rm:e.rm||''})})});
+  list.sort((a,b)=>a.d===b.d?(a.label>b.label?1:-1):(a.d>b.d?1:-1));
+  if(!list.length)throw new Error('No Collection & Order entry from '+dd(fr)+' to '+dd(to));
+  const E=coList(to);if(E.length)coSave(to,E);   /* same as before: the day is also saved in the app for Smart Post */
+  const r=await RDL_SELFX('co',to,list);return{r,fr,n:list.length,days:new Set(list.map(z=>z.d)).size,what:'entr'}}
+async function dcrMake(to){
+  if(!window.RDL_SELFX)throw new Error('The Excel maker is not ready, reload the app and try again');
+  const fr=to.slice(0,8)+'01',list=getV().visits.filter(dpShow).filter(v=>v.date>=fr&&v.date<=to).map(v=>({d:v.date,nm:v.nm||'',mn:vmin(v),vp:v.vp||v.purpose||'Visit',vw:v.vw||'',note:v.note||'',t:v.tin||'99'})).sort((a,b)=>a.d===b.d?(a.t>b.t?1:-1):(a.d>b.d?1:-1));
+  if(!list.length)throw new Error('No DCR visit from '+dd(fr)+' to '+dd(to));
+  const r=await RDL_SELFX('dcr',to,list);return{r,fr,n:list.length,days:new Set(list.map(z=>z.d)).size}}
+function warnOf(r){return(r.missing?' • Your official name / SAP ID is not in your Profile yet — add it in My profile so it appears in the Excel':'')+(r.partial?' • Earlier months could not be loaded from the server (no internet?) — only what is on this phone is in the file':'')}
+function excelRow(B,make,title,text,getDate){const c=el('div','st-card'),st=el('div','stt'),say=(t,k)=>{st.className='stt'+(k?' '+k:'');st.textContent=t};
+  const run=async share=>{const to=getDate();say('Making the file…');
+    try{const m=await make(to),f=new File([m.r.blob],m.r.name,{type:m.r.blob.type}),info=m.days+' day'+(m.days===1?'':'s')+' • '+m.n+' record'+(m.n===1?'':'s')+' • '+dd(m.fr)+' to '+dd(to);
+      if(share&&navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f],title:title+' '+dd(to),text:text+' — '+dd(to)});say('✓ '+info+' • shared'+warnOf(m.r),'ok')}
+      else{dlBlob(m.r.blob,m.r.name);say('✓ '+info+(share?' • sharing is not available here, so the file was downloaded':' • downloaded')+warnOf(m.r),'ok')}}
+    catch(e){if(e&&e.name==='AbortError')say('');else say('✗ '+(e&&e.message||'Could not make the file'),'bad')}};
+  const row=el('div','od-actions'),dl=el('button','st-btn','Download Excel'),sh=el('button','st-btn','Share to Outlook');dl.type=sh.type='button';dl.onclick=()=>run(false);sh.onclick=()=>run(true);row.appendChild(dl);row.appendChild(sh);c.appendChild(row);c.appendChild(st);B.appendChild(c)}
+function drawRP(){const B=DRP.body;B.textContent='';
+  const c=el('div','st-card'),dt=el('input','list-search'),st=el('div','stt'),say=(t,k)=>{st.className='stt'+(k?' '+k:'');st.textContent=t};
+  dt.type='date';dt.value=RP.date;dt.max=today();dt.onchange=()=>{if(dt.value)RP.date=dt.value};
+  c.appendChild(el('div','rp-tt','Excel files — this month, up to the date'));c.appendChild(dt);
+  const both=el('button','st-btn','Download both Excel (Collection & Order + DCR)');both.type='button';both.style.marginTop='8px';
+  both.onclick=async()=>{const to=RP.date||today();say('Making the files…');const got=[],bad=[];
+    try{got.push(await coMake(to))}catch(e){bad.push(e&&e.message||'Collection & Order file failed')}
+    try{got.push(await dcrMake(to))}catch(e){bad.push(e&&e.message||'DCR file failed')}
+    for(let i=0;i<got.length;i++){dlBlob(got[i].r.blob,got[i].r.name);if(i<got.length-1)await new Promise(r=>setTimeout(r,700))}
+    if(got.length===2)say('✓ Both Excel files downloaded ('+dd(got[0].fr)+' to '+dd(to)+')'+warnOf(got[0].r),'ok');
+    else if(got.length===1)say('✓ One file downloaded • '+bad.join(' • '),'bad');
+    else say('✗ '+bad.join(' • '),'bad')};
+  c.appendChild(both);c.appendChild(st);B.appendChild(c);
+  B.appendChild(el('div','mv-day','Collection & Order'));coTable(B);excelRow(B,coMake,'Collection & Order','Daily Sales Order & Collection Statements',()=>RP.date||today());
+  B.appendChild(el('div','mv-day','DCR'));dcrTable(B);excelRow(B,dcrMake,'DCR','Daily Call Report',()=>RP.date||today())}
+R.openDailyReport=()=>{if(window.RDL_ROLE==='admin')return;RP.date=R.salesDay?R.salesDay():today();COT.from=COT.to=DCT.from=DCT.to=RP.date;COT.biz='';drawRP();show('dcre')};
 
 /* =====================================================  MORE page  ===================================================== */
 /* =====================================================  NOTES  (Tools > Notes, under Schedule). Key rdl.notes.v1 is inside Backup / Restore. Notes are never deleted automatically. ===================================================== */
@@ -9876,7 +9935,7 @@ function Sty(){
         b=o.bd==='all'?reg(bds,'<border>'+t+'</border>'):(o.bd==='bottom'?reg(bds,'<border><left/><right/><top/><bottom style="thin"><color auto="1"/></bottom><diagonal/></border>'):0),
         nf=o.nf==='acc'?164:(o.nf==='date'?165:(o.nf==='dmy'?166:0));
     return reg(xfs,'<xf numFmtId="'+nf+'" fontId="'+f+'" fillId="'+fl+'" borderId="'+b+'" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyNumberFormat="1" applyAlignment="1"><alignment horizontal="'+(o.h||'general')+'" vertical="'+(o.v||'center')+'"'+(o.wrap?' wrapText="1"':'')+'/></xf>')};
-  this.xml=function(){return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="3"><numFmt numFmtId="164" formatCode="_(* #,##0.00_);_(* \\(#,##0.00\\);_(* \\-??_);_(@_)"/><numFmt numFmtId="165" formatCode="m/d/yyyy"/><numFmt numFmtId="166" formatCode="dd-mm-yy"/></numFmts><fonts count="'+fonts.length+'">'+fonts.join('')+'</fonts><fills count="'+fills.length+'">'+fills.join('')+'</fills><borders count="'+bds.length+'">'+bds.join('')+'</borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="'+xfs.length+'">'+xfs.join('')+'</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>'}}
+  this.xml=function(){return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="3"><numFmt numFmtId="164" formatCode="_(* #,##0.00_);_(* \\(#,##0.00\\);_(* &quot;-&quot;??_);_(@_)"/><numFmt numFmtId="165" formatCode="m/d/yyyy"/><numFmt numFmtId="166" formatCode="dd-mm-yy"/></numFmts><fonts count="'+fonts.length+'">'+fonts.join('')+'</fonts><fills count="'+fills.length+'">'+fills.join('')+'</fills><borders count="'+bds.length+'">'+bds.join('')+'</borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="'+xfs.length+'">'+xfs.join('')+'</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>'}}
 /* ---- a worksheet ---- */
 function Sheet(){
   var rows={},merges=[],cols=[],hts={},freeze=null;
@@ -9897,37 +9956,48 @@ function Sheet(){
     var pane=freeze?'<pane'+(freeze[1]?' xSplit="'+freeze[1]+'"':'')+' ySplit="'+freeze[0]+'" topLeftCell="'+cl(freeze[1])+(freeze[0]+1)+'" activePane="'+(freeze[1]?'bottomRight':'bottomLeft')+'" state="frozen"/>':'';
     return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><sheetViews><sheetView workbookViewId="0"'+(sel?' tabSelected="1"':'')+'>'+pane+'</sheetView></sheetViews><sheetFormatPr defaultRowHeight="15"/><cols>'+cols.join('')+'</cols><sheetData>'+sd+'</sheetData>'+(merges.length?'<mergeCells count="'+merges.length+'">'+merges.map(function(m){return '<mergeCell ref="'+m+'"/>'}).join('')+'</mergeCells>':'')+'<pageMargins left="0.4" right="0.4" top="0.5" bottom="0.5" header="0.3" footer="0.3"/><pageSetup paperSize="9" orientation="landscape" fitToWidth="1" fitToHeight="0"/></worksheet>'}}
 /* ---- one user's "Daily Sales Order & Collection Statements" sheet ---- */
-function userSheet(S,info,ent,monthLabel){
-  var sh=new Sheet(),X=function(o){return S.xf(o)};
-  var gray={b:1,sz:10,fill:'969696',bd:'all',h:'center',wrap:1},yel={b:1,sz:10,fill:'FFFF99',bd:'all',h:'center'},blu={b:1,sz:10,fill:'99CCFF',bd:'all',h:'center'};
-  [4.7,10.6,36.3].concat([14,14,14,14,14,14,14,14,9.5,14,13,13,13,13,13,13,14,9.5]).forEach(function(w,i){sh.width(i,w)});
-  sh.put(1,0,'Institutional Order & Credit Management',X({b:1,sz:14}));sh.put(2,0,'Daily Sales Order & Collection Statements',X({b:1,sz:12}));
-  sh.put(3,0,'Territory: '+(info.depot||'')+(info.name?', '+info.name:''),X({b:1,sz:12}));sh.put(4,0,'Month: '+monthLabel,X({b:1,sz:12,bd:'bottom'}));
-  sh.height(1,18);sh.height(2,15.6);sh.height(3,15.6);sh.height(4,15.6);
-  var g=X(gray),y=X(yel),b=X(blu);
-  sh.put(5,0,'Sl',g);sh.put(5,1,'Date',g);sh.put(5,2,'Customer Name',g);sh.box(5,0,7,2,g);sh.merge(5,0,7,0);sh.merge(5,1,7,1);sh.merge(5,2,7,2);
-  sh.put(5,3,'Business Wise Order',y);sh.box(5,3,5,9,y);sh.merge(5,3,5,9);
-  sh.put(5,10,'Total Value',y);sh.box(5,10,6,10,y);sh.merge(5,10,6,10);
-  sh.put(5,11,'Remarks',g);sh.box(5,11,7,11,g);sh.merge(5,11,7,11);
-  sh.put(5,12,'Business Wise Collection',b);sh.box(5,12,5,18,b);sh.merge(5,12,5,18);
-  sh.put(5,19,'Total Value',b);sh.box(5,19,6,19,b);sh.merge(5,19,6,19);
-  sh.put(5,20,'Remarks',g);sh.box(5,20,7,20,g);sh.merge(5,20,7,20);
-  COL7.forEach(function(k,i){sh.put(6,3+i,k,y);sh.put(6,12+i,k,b)});
-  var n=ent.length,last=8+n-1,end=Math.max(last,8)+300,tot={o:[0,0,0,0,0,0,0],c:[0,0,0,0,0,0,0]};
+function userSheet(S,info,ent,monthLabel,mine){
+  /* mine = the user's own Excel (matches the hand-made file: colours, column widths, row heights, only Territory + Month on top); admin keeps the old look */
+  var sh=new Sheet(),X=function(o){return S.xf(o)},d=mine?2:0,H1=5-d,H2=6-d,TR=7-d,F=8-d;
+  var GR=mine?'BFBFBF':'969696',YE=mine?'C6E0B4':'FFFF99',BL=mine?'B4C6E7':'99CCFF',TF=mine?'92D050':'99CC00';
+  var gray={b:1,sz:10,fill:GR,bd:'all',h:'center',wrap:mine?0:1},yel={b:1,sz:10,fill:YE,bd:'all',h:'center'},blu={b:1,sz:10,fill:BL,bd:'all',h:'center'},grayW={b:1,sz:10,fill:GR,bd:'all',h:'center',wrap:1},yelW={b:1,sz:10,fill:YE,bd:'all',h:'center',wrap:1},bluW={b:1,sz:10,fill:BL,bd:'all',h:'center',wrap:1},grayD={b:1,sz:mine?8:10,fill:GR,bd:'all',h:'center',wrap:mine?0:1};
+  var W=mine?[4.71,11.71,36.29,13,11.57,12.86,13,11.29,11.57,11.57,15.57,13.43,14.57,11.14,12.71,11.29,10.57,11.57,11.57,14.14,32.57]:[4.7,10.6,36.3,14,14,14,14,14,14,14,14,9.5,14,13,13,13,13,13,13,14,9.5];
+  W.forEach(function(w,i){sh.width(i,w)});
+  var HT=mine?12.75:18;
+  if(mine){
+    var tl=X({b:1,sz:12,h:'left'}),tlb=X({b:1,sz:12,h:'left',bd:'bottom'});
+    sh.put(1,0,'Territory: '+(info.depot||'')+(info.name?', '+info.name:''),tl);sh.box(1,0,1,4,tl);sh.merge(1,0,1,4);
+    sh.put(2,0,'Month: '+monthLabel,tlb);sh.box(2,0,2,4,tlb);sh.merge(2,0,2,4);
+    sh.height(1,15.75);sh.height(2,15.75);
+    sh.height(H1,12.75);sh.height(H2,12.75);sh.height(TR,12.75)}
+  else{
+    sh.put(1,0,'Institutional Order & Credit Management',X({b:1,sz:14}));sh.put(2,0,'Daily Sales Order & Collection Statements',X({b:1,sz:12}));
+    sh.put(3,0,'Territory: '+(info.depot||'')+(info.name?', '+info.name:''),X({b:1,sz:12}));sh.put(4,0,'Month: '+monthLabel,X({b:1,sz:12,bd:'bottom'}));
+    sh.height(1,18);sh.height(2,15.6);sh.height(3,15.6);sh.height(4,15.6)}
+  var g=X(gray),y=X(yel),b=X(blu),gw=X(grayW),yw=X(yelW),bw=X(bluW),gd=X(grayD);
+  sh.put(H1,0,'Sl',g);sh.put(H1,1,'Date',gd);sh.put(H1,2,'Customer Name',mine?gw:g);sh.box(H1,0,TR,2,mine?gw:g);sh.merge(H1,0,TR,0);sh.merge(H1,1,TR,1);sh.merge(H1,2,TR,2);
+  sh.put(H1,3,'Business Wise Order',y);sh.box(H1,3,H1,9,y);sh.merge(H1,3,H1,9);
+  sh.put(H1,10,'Total Value',mine?yw:y);sh.box(H1,10,H2,10,mine?yw:y);sh.merge(H1,10,H2,10);
+  sh.put(H1,11,'Remarks',g);sh.box(H1,11,TR,11,g);sh.merge(H1,11,TR,11);
+  sh.put(H1,12,'Business Wise Collection',b);sh.box(H1,12,H1,18,b);sh.merge(H1,12,H1,18);
+  sh.put(H1,19,'Total Value',mine?bw:b);sh.box(H1,19,H2,19,mine?bw:b);sh.merge(H1,19,H2,19);
+  sh.put(H1,20,'Remarks',g);sh.box(H1,20,TR,20,g);sh.merge(H1,20,TR,20);
+  COL7.forEach(function(k,i){sh.put(H2,3+i,k,y);sh.put(H2,12+i,k,b)});
+  var n=ent.length,last=F+n-1,end=Math.max(last,F)+300,tot={o:[0,0,0,0,0,0,0],c:[0,0,0,0,0,0,0]};
   ent.forEach(function(e){COL7.forEach(function(k,i){tot.o[i]+=+(e.o||{})[k]||0;tot.c[i]+=+(e.c||{})[k]||0})});
-  var tg=X({b:1,sz:8,color:'FF0000',fill:'99CC00',bd:'all',h:'center',nf:'acc',wrap:1}),sumO=0,sumC=0;
-  for(var i=0;i<7;i++){sh.put(7,3+i,{f:'SUM('+cl(3+i)+'8:'+cl(3+i)+end+')',v:r2(tot.o[i])},tg);sh.put(7,12+i,{f:'SUM('+cl(12+i)+'8:'+cl(12+i)+end+')',v:r2(tot.c[i])},tg);sumO+=tot.o[i];sumC+=tot.c[i]}
-  sh.put(7,10,{f:'SUM(K8:K'+end+')',v:r2(sumO)},tg);sh.put(7,19,{f:'SUM(T8:T'+end+')',v:r2(sumC)},tg);
-  var sl=X({b:1,sz:8,fill:'FFFFFF',bd:'all',h:'center'}),dt=X({b:1,sz:8,bd:'all',h:'center',nf:'dmy'}),cu=X({b:1,sz:8,fill:'FFFFFF',bd:'all',h:'left'}),oy=X({sz:8,fill:'FFFF99',bd:'all',h:'center',nf:'acc'}),ob=X({sz:8,fill:'99CCFF',bd:'all',h:'center',nf:'acc'}),ty=X({b:1,sz:8,fill:'FFFF99',bd:'all',h:'center',nf:'acc'}),tb=X({b:1,sz:8,fill:'99CCFF',bd:'all',h:'center',nf:'acc'}),rk=X({sz:8,fill:'FFFFFF',bd:'all',h:'center'});
+  var tg=X({b:1,sz:8,color:'FF0000',fill:TF,bd:'all',h:mine?'general':'center',nf:'acc',wrap:1}),sumO=0,sumC=0;
+  for(var i=0;i<7;i++){sh.put(TR,3+i,{f:'SUM('+cl(3+i)+F+':'+cl(3+i)+end+')',v:r2(tot.o[i])},tg);sh.put(TR,12+i,{f:'SUM('+cl(12+i)+F+':'+cl(12+i)+end+')',v:r2(tot.c[i])},tg);sumO+=tot.o[i];sumC+=tot.c[i]}
+  sh.put(TR,10,{f:'SUM(K'+F+':K'+end+')',v:r2(sumO)},tg);sh.put(TR,19,{f:'SUM(T'+F+':T'+end+')',v:r2(sumC)},tg);
+  var sl=X({b:1,sz:8,fill:'FFFFFF',bd:'all',h:'center'}),dt=X({b:1,sz:8,bd:'all',h:'center',nf:'dmy'}),cu=X({b:1,sz:8,fill:'FFFFFF',bd:'all',h:'left'}),oy=X({sz:8,fill:YE,bd:'all',h:'center',nf:'acc'}),ob=X({sz:8,fill:BL,bd:'all',h:'center',nf:'acc'}),ty=X({b:1,sz:8,fill:YE,bd:'all',h:'center',nf:'acc',wrap:mine?1:0}),tb=X({b:1,sz:8,fill:BL,bd:'all',h:'center',nf:'acc'}),rk=X({sz:mine?10:8,b:mine?1:0,fill:'FFFFFF',bd:'all',h:'center'}),rku=X({sz:mine?10:8,b:mine?1:0,fill:'FFFFFF',bd:'all',h:mine?'left':'center'});
   var prev='',gs=0;
-  ent.forEach(function(e,ix){var r=8+ix,to=0,tc=0;sh.height(r,18);
+  ent.forEach(function(e,ix){var r=F+ix,to=0,tc=0;sh.height(r,HT);
     sh.put(r,0,ix+1,sl);
-    if(e.d!==prev){if(prev&&ix-1>=gs&&ix-1>gs)sh.merge(8+gs,1,8+ix-1,1);gs=ix;prev=e.d;sh.put(r,1,ser(e.d),dt)}else sh.put(r,1,null,dt);
+    if(e.d!==prev){if(prev&&ix-1>=gs&&ix-1>gs)sh.merge(F+gs,1,F+ix-1,1);gs=ix;prev=e.d;sh.put(r,1,ser(e.d),dt)}else sh.put(r,1,null,dt);
     sh.put(r,2,e.label,cu);
     COL7.forEach(function(k,i){var o=+(e.o||{})[k]||0,c=+(e.c||{})[k]||0;to+=o;tc+=c;sh.put(r,3+i,o?o:null,oy);sh.put(r,12+i,c?c:null,ob)});
-    sh.put(r,10,{f:'SUM(D'+r+':J'+r+')',v:r2(to)},ty);sh.put(r,11,e.rm||'',rk);sh.put(r,19,{f:'SUM(M'+r+':S'+r+')',v:r2(tc)},tb);sh.put(r,20,null,rk)});
-  if(n>1&&last>8+gs)sh.merge(8+gs,1,last,1);
-  sh.freeze(7,3);
+    sh.put(r,10,{f:'SUM(D'+r+':J'+r+')',v:r2(to)},ty);sh.put(r,11,e.rm||'',rk);sh.put(r,19,{f:'SUM(M'+r+':S'+r+')',v:r2(tc)},tb);sh.put(r,20,null,rku)});
+  if(n>1&&last>F+gs)sh.merge(F+gs,1,last,1);
+  sh.freeze(TR,3);
   return{sh:sh,tot:tot}}
 /* ---- Top Sheet ---- */
 function topSheet(S,users,monthLabel){
@@ -10007,7 +10077,7 @@ function buildDcr(JS,people,vis){var S=new Sty(),used={},sheets=[];
 /* a user's own Collection & Order file: one sheet per month (January up to the chosen month), named  Md.Omito-November-2026 ; no Top Sheet. months: [{ym:'2026-11',ent:[...]}] */
 var FULLMON=['January','February','March','April','May','June','July','August','September','October','November','December'];
 function buildMine(JS,p,months){var S=new Sty(),used={},sheets=[],nm0=String(p.official||p.name||'User').replace(/[\[\]:*?\/\\]/g,' ').trim().split(/\s+/).slice(0,2).join('')||'User';
-  months.forEach(function(m){var lab=FULLMON[+m.ym.slice(5,7)-1]+'-'+m.ym.slice(0,4),nm=sheetName(nm0.slice(0,Math.max(3,30-lab.length))+'-'+lab,used),us=userSheet(S,{depot:p.depot,name:p.official||p.name},m.ent,lab);sheets.push({name:nm,sh:us.sh})});
+  months.forEach(function(m){var lab=FULLMON[+m.ym.slice(5,7)-1]+'-'+m.ym.slice(0,4),nm=sheetName(nm0.slice(0,Math.max(3,30-lab.length))+'-'+lab,used),us=userSheet(S,{depot:p.depot,name:p.official||p.name},m.ent,lab,true);sheets.push({name:nm,sh:us.sh})});
   return zipBook(JS,S,sheets,sheets.length-1)}
 function buildMineDcr(JS,p,months){var S=new Sty(),used={},sheets=[],nm0=String(p.official||p.name||'User').replace(/[\[\]:*?\/\\]/g,' ').trim().split(/\s+/).slice(0,2).join(' ')||'User';
   months.forEach(function(m){var lab=FULLMON[+m.ym.slice(5,7)-1]+'-'+m.ym.slice(0,4),nm=sheetName(nm0.slice(0,Math.max(3,30-lab.length))+'-'+lab,used);
@@ -10152,7 +10222,7 @@ window.RDL_SELFX=function(kind,upto,list){
         return TX.buildMine(JSZip,per,yms)})}
     else{
       var Y1=upto.slice(0,4)+'-01-01',od={},addV=function(d,v){if(d<Y1||d>=from)return;var sig=d+'|'+(v.id||(String(v.nm||'').toLowerCase()+'|'+(v.tin||'')+'|'+(v.mn||'')));if(od[sig])return;
-          var lb=v.nm||'';if(v.cu&&lb.indexOf(v.cu)<0)lb+='-'+v.cu;od[sig]={d:d,nm:lb,hr:TX.hourText(vm(v)),vp:v.vp||v.purpose||'Visit',vw:v.vw||'',note:v.note||'',t:v.tin||'99'}};
+          var lb=v.nm||'';od[sig]={d:d,nm:lb,hr:TX.hourText(vm(v)),vp:v.vp||v.purpose||'Visit',vw:v.vw||'',note:v.note||'',t:v.tin||'99'}};
       var V0=J('rdl.visit.v1',{});(Array.isArray(V0.visits)?V0.visits:[]).forEach(function(v){addV(v.date,v)});
       var sv=(window.RDLGATE&&RDLGATE.api&&from>Y1)?RDLGATE.api('myRecords',{kind:'dcr',from:Y1,to:upto},true).then(function(j){if(!(j&&j.ok&&Array.isArray(j.rows)))throw new Error('x');j.rows.forEach(function(r){if(r&&r.e)addV(r.d,r.e)})}).catch(function(){partial=true}):Promise.resolve();
       pr=sv.then(function(){var by={};Object.keys(od).forEach(function(k){var x=od[k],ym=x.d.slice(0,7);(by[ym]=by[ym]||[]).push(x)});
@@ -10529,7 +10599,7 @@ function page(){
   PG=el('div','pg st');PG.id='sapp';up.parentNode.appendChild(PG);return PG}
 function showPg(){document.querySelectorAll('.pg').forEach(function(x){x.classList.remove('on')});document.querySelectorAll('.nav button').forEach(function(x){x.classList.remove('on')});
   PG.classList.add('on');var nb=document.querySelector('.nav button[data-p="more"]');if(nb)nb.classList.add('on');window.scrollTo(0,0)}
-function back(){if(R.openUpload)R.openUpload()}
+function back(){if(R.openDailyEntry)R.openDailyEntry();else if(R.openUpload)R.openUpload()}
 function chip(st){var s=STL[st],c=el('span',null,s[0]);c.style.cssText='display:inline-block;padding:2px 8px;border-radius:999px;font-size:11.5px;font-weight:700;white-space:nowrap;color:'+s[1]+';background:'+s[2];return c}
 function draw(state){
   var P=page();if(!P)return;P.textContent='';
