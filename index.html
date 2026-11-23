@@ -7676,7 +7676,7 @@ function drawD(){const B=DP.body;B.textContent='';
   const di=el('input','list-search');di.type='date';di.value=DV.date;di.max=today();di.onchange=()=>{if(!di.value)return;if(DS.commit)try{DS.commit()}catch(e){}DV.date=di.value;DCT.from=DCT.to=DV.date;DS.open=false;drawD()};di.classList.add('co-dt');
   const CL=custs(),blank=()=>({id:'',cu:'',nm:'',txt:'',t:'',vp:VP[0],vw:'Self',rm:'',saved:false,dirty:false}),
     isBlank=r=>!r.cu&&!(r.txt||'').trim()&&!(r.t||'').trim()&&!(r.rm||'').trim()&&(!r.vw||r.vw==='Self')&&r.vp===VP[0];
-  const rows=vOf(DV.date).map(v=>({id:v.id,cu:v.cu||'',nm:v.nm||'',txt:v.cu?'':(v.nm||''),t:vmin(v)>0?durIn(vmin(v)):'',vp:v.vp||v.purpose||VP[0],vw:v.vw!=null?v.vw:'Self',rm:v.note||'',saved:true,hid:true,dirty:false,src:v}));
+  const rows=vOf(DV.date).map(v=>({id:v.id,cu:v.cu||'',nm:v.nm||'',txt:v.cu?'':(v.nm||''),t:vmin(v)>0?durIn(vmin(v)):'',vp:v.vp||v.purpose||VP[0],vw:v.vw!=null?v.vw:'Self',rm:v.note||'',saved:true,hid:true,posted:!!v.posted,dirty:false,src:v}));
   DS.rows=rows;if(!rows.length||!isBlank(rows[rows.length-1]))rows.push(blank());
   const tcard=el('div','st-card co-tcard');B.appendChild(tcard);{const th=el('div','co-th co-th2');th.appendChild(di);th.appendChild(el('span','co-tt','Daily Call Report (DCR)'));th.appendChild(el('span','co-ts'));tcard.appendChild(th)}
   {const nh=rows.filter(r=>r.hid).length;if(nh){const tg=el('button','co-tg');tg.type='button';const pt=()=>{tg.textContent=(DS.open?'\u25BE ':'\u25B8 ')+'Saved visits for '+dd(DV.date)+' \u2022 '+nh+' visit'+(nh===1?'':'s')+(DS.open?' \u2014 tap to hide':' \u2014 tap to open')};pt();tg.onclick=()=>{DS.open=!DS.open;pt();tbl.classList.toggle('co-show',!!DS.open)};tcard.appendChild(tg)}}
@@ -7698,6 +7698,7 @@ function drawD(){const B=DP.body;B.textContent='';
   function mkRow(r){
     const tr=el('tr',(r.saved?'co-sv':'')+(r.hid?' co-hid':'')),t0=el('td','co-c0'),ci=el('input','co-cu'),cn=el('div','co-cn',r.cu?(r.nm+(dpOf(r.cu)?' • '+dpOf(r.cu):'')):''),sg=el('div','od-suggestions co-sg');
     r._tr=tr;ci.type='text';ci.placeholder='Code or name';ci.autocomplete='off';ci.value=r.cu||r.txt||'';t0.appendChild(ci);t0.appendChild(cn);t0.appendChild(sg);tr.appendChild(t0);
+    if(r.posted){tr.classList.add('co-pst');ci.disabled=true;t0.appendChild(el('div','co-pb','Sent \u2022 locked'))}
     const pick=c=>{r.cu=c.code;r.nm=c.name;r.txt='';ci.value=c.code;cn.textContent=c.name+(c.dp?' • '+c.dp:'');ci.classList.remove('bad');sg.textContent='';setMsg('');r.dirty=true;grow();return true};
     const sug=m=>{sg.textContent='';m.slice(0,8).forEach(c=>{const b=el('button','od-sug',c.name+' ');b.type='button';b.appendChild(el('small',null,c.code+(c.dp?' • '+c.dp:'')));b.onpointerdown=e=>e.preventDefault();b.onclick=()=>{if(pick(c))nextFrom(ci)};sg.appendChild(b)})};
     ci.addEventListener('input',()=>{r.cu='';r.nm='';r.txt=ci.value;cn.textContent='';ci.classList.remove('bad');r.dirty=true;sg.textContent='';const v=ci.value.trim().toLowerCase();grow();if(v.length<2)return;sug(find(v))});
@@ -7706,26 +7707,43 @@ function drawD(){const B=DP.body;B.textContent='';
     const mkTd=(node)=>{const td=el('td');td.appendChild(node);tr.appendChild(td);return node};
     const ti=el('input','co-n');ti.type='text';ti.inputMode='decimal';ti.autocomplete='off';ti.placeholder='Time';ti.value=r.t||'';
     ti.addEventListener('input',()=>{let t=ti.value.replace(/[^0-9.]/g,'');const p=t.indexOf('.');if(p>=0)t=t.slice(0,p+1)+t.slice(p+1).replace(/\./g,'');if(t!==ti.value)ti.value=t;r.t=t;r.dirty=true;grow()});
-    ti.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();nextFrom(ti)}});mkTd(ti);
+    ti.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();nextFrom(ti)}});mkTd(ti);if(r.posted)ti.disabled=true;
     const vp=el('select','co-n dc-l');const vps=VP.includes(r.vp)?VP:VP.concat([r.vp]);vps.forEach(p=>vp.appendChild(new Option(p)));vp.value=r.vp;
-    vp.addEventListener('change',()=>{r.vp=vp.value;r.dirty=true;grow()});mkTd(vp);
-    const vw=el('input','co-n dc-l');vw.type='text';vw.placeholder='Self';vw.value=r.vw||'';vw.addEventListener('input',()=>{r.vw=vw.value;r.dirty=true;grow()});vw.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();nextFrom(vw)}});mkTd(vw);
-    const rm=el('input','co-n dc-l');rm.type='text';rm.placeholder='Remarks';rm.value=r.rm||'';rm.addEventListener('input',()=>{r.rm=rm.value;r.dirty=true;grow()});rm.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();nextFrom(rm)}});mkTd(rm);
+    vp.addEventListener('change',()=>{r.vp=vp.value;r.dirty=true;grow()});mkTd(vp);if(r.posted)vp.disabled=true;
+    const vw=el('input','co-n dc-l');vw.type='text';vw.placeholder='Self';vw.value=r.vw||'';vw.addEventListener('input',()=>{r.vw=vw.value;r.dirty=true;grow()});vw.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();nextFrom(vw)}});mkTd(vw);if(r.posted)vw.disabled=true;
+    const rm=el('input','co-n dc-l');rm.type='text';rm.placeholder='Remarks';rm.value=r.rm||'';rm.addEventListener('input',()=>{r.rm=rm.value;r.dirty=true;grow()});rm.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();nextFrom(rm)}});mkTd(rm);if(r.posted)rm.disabled=true;
     const tx=el('td'),x=el('button','co-x','×');x.type='button';x.setAttribute('aria-label','Delete row');
-    x.onclick=()=>{if(r.saved){if(!confirm('Delete this visit?'))return;const V=getV();V.visits=V.visits.filter(z=>z.id!==r.id);saveV(V);refreshMore();drawD();return}
+    x.onclick=()=>{if(r.posted){alert('This visit is already sent to the Admin and locked, so it cannot be deleted here. Ask the Admin if it must be removed.');return}if(r.saved){if(!confirm('Delete this visit?'))return;const V=getV();V.visits=V.visits.filter(z=>z.id!==r.id);saveV(V);refreshMore();drawD();return}
       const i=rows.indexOf(r);if(i>=0)rows.splice(i,1);tr.remove();if(!rows.length||!isBlank(rows[rows.length-1])){const nb=blank();rows.push(nb);tb.appendChild(mkRow(nb))}};
+    if(r.posted){x.textContent='\u2713';x.className='co-x co-ok';x.title='Posted and locked';x.setAttribute('aria-label','Posted and locked');x.onclick=()=>alert('Posted and locked \u2014 only the Admin can change or delete it.')}
     tx.appendChild(x);tr.appendChild(tx);return tr}
   rows.forEach(r=>tb.appendChild(mkRow(r)));
   tcard.appendChild(msg);
-  /* Save DCR button: saves every finished row, then opens the DCR report of that date */
-  {const sc=el('div','st-card'),srow=el('div','od-actions'),svb=el('button','st-btn co-b co-p');svb.type='button';
-   svb.innerHTML='<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h11l3 3v13H5zM8 4v5h7M8 20v-6h8v6"/></svg><span>Save DCR</span>';
+  /* Save DCR = keep it on this phone and look at the report (still editable). Post DCR = final: sent to the admin and locked */
+  {const sc=el('div','st-card'),srow=el('div','od-actions'),svb=el('button','st-btn co-b co-s'),pob=el('button','st-btn co-b co-p');svb.type=pob.type='button';
+   const ic='<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none">';
+   svb.innerHTML=ic+'<path d="M5 4h11l3 3v13H5zM8 4v5h7M8 20v-6h8v6"/></svg><span>Save to app only</span>';pob.innerHTML=ic+'<path d="M4 12l16-8-6 16-3-7z"/></svg><span>Send to Admin</span>';
+   svb.style.cssText=pob.style.cssText='display:inline-flex;align-items:center;justify-content:center;gap:6px';
+   const bad=()=>{for(let i=0;i<rows.length;i++){const r=rows[i];if(isBlank(r)||(r.saved&&!r.dirty))continue;const c=chk(r);if(!c.ok){setMsg('✗ Row '+(i+1)+': '+c.err+' — not saved yet','bad');return true}}return false};
    svb.onclick=()=>{
-     for(let i=0;i<rows.length;i++){const r=rows[i];if(isBlank(r)||(r.saved&&!r.dirty))continue;const c=chk(r);if(!c.ok){setMsg('\u2717 Row '+(i+1)+': '+c.err+' \u2014 not saved yet','bad');return}}
+     if(bad())return;
      commit();
-     if(!vOf(DV.date).length){setMsg('\u2717 No DCR visit to save for '+dd(DV.date),'bad');return}
+     if(!vOf(DV.date).length){setMsg('✗ No DCR visit to save for '+dd(DV.date),'bad');return}
      const d=DV.date;if(R.openDailyReport)R.openDailyReport();RP.tab='dcr';RP.date=d;DCT.from=DCT.to=d;drawRP()};
-   srow.appendChild(svb);sc.appendChild(srow);B.appendChild(sc)}
+   pob.onclick=async()=>{
+     if(bad())return;
+     commit();
+     const V=getV(),d=DV.date,all=vOf(d),ids=new Set(all.filter(v=>!v.posted).map(v=>v.id));
+     if(!ids.size){setMsg(all.length?'✓ Everything of '+dd(d)+' is already sent to the Admin':'✗ No DCR visit to send for '+dd(d),all.length?'ok':'bad');return}
+     if(!confirm('Send '+ids.size+' DCR visit'+(ids.size===1?'':'s')+' of '+dd(d)+' to the Admin?\n\nAfter sending they are locked and cannot be changed.'))return;
+     const t=Date.now();V.visits.forEach(v=>{if(ids.has(v.id)){v.posted=1;v.postedAt=t}});
+     if(!saveV(V)){setMsg('✗ Could not save on this device','bad');return}
+     refreshMore();
+     let sent=false;try{const g=window.RDLGATE;if(g&&g.sendBackup){await g.sendBackup(true);sent=true}}catch(e){}
+     drawD();
+     const nm=document.querySelector('#dcrp .co-tcard .stt'),setMsg2=(t,k)=>{if(nm){nm.className='stt'+(k?' '+k:'');nm.textContent=t}};
+     setMsg2(sent?'✓ '+ids.size+' visit'+(ids.size===1?'':'s')+' sent to the Admin':'✓ '+ids.size+' visit'+(ids.size===1?'':'s')+' marked as sent — it will reach the Admin as soon as the internet is back','ok')};
+   srow.appendChild(svb);srow.appendChild(pob);sc.appendChild(srow);B.appendChild(sc)}
   /* ---- automatic saving (no Submit): a finished visit row is added to "My DCR table" below as soon as the next row is started, when the table is left, or when the date is changed ---- */
   const tw=el('div'),sumEl=el('div','mv-day');
   const paintSum=()=>{const L=vOf(DV.date),s=stats(L);sumEl.textContent=dow(DV.date)+', '+dd(DV.date)+(DV.date===today()?' • Today':'')+' • '+s.n+' visit'+(s.n===1?'':'s')+' • '+s.c+' customer'+(s.c===1?'':'s')+' • '+dur(s.m)};
@@ -8044,6 +8062,7 @@ function drawCO(){const B=CP.body;B.textContent='';
     const tx=el('td'),x=el('button','co-x','×');x.type='button';x.setAttribute('aria-label','Delete row');
     x.onclick=()=>{if(r.posted){if(!confirm('This entry is already posted. Delete it from this table?\n\nThe Sales / Collection already posted in the app stays as it is (remove it from Database Correction if needed).'))return;const X=coGet();X[CX.date]=coList(CX.date).filter(z=>z.id!==r.id);coSet(X);CX.rows=rows.filter(z=>z!==r);drawCO();return}if(r.saved){if(!confirm('Delete this saved entry?'))return;const X=coGet();X[CX.date]=coList(CX.date).filter(z=>z.id!==r.id);coSet(X);CX.rows=rows.filter(z=>z!==r);drawCO();return}
       const i=rows.indexOf(r);if(i>=0)rows.splice(i,1);tr.remove();if(!rows.length||!isBlank(rows[rows.length-1])){const nb=blank();rows.push(nb);tb.appendChild(mkRow(nb))}CX.dirty=true};
+    if(r.posted){x.textContent='\u2713';x.className='co-x co-ok';x.title='Posted and locked';x.setAttribute('aria-label','Posted and locked');x.onclick=()=>alert('Posted and locked \u2014 only the Admin can change or delete it.')}
     tx.appendChild(x);tr.appendChild(tx);return tr}
   rows.forEach(r=>tb.appendChild(mkRow(r)));
   tcard.appendChild(msg);
@@ -8104,7 +8123,7 @@ function openD(){if(window.RDL_ROLE==='admin')return;dcrPC=0;DS.open=false;DV.da
 /* ===== Posting Center: "Daily CO & DCR Entry" (entry / upload only, with today's status) and "Daily CO & DCR Report" (tables, reports, Excel). User accounts only. ===== */
 const DE=mkPage('dcen','Daily CO & DCR Entry',()=>{if(R.openUpload)R.openUpload()}),DRP=mkPage('dcre','Daily CO & DCR Report',()=>{if(R.openUpload)R.openUpload()});
 const RP={date:'',tab:'co'};
-(function(){const s=document.createElement('style');s.textContent='.co-tbl tr.co-hid{display:none}.co-tbl.co-show tr.co-hid{display:table-row}.co-tg{display:block;width:100%;box-sizing:border-box;margin:0;padding:10px 12px;border:0;border-bottom:1px solid #c9d9f1;background:#eaf2ff;color:#0a3fa8;font:inherit;font-size:13px;font-weight:800;text-align:left;cursor:pointer}.up-st{display:block;margin-top:5px;font-size:12px;font-weight:800;color:#0b7a4b}.up-st.no{color:#8a6d00}.rp-tt{font-size:13px;font-weight:700;margin:2px 0 6px}';document.head.appendChild(s)})();
+(function(){const s=document.createElement('style');s.textContent='.co-tbl tr.co-hid{display:none}.co-pb{background:#dcf5e7!important;color:#0b7a4b!important}.co-x.co-ok{background:#16a34a!important;color:#fff!important;border-radius:50%!important;font-size:16px!important}.co-tbl.co-show tr.co-hid{display:table-row}.co-tg{display:block;width:100%;box-sizing:border-box;margin:0;padding:10px 12px;border:0;border-bottom:1px solid #c9d9f1;background:#eaf2ff;color:#0a3fa8;font:inherit;font-size:13px;font-weight:800;text-align:left;cursor:pointer}.up-st{display:block;margin-top:5px;font-size:12px;font-weight:800;color:#0b7a4b}.up-st.no{color:#8a6d00}.rp-tt{font-size:13px;font-weight:700;margin:2px 0 6px}';document.head.appendChild(s)})();
 /* what has been entered / uploaded today (the sales day the entry pages open on counts as today's work) */
 function entryStatus(){
   const t=today(),sd=R.salesDay?R.salesDay():t,days=[t,sd].filter((d,i,a)=>a.indexOf(d)===i),X=coGet();let man=0,sap=0,sb=0;
