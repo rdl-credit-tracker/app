@@ -6362,7 +6362,7 @@ function showResult(res){
       if(isS)hookTh(db,'Payment Date',st,'y',render,()=>paintIt(dateItems(base,x=>x.due,x=>x.amt),x=>x.due));else hookTh(db,'Payment',st,'m',render,()=>paintIt(modeItems(base),x=>x.type));
       list.forEach(x=>{add(dt,x);const q=el('tr','row-ok');if(isS&&x.bal>0){const sc=stCls(x.due);if(sc)q.classList.add(sc)}nameCell(q,String(x.doc),[multi?nameOf(x.cu):'',many?R.coName(x.co):''].filter(Boolean).join(' • '));td(q,dd(x.d),{chip:'cd'});
         if(isS){td(q,x.due?dd(x.due):'\u2014',{chip:'cd'});td(q,money(x.amt),{chip:'cn2 cb',cls:'num'});td(q,money(x.col),{chip:'cn2',cls:'num'});td(q,money(x.tds),{chip:'cn2',cls:'num'});td(q,money(x.bal),{chip:'cn2 cb',cls:'num'});
-          if(x.bal>0&&x.due){const dv=Math.round((new Date(TD+'T00:00:00')-new Date(x.due+'T00:00:00'))/864e5);td(q,__d(dv),{chip:dv>0?'g3':dv>=-7?'g1':'g0',cls:'c-arr'})}else td(q,'\u2014',{chip:'cl',cls:'c-arr'});sb+=x.bal}
+          if(x.bal>0&&x.due){const dv=Math.round((new Date(TD+'T00:00:00')-new Date(x.due+'T00:00:00'))/864e5);td(q,__d(dv),{chip:dv>0?'g3':dv>=-7?'g1':'g0',cls:'c-arr'})}else if(x.bal<=0){td(q,'',{chip:'cl',cls:'c-arr'});/*TICK*/q.lastChild.firstChild.innerHTML='<i class="arr-ok" role="img" aria-label="Collected"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5.5 12.5l4.2 4.2L18.5 7.5"/></svg></i>';/*TICKEND*/}else td(q,'\u2014',{chip:'cl',cls:'c-arr'});sb+=x.bal}
         else{const bl=bmp.get(String(x.cu)+'|'+String(x.against));td(q,x.against||'\u2014',{chip:'cd',cls:'c-pay'});td(q,x.type,{chip:'cl',cls:'c-lim'});td(q,x.ref||'\u2014',{chip:'cl',cls:'c-lim',sub:x.rd?dd(x.rd):''});td(q,bl?money(bl.amt):'\u2014',{chip:'cn2',cls:'num'});td(q,money(x.col),{chip:'cn2',cls:'num'});td(q,money(x.tds),{chip:'cn2',cls:'num'});td(q,bl?money(bl.bal):'\u2014',{chip:'cn2 cb',cls:'num'});td(q,money(x.col+x.tds),{chip:'cn2 cb',cls:'num'})}
         db.appendChild(q)});
       const q=el('tr','row-ok cs-tot');nameCell(q,'Total');td(q,'',{});
@@ -6510,11 +6510,20 @@ function showResult(res){
         mr.onclick=()=>{const o=kids[0]&&kids[0].style.display==='none';kids.forEach(k=>{if(k.classList.contains('ca-c'))k.style.display=o?'':'none';else if(!o)k.style.display='none'});mr.querySelector('.ca-ar').textContent=o?'▾ ':'▸ '}});
       {const sm=sum(lines),tr=el('tr','row-ok cs-tot');nameCell(tr,'Total');td(tr,'',{});td(tr,'',{});statCells(tr,mrows);td(tr,money(sm.c),{chip:'cn2',cls:'num'});td(tr,money(sm.t),{chip:'cn2',cls:'num'});td(tr,money(sm.c+sm.t),{chip:'cn2 cb',cls:'num'});td(tr,'',{});db.appendChild(tr)}
       const ob=[].concat(...[...cset].map(c=>openBy.get(c)||[])).sort((p,q)=>(p.due||'9')<(q.due||'9')?-1:1);
-      if(ob.length){const avOf=b=>{const rr=PB.get(String(b.co))||[];return rr.length?Math.round(agg(rr).ad):null},ob2=table(detHost,'Still Open Bills • '+name+' • '+fmt(ob.length),['Document','Posting Date','Payment Date','Balance','Arrears by Net Due Date','Expected (Estimated)'],820);ob2.closest('.st-card').classList.add('dd-card');let tb=0;
-        ob.forEach(b=>{const q=el('tr','row-ok');if(REG){const sc=stCls(b.due);if(sc)q.classList.add(sc)}nameCell(q,String(b.bill),many?R.coName(b.co):'');q.firstChild.className+=' dc-rv';td(q,b.post?dd(b.post):'—',{chip:'cd'});td(q,b.due?dd(b.due):'—',{chip:'cd'});td(q,money(bal(b)),{chip:'cn2 cb',cls:'num'});tb+=bal(b);
+      if(ob.length){const avOf=b=>{const rr=PB.get(String(b.co))||[];return rr.length?Math.round(agg(rr).ad):null},ob2=table(detHost,'Still Open Bills • '+name+' • '+fmt(ob.length),['Document','Posting Date','Payment Date','Balance','Arrears by Net Due Date','Expected (Estimated)'],820);ob2.closest('.st-card').classList.add('dd-card','ob-card');
+        /* header pick lists (same as Sales Details): tap a column head, tick the values to show, Submit */
+        const sto={},arrOf=b=>bal(b)>0&&b.due?String(Math.round((new Date(TD+'T00:00:00')-new Date(b.due+'T00:00:00'))/864e5)):'\u2014';
+        const obRows=()=>ob.filter(b=>inSet(String(b.bill),sto.d)&&inSet(b.post,sto.p)&&inSet(b.due,sto.y)&&inSet(arrOf(b),sto.a));
+        const fillOb=()=>{ob2.textContent='';let tb=0;
+        obRows().forEach(b=>{const q=el('tr','row-ok');if(REG){const sc=stCls(b.due);if(sc)q.classList.add(sc)}nameCell(q,String(b.bill),many?R.coName(b.co):'');q.firstChild.className+=' dc-rv';td(q,b.post?dd(b.post):'—',{chip:'cd'});td(q,b.due?dd(b.due):'—',{chip:'cd'});td(q,money(bal(b)),{chip:'cn2 cb',cls:'num'});tb+=bal(b);
           if(b.due){const dv=Math.round((new Date(TD+'T00:00:00')-new Date(b.due+'T00:00:00'))/864e5);td(q,__d(dv),{chip:dv>0?'g3':dv>=-7?'g1':'g0',cls:'c-arr'})}else td(q,'—',{chip:'cl',cls:'c-arr'});
           let ex='—';const av=avOf(b);if(av!=null&&b.post){const e=new Date(b.post+'T00:00:00');e.setDate(e.getDate()+av);ex=dd(ymd(e))}td(q,ex,{chip:'cd'});ob2.appendChild(q)});
-        const q=el('tr','row-ok cs-tot');nameCell(q,'Total');td(q,'',{});td(q,'',{});td(q,money(tb),{chip:'cn2 cb',cls:'num'});td(q,'',{});td(q,'',{});ob2.appendChild(q)}
+        const q=el('tr','row-ok cs-tot');nameCell(q,'Total');td(q,'',{});td(q,'',{});td(q,money(tb),{chip:'cn2 cb',cls:'num'});td(q,'',{});td(q,'',{});ob2.appendChild(q)};fillOb();
+        const cmA=new Map();if(many)ob.forEach(b=>cmA.set(String(b.bill),R.coName(b.co)));
+        hookTh(ob2,'Document',sto,'d',fillOb,()=>keyItems(ob,b=>String(b.bill),k=>many?[k,cmA.get(k)||'']:k,b=>bal(b),(a,b)=>a<b?1:-1));
+        hookTh(ob2,'Posting Date',sto,'p',fillOb,()=>dateItems(ob,b=>b.post,b=>bal(b)));
+        hookTh(ob2,'Payment Date',sto,'y',fillOb,()=>dateItems(ob,b=>b.due,b=>bal(b)));
+        hookTh(ob2,'Arrears by Net Due Date',sto,'a',fillOb,()=>keyItems(ob,arrOf,k=>k==='\u2014'?'\u2014':__d(+k),b=>bal(b),(a,b)=>a==='\u2014'?1:b==='\u2014'?-1:b-a,k=>k==='\u2014'?'#44587c':+k>0?'#b5122f':+k>=-7?'#9a6200':'#0b7a4a'));/*OBEND*/}
       };
     {const first=res.querySelector('.st-card');if(first&&first!==pcard)res.insertBefore(pcard,first)}
     if(ana){res.insertBefore(ana,pcard);pcard._pair=ana}   /* Collection Analysis is the first table */
@@ -10717,5 +10726,15 @@ window.RDL_SAP={parse:parseSap,analyze:analyze,apply:apply,makeExcel:makeExcel};
 })();
 </script>
 
+<style id="rdl-ob-title">
+/* Customer page: the "Still Open Bills ..." title sits exactly in the middle of its table */
+html body .st-card.ob-card h3.tt-h{justify-content:center;text-align:center}
+html body .st-card.ob-card h3.tt-h .tt-name{text-align:center;flex:0 1 auto}
+</style>
+<style id="rdl-arr-ok">
+/* Sales Details: a bill whose collection is already received (balance 0) shows a small green tick circle in the Arrears column instead of a dash */
+html body .arr-ok{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;vertical-align:middle;background:linear-gradient(135deg,#4ade80,#15a34a);box-shadow:0 2px 4px #15a34a66,inset 0 1px 1px #ffffffaa,inset 0 -2px 3px #0b6b3055}
+html body .arr-ok svg{width:12px;height:12px;fill:none;stroke:#fff;stroke-width:3.6;stroke-linecap:round;stroke-linejoin:round;display:block}
+</style>
 </body>
 </html>
