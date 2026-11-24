@@ -4043,7 +4043,8 @@ window.addEventListener('popstate',()=>{
   if(!mState||!$('#collection').classList.contains('on')){mState=0;return}
   if(mState===2){mState=1;if(mBack)mBack();window.scrollTo(0,0);return}
   mState=0;render('c')});
-const QCS=[];   /* Quick Collection: collections saved on the page, waiting for one combined Review */
+const QCS=[],QF={cu:'',co:'',bill:'',ty:'',ref:'',date:'',tds:'',col:'',tot:'',left:'',sk:'',sd:1};   /* QF = header filters / sort of the Saved Collections table */
+   /* Quick Collection: collections saved on the page, waiting for one combined Review */
 /* ---------- Collection By Manually: the same options as the Collection & Order collection update, but typed in by hand ---------- */
 function manualPage(P,ttl,bk){
   const m=R.master,EPS=0.005,t0=today();const formBack=()=>mState===1?history.back():window.RDL.openUpload();ttl.textContent='Quick Collection';bk.onclick=formBack;
@@ -4270,14 +4271,50 @@ function manualPage(P,ttl,bk){
     const by=(kf)=>{const mp=new Map();parts.forEach(x=>{const k=kf(x),r=mp.get(k)||{n:new Set(),c:0,t:0};r.n.add(uid(x.b));r.c+=x.c;r.t+=tx(x);mp.set(k,r)});return mp};
     const cm=by(x=>String(x.b.co));tbl('Business-wise total',['Business','Collected','TDS','Total'],[...cm.keys()].sort(R.coCmp).map(k=>{const r=cm.get(k);return[R.coName(k),qn(r.c),qn(r.t),qn(r.c+r.t)]}));
     const tm=by(x=>x.o.ty.value);tbl('Payment type-wise total',['Type','Collected','TDS','Total'],['Cash','Cheque','BEFTN'].filter(k=>tm.has(k)).map(k=>{const r=tm.get(k);return[k+' ('+r.n.size+')',qn(r.c),qn(r.t),qn(r.c+r.t)]}));
-    sbox.appendChild(el('div','hint','Saved customers')).style.cssText='font-weight:800;margin:10px 0 4px';
-    QCS.forEach(e=>{const c=sum(e.groups,g=>g.col),t=sum(e.groups,g=>g.tds),r=el('div');r.style.cssText='display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px dashed #c9d6ea'+(e.id===editId?';background:#fff8e1':'');
-      const i=el('div');i.style.cssText='flex:1;min-width:0';const n=el('b',null,e.nm);n.style.display='block';i.appendChild(n);i.appendChild(el('small',null,e.bp+' • '+dd(e.f)+' • '+q(c+t)+(t>0?' (TDS '+q(t)+')':'')+(e.id===editId?' • editing':'')));r.appendChild(i);
-      const eb=el('button','st-btn','Edit'),db=el('button','st-btn od-clear','Delete');eb.type=db.type='button';eb.style.cssText=db.style.cssText=small;
-      eb.onclick=()=>{if(dirty()){sst.className='stt bad';sst.textContent='The collection on the form below is not saved yet. Press Save Collection first.';return}editId=e.id;restore(e);renderSaved();st.className='stt warn';st.textContent='Editing '+e.nm+' — change it and press Save Collection to update.';window.scrollTo(0,card.offsetTop>0?card.offsetTop:0)};
-      db.onclick=async()=>{const ok=await RDLUI.ask({title:'Delete saved collection?',msg:e.nm+' ('+e.bp+') will be removed from the saved list.',ok:'Delete',danger:true});if(!ok)return;QCS.splice(QCS.indexOf(e),1);if(editId===e.id){editId=null;resetForm();st.textContent='';st.className='stt'}renderSaved()};
-      r.appendChild(eb);r.appendChild(db);sbox.appendChild(r)});
-    const sst=el('div','stt');sbox.appendChild(sst);sbox.__sst=sst;
+    const sst=el('div','stt'),F=QF;
+    sbox.appendChild(el('div','hint','Saved collections — filter or sort from the table header')).style.cssText='font-weight:800;margin:10px 0 4px';
+    const rows=[];QCS.forEach(e=>e.groups.forEach(g=>g.ps.forEach(x=>rows.push({e,cu:e.nm,code:String(e.bp),co:String(x.b.co),bill:String(x.b.bill),ty:g.o.ty.value,ref:g.o.rf.value.trim(),date:e.f,col:x.c,tds:tx(x),tot:x.c+tx(x),left:x.left}))));
+    const editE=e=>{if(dirty()){sst.className='stt bad';sst.textContent='The collection on the form below is not saved yet. Press Save Collection first.';return}editId=e.id;restore(e);renderSaved();st.className='stt warn';st.textContent='Editing '+e.nm+' — change it and press Save Collection to update.';card.scrollIntoView({behavior:'smooth'})};
+    const delE=async e=>{const ok=await RDLUI.ask({title:'Delete saved collection?',msg:e.nm+' ('+e.bp+') will be removed from the saved list.',ok:'Delete',danger:true});if(!ok)return;QCS.splice(QCS.indexOf(e),1);if(editId===e.id){editId=null;resetForm();st.textContent='';st.className='stt'}renderSaved()};
+    const CS='width:100%;min-width:64px;max-width:96px;font-size:12px;padding:4px 3px;box-sizing:border-box;border:1px solid #b8c7e0;border-radius:6px;background:#fff;color:#0b2a5b;margin:0;height:auto';
+    const sel=(k,opts)=>{const c=el('select');c.style.cssText=CS;c.appendChild(new Option('All',''));opts.forEach(([v,t])=>c.appendChild(new Option(t,v)));if(!opts.some(o=>o[0]===F[k]))F[k]='';c.value=F[k];c.onchange=()=>{F[k]=c.value;draw()};return c};
+    const inp=(k,ph,num)=>{const c=el('input');c.style.cssText=CS;c.placeholder=ph;if(num){c.type='number';c.min='0'}c.value=F[k];c.oninput=()=>{F[k]=c.value;draw()};return c};
+    const uniq=f=>[...new Map(rows.map(r=>[f(r),f(r)])).keys()];
+    const COLS=[['Customer','cu',()=>sel('cu',[...new Map(rows.map(r=>[r.code,r.cu])).entries()])],['Co','co',()=>sel('co',uniq(r=>r.co).sort(R.coCmp).map(c=>[c,R.coName(c)]))],['Bill No','bill',()=>inp('bill','Bill…')],
+      ['Type','ty',()=>sel('ty',['Cash','Cheque','BEFTN'].filter(t=>rows.some(r=>r.ty===t)).map(t=>[t,t]))],['Ref No.','ref',()=>inp('ref','Ref…')],['Date','date',()=>sel('date',uniq(r=>r.date).sort().map(d=>[d,dq(d)]))],
+      ['Collected','col',()=>inp('col','≥',1)],['TDS','tds',()=>sel('tds',[['with','With TDS'],['no','No TDS']])],['Total','tot',()=>inp('tot','≥',1)],['Balance','left',()=>sel('left',[['clr','Cleared'],['rem','Remaining']])]];
+    const NUM=new Set(['col','tds','tot','left']);
+    const pass=r=>(F.cu===''||r.code===F.cu)&&(F.co===''||r.co===F.co)&&r.bill.includes(F.bill.trim())&&(F.ty===''||r.ty===F.ty)&&(r.ref||'').toLowerCase().includes(F.ref.trim().toLowerCase())&&(F.date===''||r.date===F.date)
+      &&(F.tds===''||(F.tds==='with'?r.tds>EPS:r.tds<=EPS))&&(F.col===''||r.col>=(+F.col||0)-EPS)&&(F.tot===''||r.tot>=(+F.tot||0)-EPS)&&(F.left===''||(F.left==='clr'?r.left<=EPS:r.left>EPS));
+    const wrap=sbox.appendChild(el('div','sq-scroll')),tab=el('table','sq-tbl'),th=el('thead'),h1=el('tr'),h2=el('tr'),tb=el('tbody'),tf=el('tfoot');
+    const arrows=new Map();
+    COLS.forEach(([lab,k,mk],j)=>{const t=el('th',NUM.has(k)?'num':(j===0?'sq-r1':null));t.style.cursor='pointer';t.style.whiteSpace='nowrap';t.appendChild(document.createTextNode(lab+' '));const ar=el('span',null,'');ar.style.opacity='.8';t.appendChild(ar);arrows.set(k,ar);
+      t.onclick=()=>{if(F.sk!==k){F.sk=k;F.sd=1}else if(F.sd===1)F.sd=-1;else{F.sk='';F.sd=1}draw()};h1.appendChild(t);
+      const f=el('th',j===0?'sq-r1':null);f.style.padding='4px';f.style.background='#eef4ff';f.appendChild(mk());h2.appendChild(f)});
+    const ah=el('th',null,'Action'),ac=el('th'),clr=el('button',null,'Clear');ac.style.cssText='padding:4px;background:#eef4ff';clr.type='button';clr.style.cssText='font-size:12px;padding:4px 8px;border:1px solid #b8c7e0;border-radius:6px;background:#fff;color:#0b2a5b;font-weight:700';
+    clr.onclick=()=>{Object.keys(F).forEach(k=>F[k]=k==='sd'?1:'');renderSaved()};ac.appendChild(clr);h1.appendChild(ah);h2.appendChild(ac);th.appendChild(h1);th.appendChild(h2);tab.appendChild(th);tab.appendChild(tb);tab.appendChild(tf);wrap.appendChild(tab);
+    const TY={Cash:['#0b7a4b','#d6f5e7'],Cheque:['#0a3fa8','#dbe9ff'],BEFTN:['#6d28d9','#ede4ff']};
+    function draw(){let list=rows.filter(pass);
+      if(F.sk){const k=F.sk,n=NUM.has(k);list=list.map((r,i)=>[r,i]).sort((x,y)=>{const a=x[0][k],b=y[0][k],c=n?a-b:String(a).localeCompare(String(b),undefined,{numeric:true});return c?c*F.sd:x[1]-y[1]}).map(x=>x[0])}
+      arrows.forEach((ar,k)=>ar.textContent=F.sk===k?(F.sd===1?'▲':'▼'):'');
+      tb.textContent='';tf.textContent='';
+      if(!list.length){const r=el('tr'),c=el('td','hint','No saved collection matches the filter');c.colSpan=COLS.length+1;c.style.textAlign='center';r.appendChild(c);tb.appendChild(r)}
+      list.forEach(r=>{const tr=el('tr');if(r.e.id===editId)tr.style.background='#fff8e1';
+        const cell=(v,cls)=>{const d=el('td',cls);if(v!=null)d.textContent=v;tr.appendChild(d);return d};
+        const c1=cell(null,'sq-r1');c1.appendChild(el('b',null,r.cu));const sm=el('small',null,r.code);sm.style.cssText='display:block;opacity:.75';c1.appendChild(sm);
+        cell(R.coName(r.co));cell(r.bill).style.fontWeight='700';
+        const ty=cell(null),bd=el('span',null,r.ty),cc=TY[r.ty]||['#334','#eee'];bd.style.cssText='display:inline-block;padding:2px 9px;border-radius:99px;font-size:12px;font-weight:800;color:'+cc[0]+';background:'+cc[1];ty.appendChild(bd);
+        cell(r.ref||'—');cell(dq(r.date));cell(qn(r.col),'num');
+        const td=cell(r.tds>EPS?qn(r.tds):'—','num');if(r.tds>EPS)td.style.cssText='color:#b45309;font-weight:800;background:#fff3d6';
+        cell(qn(r.tot),'num').style.fontWeight='800';
+        const bl=cell(r.left<=EPS?'✓ Cleared':qn(r.left),'num');bl.style.cssText=r.left<=EPS?'color:#0b7a4b;font-weight:800':'color:#c0392b;font-weight:800';
+        const ac=cell(null);ac.style.whiteSpace='nowrap';
+        [['✎','Edit this customer',()=>editE(r.e),'#0a4fd0'],['🗑','Delete this customer',()=>delE(r.e),'#c0392b']].forEach(([ic,tt,fn,col])=>{const b=el('button',null,ic);b.type='button';b.title=tt;b.setAttribute('aria-label',tt);b.style.cssText='border:1px solid '+col+';color:'+col+';background:#fff;border-radius:8px;padding:3px 8px;margin-right:4px;font-size:14px;min-height:0;width:auto';b.onclick=fn;ac.appendChild(b)});
+        tb.appendChild(tr)});
+      const ft=el('tr'),l=el('td','sq-r1','Total • '+list.length+' of '+rows.length+' rows');l.colSpan=6;l.style.textAlign='left';ft.appendChild(l);
+      ['col','tds','tot','left'].forEach(k=>ft.appendChild(el('td','num',qn(sum(list,r=>r[k])))));ft.appendChild(el('td'));tf.appendChild(ft)}
+    draw();
+    sbox.appendChild(sst);
     const rb=el('button','st-btn','Review Collection');rb.type='button';rb.style.cssText='display:block;width:100%;margin-top:8px';
     rb.onclick=()=>{if(dirty()){sst.className='stt bad';sst.textContent='The collection on the form below is not saved yet. Press Save Collection first.';return}if(!QCS.length)return;showReview()};sbox.appendChild(rb)}
   pb.onclick=()=>{const en=buildEntry();if(!en)return;
