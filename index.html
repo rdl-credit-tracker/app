@@ -4253,19 +4253,20 @@ function buildDrafts(kind){const P=$('#drf');P.textContent='';const L=ld(),all0=
   /* ===== Pending Collections (SAP style): one table block per customer; Cheque/BEFTN no + date and posting date are set once per customer; one row per draft; edits save by themselves; Post selected / Delete work on the ticked rows ===== */
   const nf=v=>(+v||0).toLocaleString('en-IN',{maximumFractionDigits:2}),ageD=v=>v?Math.max(0,Math.round((new Date(t)-new Date(v))/864e5)):0,dd2=v=>v?v.slice(8,10)+'.'+v.slice(5,7):'—';
   const rowsAll=[],custs=[];
+  const setM=(r,x)=>{r.mt.textContent='';if(x){const sp=document.createElement('span');sp.className='pcm';sp.textContent=x;r.mt.appendChild(sp)}};
   const readRow=r=>{const c2=+r.col.value||0,tx=+r.tds.value||0;if(c2<0||tx<0||!(c2+tx>0))return null;return{c:c2,tx}};
   const live=r=>{const c2=+r.col.value||0,tx=+r.tds.value||0;let cls='',txt='';
     if(!r.bill){cls='bad';txt='This bill is no longer open (the database changed). Delete this draft.'}
     else if(!(c2+tx>0)){cls='warn';txt='Enter the collected amount or the TDS'}
     else if(c2+tx>r.bal0+EPS){cls='bad';txt=money(c2+tx)+' is more than the open balance ('+money(r.bal0)+')'}
     else{const rem=+(r.bal0-c2-tx).toFixed(2);if(rem>EPS){cls='warn';txt='Remaining on this bill: '+money(rem)}}
-    r.mt.className='stt '+cls;r.mt.textContent=txt;r.mr.style.display=txt?'':'none';r.tr.classList.toggle('pc-bad',cls==='bad')};
-  const persist=r=>{const v=readRow(r);if(!v)return;const L2=ld();if(!L2.dr)return;const x=L2.dr.find(e=>e.id===r.d.id);if(!x)return;x.col=v.c;x.tds=v.tx;x.type=r.ty.value;x.ref=r.c.rf.value.trim();if(r.c.rd.value)x.rd=r.c.rd.value;else delete x.rd;try{sv(L2)}catch(e){}};
-  const doPost=(r,used)=>{const v=readRow(r),bad=x=>{r.mt.className='stt bad';r.mt.textContent=x;r.mr.style.display='';return false};
+    r.mt.className='stt '+cls;setM(r,txt);r.mr.style.display=txt?'':'none';r.tr.classList.toggle('pc-bad',cls==='bad')};
+  const persist=r=>{const v=readRow(r);if(!v)return;const L2=ld();if(!L2.dr)return;const x=L2.dr.find(e=>e.id===r.d.id);if(!x)return;x.col=v.c;x.tds=v.tx;x.type=r.ty.value;if(x.type==='Cash'){x.ref='';delete x.rd}else{x.ref=r.c.rf.value.trim();if(r.c.rd.value)x.rd=r.c.rd.value;else delete x.rd}try{sv(L2)}catch(e){}};
+  const doPost=(r,used)=>{const v=readRow(r),bad=x=>{r.mt.className='stt bad';setM(r,x);r.mr.style.display='';return false};
     if(!v)return bad('Enter a collected amount');if(!r.bill)return bad('This bill is no longer open (the database changed). Delete this draft.');
     const pdv=r.c.pd.value;if(!pdv)return bad('Choose a posting date');if(pdv>t)return bad('Posting date cannot be after today');if(r.bill.post&&pdv<r.bill.post)return bad('Posting date cannot be before the bill date ('+dm(r.bill.post)+')');
     if(v.c+v.tx+((used&&used.get(r.d.ag))||0)>r.bal0+EPS)return bad('More than the open balance ('+money(r.bal0)+')');
-    const L2=ld();if(!L2.dr)return false;const x=L2.dr.find(e=>e.id===r.d.id);if(!x)return false;x.col=v.c;x.tds=v.tx;x.type=r.ty.value;x.ref=r.c.rf.value.trim();if(r.c.rd.value)x.rd=r.c.rd.value;else delete x.rd;
+    const L2=ld();if(!L2.dr)return false;const x=L2.dr.find(e=>e.id===r.d.id);if(!x)return false;x.col=v.c;x.tds=v.tx;x.type=r.ty.value;if(x.type==='Cash'){x.ref='';delete x.rd}else{x.ref=r.c.rf.value.trim();if(r.c.rd.value)x.rd=r.c.rd.value;else delete x.rd}
     window.RDLDDEL&&RDLDDEL(L2,[x.id]);L2.dr=L2.dr.filter(e=>e.id!==x.id);const n=nextNo(L2,'DZ');r._res={k:'DZ',cu:x.cu,doc:'DZ-'+String(n).padStart(6,'0'),d:pdv};
     L2.dz.push({bill:'DZ-'+String(n).padStart(6,'0'),doc:'DZ',pt:Date.now(),ag:x.ag,cu:x.cu,co:x.co,nm:x.nm,col:x.col,tds:x.tds,...(x.xt?{xt:x.xt}:{}),type:x.type,ref:x.ref,...(x.rd?{rd:x.rd}:{}),date:pdv,...(x.dcr?{dcr:x.dcr}:{}),...(x.bd?{bd:x.bd}:{}),...(x.manual?{manual:1}:{})});
     try{sv(L2)}catch(e){return bad('Could not save on this device')}if(used)used.set(r.d.ag,((used.get(r.d.ag))||0)+v.c+v.tx);return true};
@@ -4305,7 +4306,7 @@ function buildDrafts(kind){const P=$('#drf');P.textContent='';const L=ld(),all0=
     card0.appendChild(gx)});
   const ft=el('div','pc-ft'),fi=el('div','s'),fm=el('b'),fs=el('span'),db=el('button','st-btn od-clear','Delete'),pb=el('button','st-btn','Post selected'),fx=el('div','stt');db.type=pb.type='button';fi.appendChild(fm);fi.appendChild(fs);ft.appendChild(fi);ft.appendChild(db);ft.appendChild(pb);
   P.appendChild(el('div','pc-sp'));P.appendChild(ft);
-  function sum(){let tot=0,td=0,cash=0,ch=0;const on=tick();on.forEach(r=>{tot+=(+r.col.value||0)+(+r.tds.value||0);td+=+r.tds.value||0;r.ty.value==='Cash'?cash++:ch++});
+  function sum(){let tot=0,td=0,cash=0,ch=0;const on=tick();{const hn=card0.querySelector('.dr-c');if(hn){const lv=live0();hn.textContent=lv.length+(lv.length===1?' draft':' drafts')+' \u2022 '+money(lv.reduce((a,r)=>a+(+r.col.value||0)+(+r.tds.value||0),0))+'. Posting date: any day up to today (not before the bill date).'}}on.forEach(r=>{tot+=(+r.col.value||0)+(+r.tds.value||0);td+=+r.tds.value||0;r.ty.value==='Cash'?cash++:ch++});
     fm.textContent=on.length+(on.length===1?' bill':' bills')+' \u2022 '+money(tot);fs.textContent='TDS '+nf(td)+' \u2022 Cash '+cash+' \u2022 Chq/BEFTN '+ch;pb.disabled=db.disabled=!on.length;
     custs.forEach(c=>{const rl=c.rows.filter(r=>r.tr.isConnected),o=rl.filter(r=>r.ck.checked);if(!rl.length)return;
       [c.ck,c.hck].forEach(k=>{k.checked=o.length===rl.length;k.indeterminate=o.length>0&&o.length<rl.length});
@@ -10842,7 +10843,7 @@ html body .sap .pc-t .dr-ck,html body .sap .pc-h .dr-ck{width:17px!important;hei
 .pc-t tr.pc-r td:first-child{border-left:3px solid #4a90d9}.pc-t tr.pc-r.cash td:first-child{border-left-color:#4cb36b}
 .pc-t tr.pc-bad td{background:#fdecec}
 .pc-t input[type=number],.pc-t select{width:100%;min-width:0;border:1px solid #c5cfda;border-radius:5px;padding:4px 2px;font:inherit;font-size:11.5px;background:#fff;color:#24303c}
-.pc-t input[type=number]{text-align:right}.pc-t input,.pc-t select{box-sizing:border-box!important;max-width:100%}.pc-t input[type=number]{-moz-appearance:textfield;appearance:textfield;padding:4px 3px!important}.pc-t input[type=number]::-webkit-inner-spin-button,.pc-t input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}.pc-t th:nth-child(1){width:28%!important}.pc-t th:nth-child(2){width:10%!important}.pc-t th:nth-child(3){width:13%!important}.pc-t th:nth-child(4){width:15%!important}.pc-t th:nth-child(5){width:18%!important}.pc-t th:nth-child(6){width:16%!important}
+.pc-t input[type=number]{text-align:right}.pc-t input,.pc-t select{box-sizing:border-box!important;max-width:100%}.pc-t input[type=number]{-moz-appearance:textfield;appearance:textfield;padding:4px 3px!important}.pc-t input[type=number]::-webkit-inner-spin-button,.pc-t input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}.pc-t th:nth-child(1){width:122px!important}.pc-t th:nth-child(2){width:52px!important}.pc-t th:nth-child(3){width:64px!important}.pc-t th:nth-child(4){width:72px!important}.pc-t th:nth-child(5){width:74px!important}.pc-t th:nth-child(6){width:62px!important}
 .pc-t tr.pc-mr td{padding:2px 6px;border-bottom:1px solid #e4e9f0}
 .pc-ft{position:sticky;bottom:88px;margin-top:8px;z-index:30;background:#fff;border:1px solid #dde5ee;border-top:2px solid #2f7fd0;border-radius:10px;padding:8px 10px;display:flex;gap:8px;align-items:center;box-shadow:0 4px 14px #0003}
 .pc-ft .s{flex:1;min-width:0;font-size:11.5px;color:#66727f}.pc-ft .s b{display:block;font-size:14px;color:#24303c}
@@ -10900,11 +10901,30 @@ html body #collection.sap .od-table tbody td{background:transparent!important}
 .sx-bar{display:flex;gap:8px;margin:6px 0 10px;padding:0 2px}
 .sx-b{flex:none;border:1px solid #2f7fd0;background:#e6f1fd;color:#2f7fd0;border-radius:6px;padding:6px 12px;font-size:12.5px;font-weight:600}
 </style>
+<style id="fix42">/* nothing overlaps on a small screen: wide tables keep a minimum width and slide left-right inside their own box */
+.pc-w{overflow-x:auto;-webkit-overflow-scrolling:touch;max-width:100%}
+.pc-t{min-width:446px!important}
+.pc-t td,.pc-t th{overflow:hidden}
+.pc-t tr.pc-mr td{overflow:visible!important;white-space:normal!important;word-break:break-word;font-size:11.5px;line-height:1.3}
+.pc-t select{appearance:none;-webkit-appearance:none;padding:4px 14px 4px 5px!important;background:#fff linear-gradient(45deg,transparent 50%,#1f4e78 50%) no-repeat right 5px center/5px 5px!important}
+.pc-t td:nth-child(2){padding-left:6px!important}
+.pcm{display:block;position:sticky;left:0;box-sizing:border-box;width:270px;max-width:calc(100vw - 90px);padding:0!important;margin:0!important;white-space:normal;word-break:break-word}
+.pc-t th:first-child,.pc-t tr.pc-r td:first-child{position:sticky;left:0;z-index:2}
+.pc-t th:first-child{background:#e9eff6}.pc-t tr.pc-r td:first-child{background:#fff;box-shadow:2px 0 3px #0000001a}.pc-t tr.pc-bad td:first-child{background:#fdecec}
+.pc-nm b{overflow-wrap:anywhere}.pc-am{max-width:46%}
+.pc-ref label{max-width:100%}
+html body #collection .od-company-box .od-company-options{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.qc-hd,.qc-r{min-width:312px;grid-template-columns:20px minmax(78px,1.2fr) 60px 56px minmax(70px,1fr)!important;gap:3px!important;padding:6px 2px!important}
+.qc-r .qc-dt{font-size:10.5px}
+html body #collection .od-company-box .od-company-options{padding-left:6px;padding-right:6px}
+.qc-r .qc-bn b,.qc-r .qc-bn small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+</style>
+
 <script>(function(){var mk=function(t,c,x){var e=document.createElement(t);if(c)e.className=c;if(x)e.textContent=x;return e};
 window.RDLSelUI={
 btns:function(a,n){var b=mk('div','sx-bar');[['Select all',a],['Deselect all',n]].forEach(function(p){var x=mk('button','sx-b',p[0]);x.type='button';x.onclick=function(e){e.preventDefault();e.stopPropagation();p[1]()};b.appendChild(x)});return b},
 tick:function(root,v,sel){root.querySelectorAll(sel||'input[type=checkbox]').forEach(function(i){if(i.disabled||i.checked===v)return;i.checked=v;i.dispatchEvent(new Event('change'))})},
 bar:function(card){var s=this,f=card.querySelector('.cg');if(!f||card.querySelector('.sx-bar'))return;card.insertBefore(s.btns(function(){s.tick(card,true,'.cg>.cg-h .dr-ck')},function(){s.tick(card,false,'.cg>.cg-h .dr-ck')}),f)}};
-['collection','drf'].forEach(function(i){var e=document.getElementById(i);if(!e)return;var f=function(){if(!e.classList.contains('sap'))e.classList.add('sap')};f();new MutationObserver(f).observe(e,{attributes:true,attributeFilter:['class']})})})();</script>
+['collection','drf'].forEach(function(i){var e=document.getElementById(i);if(!e)return;var f=function(){if(window.RDL_ROLE==='admin'){if(e.classList.contains('sap'))e.classList.remove('sap');return}if(!e.classList.contains('sap'))e.classList.add('sap')};f();new MutationObserver(f).observe(e,{attributes:true,attributeFilter:['class']})})})();</script>
 </body>
 </html>
