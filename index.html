@@ -4043,6 +4043,7 @@ window.addEventListener('popstate',()=>{
   if(!mState||!$('#collection').classList.contains('on')){mState=0;return}
   if(mState===2){mState=1;if(mBack)mBack();window.scrollTo(0,0);return}
   mState=0;render('c')});
+const QCS=[];   /* Quick Collection: collections saved on the page, waiting for one combined Review */
 /* ---------- Collection By Manually: the same options as the Collection & Order collection update, but typed in by hand ---------- */
 function manualPage(P,ttl,bk){
   const m=R.master,EPS=0.005,t0=today();const formBack=()=>mState===1?history.back():window.RDL.openUpload();ttl.textContent='Quick Collection';bk.onclick=formBack;
@@ -4060,7 +4061,7 @@ function manualPage(P,ttl,bk){
   const pd=el('input','list-search');pd.type='date';pd.value=t0;pd.max=t0;F('Posting date (cannot be after today)',pd).classList.add('sq-3');
   const holder=form.appendChild(el('div'));
   const st=form.appendChild(el('div','stt'));
-  const bar=form.appendChild(el('div','sq-bar')),pb=el('button','st-btn','Review Collection');pb.type='button';
+  const bar=form.appendChild(el('div','sq-bar')),pb=el('button','st-btn','Save Collection');pb.type='button';
   const bv={};[['Collected','col'],['TDS','tds'],['Total','tot'],['Balance','bal']].forEach(([l,k])=>{const d=el('div','sq-bi');d.appendChild(el('small',null,l));bv[k]=d.appendChild(el('b',null,__m(0).replace('/=','')));bar.appendChild(d)});bar.appendChild(pb);
   function barUpd(){let c=0,t=0,tt=0;blocks.forEach(o=>{if(o.covered)return;c+=o.col();t+=o.tdv();tt+=o.chosen().reduce((x,b)=>x+bal(b),0)});
     const rem=Math.max(0,+(tt-c-t).toFixed(2));const q=x=>__m(x).replace('/=','');bv.col.textContent=q(c);bv.tds.textContent=q(t);bv.tot.textContent=q(c+t);bv.bal.textContent=q(rem);bv.bal.className=tt>0?(rem>0.005?'sq-rem':'sq-ok'):''}
@@ -4142,6 +4143,10 @@ function manualPage(P,ttl,bk){
       if(!o.combined){o.cos=new Set([String(co)]);o.tcos=new Set([String(co)]);copt.querySelectorAll('input').forEach(i=>i.checked=i.value===String(co));sumCsum()}
       rebuildBills();buildTcos();refreshCovered()};
     ty.onchange=mode;ck.onchange=mode;am.oninput=()=>{o.pm=false;upd()};fx.onchange=()=>{if(fx.checked){o.pm=false;o.pa=new Map()}upd()};td.oninput=()=>{o.tdsAuto=false;upd()};
+    o.snap=()=>({co:String(co),ty:ty.value,rf:rf.value,rd:rd.value,cb:ck.checked,cos:[...o.cos],tcos:[...o.tcos],tsep:o.tsep,tm:[...o.tm],sel:[...o.sel],pm:o.pm,pa:[...o.pa],fx:fx.checked,am:am.value,td:td.value,tdsAuto:o.tdsAuto});
+    o.restore=x=>{ty.value=x.ty;rf.value=x.rf;rd.value=x.rd;ck.checked=x.cb;o.sel=new Set(x.sel);o.pm=x.pm;o.pa=new Map(x.pa);o.tsep=x.tsep;o.tm=new Map(x.tm);if(tsw&&tsw.k)tsw.k.checked=x.tsep;
+      o.cos=new Set(x.cos);o.tcos=new Set(x.tcos);copt.querySelectorAll('input').forEach(i=>i.checked=o.cos.has(i.value));sumCsum();mode();
+      fx.checked=x.fx;am.value=x.am;td.value=x.td;o.tdsAuto=x.tdsAuto;upd()};
     rebuildBills();buildTcos();return o}
   /* other company boxes of this customer that are part of a combined payment are covered by it */
   function refreshCovered(){const all=[...blocks.values()];
@@ -4154,7 +4159,7 @@ function manualPage(P,ttl,bk){
   const sumCos=()=>{csum.textContent=cos.size?[...cos].sort(R.coCmp).map(c=>R.coName(c)).join(', '):(bp==null?'Choose a customer first':'Tap to choose companies')};
   function loadCos(){bp=findBp();copt.textContent='';cos.clear();blocks.forEach(o=>o.box.remove());blocks.clear();
     if(bp!=null){const cs=[...new Set(m.out.filter(b=>String(b.cu)===String(bp)&&bal(b)>0).map(b=>String(b.co)))].sort(R.coCmp);
-      cs.forEach(c=>{const b=el('button',null,R.coName(c));b.type='button';b.onclick=()=>{cos.has(c)?cos.delete(c):cos.add(c);b.classList.toggle('on',cos.has(c));b.setAttribute('aria-pressed',cos.has(c));sumCos();syncBlocks()};copt.appendChild(b)});
+      cs.forEach(c=>{const b=el('button',null,R.coName(c));b.type='button';b.dataset.c=c;b.onclick=()=>{cos.has(c)?cos.delete(c):cos.add(c);b.classList.toggle('on',cos.has(c));b.setAttribute('aria-pressed',cos.has(c));sumCos();syncBlocks()};copt.appendChild(b)});
       if(cs.length===1){cos.add(cs[0]);const b0=copt.querySelector('button');b0.classList.add('on');b0.setAttribute('aria-pressed',true)}else if(!cs.length)copt.appendChild(el('div','hint','No open bills for this customer'))}
     sumCos();syncBlocks()}
   const pick=c=>{cu.value=c+' — '+names.get(c);sg.textContent='';loadCos()};
@@ -4166,7 +4171,7 @@ function manualPage(P,ttl,bk){
     if(!hit.length)sg.appendChild(el('div','hint','No customer found'))};
   cu.onchange=()=>{const b=findBp();if(b!=null&&String(b)!==String(bp))loadCos()};
 
-  pb.onclick=()=>{const f=pd.value,err=x=>{st.className='stt bad';st.textContent=x;return null};
+  const buildEntry=()=>{const f=pd.value,err=x=>{st.className='stt bad';st.textContent=x;return null};
     if(bp==null)return err('Choose a customer');if(!f||f>t0)return err('Posting date cannot be after today');if(!blocks.size)return err('Tick at least one company');
     const parts=[],groups=[],usedC=new Set();
     for(const c of [...cos].sort(R.coCmp)){const o=blocks.get(c);if(o.covered)continue;
@@ -4186,6 +4191,8 @@ function manualPage(P,ttl,bk){
       groups.push({o,nm,col,tds,ps});ps.forEach(x=>parts.push(x))}
     if(!groups.length)return err('Nothing to post');
     st.textContent='';st.className='stt';
+    const en={id:uid0(),bp,f,nm:names.get(String(bp))||('Customer '+bp),groups,parts};groups.forEach(g=>g.e=en);parts.forEach(x=>x.e=en);return en};
+  function showReview(){const E=QCS,f=E[0].f,groups=E.flatMap(e=>e.groups),parts=E.flatMap(e=>e.parts);
     form.style.display='none';pv.style.display='';pv.textContent='';ttl.textContent='Review Collection Draft';mBack=back;window.RDLNav&&RDLNav.level('c',2,back);const detBack=()=>mState===2?history.back():back();bk.onclick=detBack;
     /* ---------- Manually Collection Details: same layout as Sales & Collection Details ---------- */
     let gc=0,gt=0;groups.forEach(g=>{gc+=g.col;gt+=g.tds});
@@ -4203,32 +4210,35 @@ function manualPage(P,ttl,bk){
     detBox('This Week Collection Details','Saturday '+dd(w1)+' to Friday '+dd(w2)+' • posted amounts only',L0.dz.filter(x=>x.date>=w1&&x.date<=w2),inWk,'This posting date ('+dd(f)+') is outside this week, so the This Week collection will not change.');
     /* 3) Collection Information Details */
     const ic=pv.appendChild(el('div','st-card sapq'));ic.appendChild(el('h3','rv-ttl','Collection Information Details'));pv.insertBefore(ic,pv.firstChild);   /* page order: Collection Information Details, Today, This Week */
-    const nb=parts.length,coSet=new Set(parts.map(x=>String(x.b.co))),types=[...new Set(groups.map(g=>g.o.ty.value))];
-    const leftAll=sum(parts,x=>x.left),cleared=leftAll<=EPS,q=x=>money(x).replace('/=','');
-    const strip=ic.appendChild(el('div','sq-strip')),dep=(()=>{try{const v=RDLDEPOT.td(bp).textContent.trim();return v==='—'||v==='-'?'':v}catch(e){return ''}})();
-    [[names.get(String(bp))||('Customer '+bp),'sq-nm'],[String(bp),null],[[...coSet].sort(R.coCmp).map(c=>R.coName(c)).join(', '),null],[types.join(', '),null],[dd(f),null],[dep,null]].forEach(([v,c])=>{if(v)strip.appendChild(el('span',c,v))});
-    const mg=ic.appendChild(el('div','sq-sum'));
-    const addT=(k,v,c,sb)=>{const d=el('div','sq-bi');d.appendChild(el('small',null,k));d.appendChild(el('b',c,v));if(sb)d.appendChild(el('em',null,sb));mg.appendChild(d)};
-    addT('Collected',q(gc),null);addT('TDS',q(gt),null);addT('Total',q(gc+gt),null);addT('Balance',q(cleared?0:leftAll),cleared?'sq-ok':'sq-rem',cleared?'Fully cleared':'Remaining');
+    const nb=parts.length,q=x=>money(x).replace('/=','');
+    const info=(ee,pp,gg)=>{const coSet=new Set(pp.map(x=>String(x.b.co))),types=[...new Set(gg.map(g=>g.o.ty.value))],leftAll=sum(pp,x=>x.left),cleared=leftAll<=EPS;
+      if(ee){const strip=ic.appendChild(el('div','sq-strip')),dep=(()=>{try{const v=RDLDEPOT.td(ee.bp).textContent.trim();return v==='—'||v==='-'?'':v}catch(e){return ''}})();
+        [[ee.nm,'sq-nm'],[String(ee.bp),null],[[...coSet].sort(R.coCmp).map(c=>R.coName(c)).join(', '),null],[types.join(', '),null],[dd(ee.f),null],[dep,null]].forEach(([v,c])=>{if(v)strip.appendChild(el('span',c,v))})}
+      const mg=ic.appendChild(el('div','sq-sum'));
+      const addT=(k,v,c,sb)=>{const d=el('div','sq-bi');d.appendChild(el('small',null,k));d.appendChild(el('b',c,v));if(sb)d.appendChild(el('em',null,sb));mg.appendChild(d)};
+      const c1=sum(gg,g=>g.col),t1=sum(gg,g=>g.tds);
+      addT('Collected',q(c1),null);addT('TDS',q(t1),null);addT('Total',q(c1+t1),null);addT('Balance',q(cleared?0:leftAll),cleared?'sq-ok':'sq-rem',cleared?'Fully cleared':'Remaining')};
+    E.forEach(e=>info(e,e.parts,e.groups));
+    if(E.length>1){ic.appendChild(el('div','sq-strip')).appendChild(el('span','sq-nm','All '+E.length+' customers'));info(null,parts,groups)}
     const xs=parts.reduce((x,e)=>x+(e.xt||0),0);if(xs>EPS)ic.appendChild(el('div','stt ok','Excess TDS '+money(xs)+' is not applied to a bill. It is kept in the TDS Ledger so the challan matches.'));
     /* 4) Post / Cancel buttons come right below, then the Collection table */
     const tc=el('div','st-card sapq');
     tc.appendChild(el('h3',null,'Collection • '+nb+' DZ collection'+(nb===1?'':'s')));
     const wrap=el('div','sq-scroll'),tb=el('table','sq-tbl');
     const th=el('thead'),hr=el('tr');const hasRef=groups.some(g=>g.o.ty.value!=='Cash'),qn=x=>q(x).replace(/^\S+\s*/,'');
-    ['Bill No','Co','Type'].concat(hasRef?['Ref No.','Ref Date']:[],['Collected','TDS','Total']).forEach((x,j)=>hr.appendChild(el('th',j===0?'sq-r1':(x==='Collected'||x==='TDS'||x==='Total'?'num':null),x)));th.appendChild(hr);tb.appendChild(th);
+    ['Bill No','Co'].concat(E.length>1?['Customer']:[],['Type'],hasRef?['Ref No.','Ref Date']:[],['Collected','TDS','Total']).forEach((x,j)=>hr.appendChild(el('th',j===0?'sq-r1':(x==='Collected'||x==='TDS'||x==='Total'?'num':null),x)));th.appendChild(hr);tb.appendChild(th);
     const tbd=el('tbody');tb.appendChild(tbd);
     groups.forEach(g=>g.ps.forEach(x=>{const r=el('tr',x.b.due&&x.b.due<t0?'cs-late':(x.b.due&&x.b.due<=T6?'cs-soon':null));
       const cell=(v,cls)=>r.appendChild(el('td',cls,v));
-      cell(String(x.b.bill),'sq-r1');cell(R.coName(x.b.co));cell(g.o.ty.value);if(hasRef){cell(g.o.rf.value.trim()||'—');cell(g.o.rd.value?dq(g.o.rd.value):'—')}
+      cell(String(x.b.bill),'sq-r1');cell(R.coName(x.b.co));if(E.length>1)cell(g.e.nm);cell(g.o.ty.value);if(hasRef){cell(g.o.rf.value.trim()||'—');cell(g.o.rd.value?dq(g.o.rd.value):'—')}
       cell(qn(x.c),'num');cell(qn(x.t),'num');cell(qn(x.c+x.t),'num');tbd.appendChild(r)}));
-    {const tf=el('tfoot'),r=el('tr'),l=el('td','sq-r1','Total');l.colSpan=hasRef?5:3;l.style.textAlign='left';r.appendChild(l);r.appendChild(el('td','num',qn(gc)));r.appendChild(el('td','num',qn(gt)));r.appendChild(el('td','num',qn(gc+gt)));tf.appendChild(r);tb.appendChild(tf)}
+    {const tf=el('tfoot'),r=el('tr'),l=el('td','sq-r1','Total');l.colSpan=(hasRef?5:3)+(E.length>1?1:0);l.style.textAlign='left';r.appendChild(l);r.appendChild(el('td','num',qn(gc)));r.appendChild(el('td','num',qn(gt)));r.appendChild(el('td','num',qn(gc+gt)));tf.appendChild(r);tb.appendChild(tf)}
     wrap.appendChild(tb);tc.appendChild(wrap);
     /* warnings (do not block posting) */
     const warns=[];
-    groups.forEach(g=>{const rf=g.o.rf.value.trim();if(rf&&L0.dz.some(z=>String(z.cu)===String(bp)&&z.type===g.o.ty.value&&String(z.ref||'').toLowerCase()===rf.toLowerCase()))warns.push(g.o.ty.value+' no. '+rf+' was already posted for this customer — check for a duplicate.');
+    groups.forEach(g=>{const rf=g.o.rf.value.trim();if(rf&&L0.dz.some(z=>String(z.cu)===String(g.e.bp)&&z.type===g.o.ty.value&&String(z.ref||'').toLowerCase()===rf.toLowerCase()))warns.push(g.o.ty.value+' no. '+rf+' was already posted for this customer — check for a duplicate.');
       if(g.o.ty.value!=='Cash'&&!rf)warns.push(R.coName(g.o.co)+': '+g.o.ty.value+' number is empty.')});
-    if(parts.some(x=>x.b.post&&f<x.b.post))warns.push('Posting date is earlier than the date of one or more selected bills.');
+    if(parts.some(x=>x.b.post&&x.e.f<x.b.post))warns.push('Posting date is earlier than the date of one or more selected bills.');
     const wn=warns.map(w=>el('div','stt warn','⚠ '+w));
     /* 4) Post / Cancel */
     const act=pv.appendChild(el('div','od-actions sq-act')),go=el('button','st-btn','Save to Draft'),cn=el('button','st-btn od-clear','Back to Edit');go.type=cn.type='button';act.appendChild(go);act.appendChild(cn);
@@ -4236,11 +4246,46 @@ function manualPage(P,ttl,bk){
     function back(){window.RDLNav&&RDLNav.level('c',1);pv.style.display='none';form.style.display='';if(cd0)cd0.style.display='';ttl.textContent='Quick Collection';bk.onclick=formBack;window.scrollTo(0,0)}
     cn.onclick=detBack;
     go.onclick=()=>{go.disabled=true;const L2=ld();let n=0;L2.dr=L2.dr||[];   /* goes to Drafts first; nothing is posted until you press Post there */
-      for(const x of parts){const o=x.o;L2.dr.push({id:uid0(),cu:x.b.cu,co:x.b.co,nm:x.b.nm||names.get(String(x.b.cu)),ag:uid(x.b),bn:String(x.b.bill),col:x.c,tds:x.t,...(x.xt?{xt:+x.xt.toFixed(2)}:{}),type:o.ty.value,ref:o.rf.value.trim(),...(o.rd.value?{rd:o.rd.value}:{}),pdt:f,ds:today(),manual:1,...(x.b.due?{bd:x.b.due}:{}),at:Date.now()});n++}
+      for(const x of parts){const o=x.o;L2.dr.push({id:uid0(),cu:x.b.cu,co:x.b.co,nm:x.b.nm||names.get(String(x.b.cu)),ag:uid(x.b),bn:String(x.b.bill),col:x.c,tds:x.t,...(x.xt?{xt:+x.xt.toFixed(2)}:{}),type:o.ty.value,ref:o.rf.value.trim(),...(o.rd.value?{rd:o.rd.value}:{}),pdt:x.e.f,ds:today(),manual:1,...(x.b.due?{bd:x.b.due}:{}),at:Date.now()});n++}
       try{sv(L2)}catch(e){go.disabled=false;st2.className='stt bad';st2.textContent='Could not save on this device';return}
+      QCS.length=0;
       msg.c='✓ Saved '+n+' collection draft'+(n===1?'':'s')+' • '+__m(gc+gt)+'. Review and post it from Posting Center → Drafts.';cards();document.dispatchEvent(new Event('visibilitychange'));render('c');hubReload()};
-    window.scrollTo(0,0)};
-  loadCos()}
+    window.scrollTo(0,0)}
+  /* ---------- Save Collection / Saved Collections box ---------- */
+  let editId=null;const sbox=form.insertBefore(el('div','st-card sapq'),card);
+  const small='padding:6px 14px;font-size:13px;min-height:0;width:auto;margin:0';
+  const resetForm=()=>{cu.value='';sg.textContent='';pd.value=t0;loadCos()};
+  const restore=e=>{const x=e.snap;cu.value=x.cu;pd.value=x.f;loadCos();cos.clear();
+    copt.querySelectorAll('button').forEach(b=>{const on=x.cos.includes(b.dataset.c);if(on)cos.add(b.dataset.c);b.classList.toggle('on',on);b.setAttribute('aria-pressed',on)});sumCos();syncBlocks();
+    x.blocks.forEach(y=>{const o=blocks.get(String(y.co));if(o)o.restore(y)});refreshCovered();barUpd()};
+  const dirty=()=>!editId&&bp!=null&&[...blocks.values()].some(o=>!o.covered&&(o.sel.size>0||o.col()>0||o.tdv()>0));
+  function renderSaved(){sbox.textContent='';if(!QCS.length){sbox.style.display='none';return}sbox.style.display='';
+    sbox.appendChild(el('h3',null,'Saved Collections'));
+    const parts=QCS.flatMap(e=>e.parts),groups=QCS.flatMap(e=>e.groups),q=x=>money(x).replace('/=',''),qn=x=>q(x).replace(/^\S+\s*/,''),tx=x=>(x.t||0)+(x.xt||0);
+    const gc=sum(groups,g=>g.col),gt=sum(groups,g=>g.tds);
+    const mg=sbox.appendChild(el('div','sq-sum'));mg.style.gridTemplateColumns='1fr 1fr';[['Customers',String(QCS.length)],['Collected',q(gc)],['TDS',q(gt)],['Total Taka',q(gc+gt)]].forEach(([k,v])=>{const d=el('div','sq-bi');d.style.minWidth='0';d.appendChild(el('small',null,k));const bb=el('b',null,v);bb.style.cssText='font-size:15px;white-space:nowrap';d.appendChild(bb);mg.appendChild(d)});
+    const tbl=(title,head,rows)=>{sbox.appendChild(el('div','hint',title)).style.cssText='font-weight:800;margin:10px 0 4px';const w=sbox.appendChild(el('div','sq-scroll')),t=el('table','sq-tbl'),hr=el('tr');
+      head.forEach((x,j)=>hr.appendChild(el('th',j===0?'sq-r1':'num',x)));const th=el('thead');th.appendChild(hr);t.appendChild(th);const tb=el('tbody');t.appendChild(tb);
+      rows.forEach(r=>{const tr=el('tr');r.forEach((v,j)=>tr.appendChild(el('td',j===0?'sq-r1':'num',v)));tb.appendChild(tr)});w.appendChild(t)};
+    const by=(kf)=>{const mp=new Map();parts.forEach(x=>{const k=kf(x),r=mp.get(k)||{n:new Set(),c:0,t:0};r.n.add(uid(x.b));r.c+=x.c;r.t+=tx(x);mp.set(k,r)});return mp};
+    const cm=by(x=>String(x.b.co));tbl('Business-wise total',['Business','Collected','TDS','Total'],[...cm.keys()].sort(R.coCmp).map(k=>{const r=cm.get(k);return[R.coName(k),qn(r.c),qn(r.t),qn(r.c+r.t)]}));
+    const tm=by(x=>x.o.ty.value);tbl('Payment type-wise total',['Type','Collected','TDS','Total'],['Cash','Cheque','BEFTN'].filter(k=>tm.has(k)).map(k=>{const r=tm.get(k);return[k+' ('+r.n.size+')',qn(r.c),qn(r.t),qn(r.c+r.t)]}));
+    sbox.appendChild(el('div','hint','Saved customers')).style.cssText='font-weight:800;margin:10px 0 4px';
+    QCS.forEach(e=>{const c=sum(e.groups,g=>g.col),t=sum(e.groups,g=>g.tds),r=el('div');r.style.cssText='display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px dashed #c9d6ea'+(e.id===editId?';background:#fff8e1':'');
+      const i=el('div');i.style.cssText='flex:1;min-width:0';const n=el('b',null,e.nm);n.style.display='block';i.appendChild(n);i.appendChild(el('small',null,e.bp+' • '+dd(e.f)+' • '+q(c+t)+(t>0?' (TDS '+q(t)+')':'')+(e.id===editId?' • editing':'')));r.appendChild(i);
+      const eb=el('button','st-btn','Edit'),db=el('button','st-btn od-clear','Delete');eb.type=db.type='button';eb.style.cssText=db.style.cssText=small;
+      eb.onclick=()=>{if(dirty()){sst.className='stt bad';sst.textContent='The collection on the form below is not saved yet. Press Save Collection first.';return}editId=e.id;restore(e);renderSaved();st.className='stt warn';st.textContent='Editing '+e.nm+' — change it and press Save Collection to update.';window.scrollTo(0,card.offsetTop>0?card.offsetTop:0)};
+      db.onclick=async()=>{const ok=await RDLUI.ask({title:'Delete saved collection?',msg:e.nm+' ('+e.bp+') will be removed from the saved list.',ok:'Delete',danger:true});if(!ok)return;QCS.splice(QCS.indexOf(e),1);if(editId===e.id){editId=null;resetForm();st.textContent='';st.className='stt'}renderSaved()};
+      r.appendChild(eb);r.appendChild(db);sbox.appendChild(r)});
+    const sst=el('div','stt');sbox.appendChild(sst);sbox.__sst=sst;
+    const rb=el('button','st-btn','Review Collection');rb.type='button';rb.style.cssText='display:block;width:100%;margin-top:8px';
+    rb.onclick=()=>{if(dirty()){sst.className='stt bad';sst.textContent='The collection on the form below is not saved yet. Press Save Collection first.';return}if(!QCS.length)return;showReview()};sbox.appendChild(rb)}
+  pb.onclick=()=>{const en=buildEntry();if(!en)return;
+    if(QCS.some(e=>e.id!==editId&&String(e.bp)===String(en.bp))){st.className='stt bad';st.textContent=en.nm+' is already saved. Edit or delete it in Saved Collections first.';return}
+    en.snap={cu:cu.value,f:pd.value,cos:[...cos],blocks:[...blocks.values()].map(o=>o.snap())};
+    const i=QCS.findIndex(e=>e.id===editId&&String(e.bp)===String(en.bp));if(i>=0){en.id=editId;QCS[i]=en}else QCS.push(en);
+    editId=null;resetForm();renderSaved();st.className='stt ok';st.textContent='✓ '+en.nm+' saved • '+money(sum(en.groups,g=>g.col+g.tds))+'. Choose the next customer, or press Review Collection in Saved Collections.';window.scrollTo(0,0)};
+  loadCos();renderSaved()}
 function render(w,rev){window.RDLNav&&RDLNav.level(w,rev?1:0,()=>render(w));if(rev!=='manual'&&mState){const n=mState;mState=0;try{history.go(-n)}catch(e){}}
   const K=KIND[w],P=$('#'+K.id);P.className='pg st'+(P.classList.contains('on')?' on':'');P.textContent='';
   const top=el('div','st-top'),bk=el('button');bk.type='button';bk.innerHTML='<svg class="bk-ar" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 12h-15M10.5 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="4.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';bk.setAttribute('aria-label','Back');
