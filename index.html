@@ -4022,9 +4022,9 @@ function manualPage(P,ttl,bk){
       const A=pc.AL;o.lastA=A;
       o.ibs.forEach((ib,k)=>{const on=bl.some(b=>uid(b)===k);ib.style.display=on?'':'none';if(on&&document.activeElement!==ib){const v=A.amt.get(k);ib.value=v==null?'':String(v)}});
       const [cls,txt]=tdsMsg(bl.length,tot,col,tds,what);du.className='stt '+cls;du.textContent=txt}
-    function rebuildBills(){bopt.textContent='';o.ibs.clear();const all=bills();o.sel=new Set([...o.sel].filter(k=>all.some(b=>uid(b)===k)));
+    function rebuildBills(){bopt.textContent='';o.ibs.clear();const all=bills();if(all.length){const hd=el('div','qc-hd');['','Bill No','Date','Balance','Collected'].forEach(x=>hd.appendChild(el('span',null,x)));bopt.appendChild(hd)}o.sel=new Set([...o.sel].filter(k=>all.some(b=>uid(b)===k)));
       all.forEach(b=>{const lb=el('label'),i=el('input');i.type='checkbox';i.checked=o.sel.has(uid(b));i.onchange=()=>{i.checked?o.sel.add(uid(b)):(o.sel.delete(uid(b)),o.pa.delete(uid(b)));o.tdsAuto=true;upd()};
-        lb.appendChild(i);lb.appendChild(document.createTextNode(' '+dmy(b.post)+', '+R.coName(b.co)+', '+__m(bal(b))));
+        lb.appendChild(i);lb.classList.add('qc-r');{const s1=el('span','qc-bn');s1.appendChild(el('b',null,String(b.bill||'')));s1.appendChild(el('small',null,R.coName(b.co)));lb.appendChild(s1);lb.appendChild(el('span','qc-dt',dmy(b.post)));lb.appendChild(el('span','qc-bl',(+bal(b)).toLocaleString('en-IN',{maximumFractionDigits:2})))}
         const ib=billAmtBox(b,v=>{if(!o.pm){o.pm=true;o.pa=new Map();(o.lastA?o.lastA.amt:new Map()).forEach((x,k)=>o.pa.set(k,x))}o.pa.set(uid(b),v);o.tdsAuto=true;upd()},()=>upd());o.ibs.set(uid(b),ib);lb.classList.add('pb-row');lb.appendChild(ib);bopt.appendChild(lb)});upd()}
     const mode=()=>{const nc=ty.value!=='Cash';rfW.style.display=rdW.style.display=cw.style.display=nc?'':'none';if(!nc)ck.checked=false;o.combined=nc&&ck.checked;
       cF.style.display=o.combined?'':'none';
@@ -4250,50 +4250,83 @@ function buildDrafts(kind){const P=$('#drf');P.textContent='';const L=ld(),all0=
   const names=new Map(),groups=new Map();
   dr.forEach(d=>{const k=String(d.cu);let g=groups.get(k);if(!g){g={cu:d.cu,nm:d.nm||('Customer '+d.cu),cos:new Map()};groups.set(k,g)}
     const ck=String(d.co);let c=g.cos.get(ck);if(!c){c={co:d.co,list:[]};g.cos.set(ck,c)}c.list.push(d)});
-  let gi=0;groups.forEach(g=>{const gx=el('div','cg cu'+(gi++%8)),gh=el('div','cg-h'),cks=[],gck=mkCk();gh.appendChild(gck);gh.appendChild(el('b',null,g.nm+' • '+g.cu));gh.appendChild(el('span','cg-n',g.cos.size+(g.cos.size===1?' company':' companies')));gx.appendChild(gh);
-    [...g.cos.values()].sort((x,y)=>R.coCmp?R.coCmp(x.co,y.co):0).forEach(c=>{
-      const row=el('div','cg-co '+coCls(c.co)),rh=el('div','cg-h cg-ch'),body=el('div','cg-b');
-      const cck=mkCk(),blks=[];rh.appendChild(cck);rh.appendChild(el('b',null,R.coName?R.coName(c.co):String(c.co)));row.appendChild(rh);row.appendChild(body);
-      const ft=el('div','cg-ft'),ftT=el('span',null,'Draft total'),ftV=el('span',null,'');ft.appendChild(ftT);ft.appendChild(ftV);
-      const totUp=()=>{const L3=ld(),mine=(L3.dr||[]).filter(e=>String(e.cu)===String(g.cu)&&String(e.co)===String(c.co));ftV.textContent=money(mine.reduce((x,e)=>x+e.col+e.tds,0))};totUp();
-      c.list.forEach(d=>{const bill=(m?m.out:[]).find(x=>uid(x)===d.ag),bal0=bill?bal(bill):0,blk=el('div','cl-card'),age=Math.floor((Date.now()-d.at)/864e5);
-        body.appendChild(blk);blks.push(blk);
-        const head=el('div','cl-head');head.appendChild(el('b',null,'Against '+d.bn));head.appendChild(el('div',null,(d.manual?'Manual entry':'DCR '+dm(d.dcr))+' • '+(age?age+' day'+(age===1?'':'s')+' in draft':'saved today')));blk.appendChild(head);
-        const bd=el('div','cl-body');blk.appendChild(bd);
-        const F=(lab,node,hidden)=>{const x=el('div','cl-f');x.appendChild(el('small',null,lab));x.appendChild(node);bd.appendChild(x);return node},I=(type,val)=>{const i=el('input','list-search');i.type=type;i.value=val;return i};
-        const ty=el('select','list-search');['Cash','Cheque','BEFTN'].forEach(x=>{const o=el('option',null,x);o.value=x;ty.appendChild(o)});ty.value=d.type;F('Payment type',ty);
-        const rf=F('Cheque / BEFTN number (optional)',I('text',d.ref||'')),rd=F('Cheque / BEFTN date (optional, can be a future date)',I('date',d.rd||''));
-        const cashTg=()=>{const h=String(ty.value).toLowerCase()==='cash'?'none':'';rf.parentNode.style.display=h;rd.parentNode.style.display=h};ty.addEventListener('change',cashTg);cashTg();
-        const sa=el('input','list-search');sa.type='text';sa.readOnly=true;sa.value=bill?money(bal0):'Bill not found';F('Selected Amount (open balance of this bill)',sa);
-        const col=F('Collected Amount',I('number',d.col)),du=el('div','stt');bd.appendChild(du);
-        const tds=F('TDS (deducted by customer)',I('number',d.tds||0));col.step=tds.step='any';
-        const tdh=el('div','hint');bd.appendChild(tdh);
-        RDLCalc.attach(sa,{label:'Selected Amount',viewOnly:true});RDLCalc.attach(col,{label:'Collected Amount'});RDLCalc.attach(tds,{label:'TDS'});
-        const pd=F('Posting date (cannot be after today)',I('date',d.pdt&&d.pdt<=t?d.pdt:t));pd.max=t;if(bill&&bill.post)pd.min=bill.post;
-        const stt=el('div','stt'),act=el('div','od-actions'),mkB=(tx,cls)=>{const b=el('button',cls,tx);b.type='button';act.appendChild(b);return b};
-        const read=()=>{const c2=+col.value||0,tx=+tds.value||0;if(c2<0||tx<0||!(c2+tx>0)){stt.className='stt bad';stt.textContent='Enter a collected amount';return null}return{c:c2,tx}};
-        /* live message between Collected Amount and TDS, like the review page */
-        const live=()=>{const c2=+col.value||0,tx=+tds.value||0;let cls,txt;
-          if(!bill){cls='bad';txt='This bill is no longer open (the database changed). Delete this draft.'}
-          else if(!(c2+tx>0)){cls='warn';txt='Enter the collected amount or the TDS'}
-          else if(c2+tx>bal0+EPS){cls='bad';txt=money(c2)+(tx>0?' + '+money(tx)+' TDS':'')+' is more than the open balance ('+money(bal0)+')'}
-          else{const rem=+(bal0-c2-tx).toFixed(2);const line=money(c2)+' collected'+(tx>0?' + '+money(tx)+' TDS':'')+' against '+d.bn+'.';
-            if(rem>EPS){cls='warn';txt=line+' Remaining on this bill: '+money(rem)+'.'}else{cls='ok';txt=line+' The bill is fully cleared.'}}
-          du.className='stt '+cls;du.textContent=txt;tdh.textContent=tx>0?'TDS '+money(tx):'';stt.textContent='';stt.className='stt'};
-        col.addEventListener('input',live);tds.addEventListener('input',live);live();
-        const upd=(L2,v)=>{const x=L2.dr.find(e=>e.id===d.id);x.col=v.c;x.tds=v.tx;x.type=ty.value;x.ref=rf.value.trim();if(rd.value)x.rd=rd.value;else delete x.rd;return x};
-        mkB('Save','st-btn od-clear').onclick=()=>{const v=read();if(!v)return;const L2=ld();if(!L2.dr)return;upd(L2,v);try{sv(L2)}catch(e){stt.className='stt bad';stt.textContent='Could not save';return}totUp();stt.className='stt ok';stt.textContent='✓ Saved'};
-        const doPost=(used)=>{const v=read();if(!v)return false;const bad=x=>{stt.className='stt bad';stt.textContent=x;return false};
-          if(!bill)return bad('This bill is no longer open (the database changed). Delete this draft.');if(!pd.value)return bad('Choose a posting date');if(pd.value>t)return bad('Posting date cannot be after today');if(bill.post&&pd.value<bill.post)return bad('Posting date cannot be before the bill date ('+dm(bill.post)+')');
-          if(v.c+v.tx+((used&&used.get(d.ag))||0)>bal0+EPS)return bad('More than the open balance ('+money(bal0)+')');
-          const L2=ld();if(!L2.dr)return;const x=upd(L2,v);window.RDLDDEL&&RDLDDEL(L2,[d.id]);L2.dr=L2.dr.filter(e=>e.id!==d.id);const n=nextNo(L2,'DZ');blk._res={k:'DZ',cu:x.cu,doc:'DZ-'+String(n).padStart(6,'0'),d:pd.value};
-          L2.dz.push({bill:'DZ-'+String(n).padStart(6,'0'),doc:'DZ',pt:Date.now(),ag:x.ag,cu:x.cu,co:x.co,nm:x.nm,col:x.col,tds:x.tds,...(x.xt?{xt:x.xt}:{}),type:x.type,ref:x.ref,...(x.rd?{rd:x.rd}:{}),date:pd.value,...(x.dcr?{dcr:x.dcr}:{}),...(x.bd?{bd:x.bd}:{}),...(x.manual?{manual:1}:{})});
-          try{sv(L2)}catch(e){return bad('Could not save on this device')}if(used)used.set(d.ag,((used.get(d.ag))||0)+v.c+v.tx);return true};
-        blk._post=doPost;blk._amt=()=>(+col.value||0)+(+tds.value||0);mkB('Post','st-btn').onclick=()=>{if(doPost()){cards();document.dispatchEvent(new Event('visibilitychange'));buildDrafts(kind)}};
-        mkB('Delete','st-btn od-clear').onclick=async()=>{const ok=window.RDLUI&&RDLUI.ask?await RDLUI.ask({title:'Delete this draft?',msg:(d.nm||d.cu)+' • '+money(d.col+d.tds)+'. The bill stays open.',ok:'Delete'}):confirm('Delete this draft?');if(!ok)return;const L2=ld();window.RDLDDEL&&RDLDDEL(L2,[d.id]);L2.dr=(L2.dr||[]).filter(e=>e.id!==d.id);try{sv(L2)}catch(e){return}buildDrafts(kind)};
-        bd.appendChild(act);bd.appendChild(stt)});
-      row.appendChild(ft);gx.appendChild(row);cks.push({ck:cck,blks,row,totUp})});
-    gx.appendChild(bulkBar(gx,gck,cks,()=>buildDrafts(kind)));card0.appendChild(gx)});window.RDLSelUI&&RDLSelUI.bar(card0)}
+  /* ===== Pending Collections (SAP style): one table block per customer; Cheque/BEFTN no + date and posting date are set once per customer; one row per draft; edits save by themselves; Post selected / Delete work on the ticked rows ===== */
+  const nf=v=>(+v||0).toLocaleString('en-IN',{maximumFractionDigits:2}),ageD=v=>v?Math.max(0,Math.round((new Date(t)-new Date(v))/864e5)):0,dd2=v=>v?v.slice(8,10)+'.'+v.slice(5,7):'—';
+  const rowsAll=[],custs=[];
+  const readRow=r=>{const c2=+r.col.value||0,tx=+r.tds.value||0;if(c2<0||tx<0||!(c2+tx>0))return null;return{c:c2,tx}};
+  const live=r=>{const c2=+r.col.value||0,tx=+r.tds.value||0;let cls='',txt='';
+    if(!r.bill){cls='bad';txt='This bill is no longer open (the database changed). Delete this draft.'}
+    else if(!(c2+tx>0)){cls='warn';txt='Enter the collected amount or the TDS'}
+    else if(c2+tx>r.bal0+EPS){cls='bad';txt=money(c2+tx)+' is more than the open balance ('+money(r.bal0)+')'}
+    else{const rem=+(r.bal0-c2-tx).toFixed(2);if(rem>EPS){cls='warn';txt='Remaining on this bill: '+money(rem)}}
+    r.mt.className='stt '+cls;r.mt.textContent=txt;r.mr.style.display=txt?'':'none';r.tr.classList.toggle('pc-bad',cls==='bad')};
+  const persist=r=>{const v=readRow(r);if(!v)return;const L2=ld();if(!L2.dr)return;const x=L2.dr.find(e=>e.id===r.d.id);if(!x)return;x.col=v.c;x.tds=v.tx;x.type=r.ty.value;x.ref=r.c.rf.value.trim();if(r.c.rd.value)x.rd=r.c.rd.value;else delete x.rd;try{sv(L2)}catch(e){}};
+  const doPost=(r,used)=>{const v=readRow(r),bad=x=>{r.mt.className='stt bad';r.mt.textContent=x;r.mr.style.display='';return false};
+    if(!v)return bad('Enter a collected amount');if(!r.bill)return bad('This bill is no longer open (the database changed). Delete this draft.');
+    const pdv=r.c.pd.value;if(!pdv)return bad('Choose a posting date');if(pdv>t)return bad('Posting date cannot be after today');if(r.bill.post&&pdv<r.bill.post)return bad('Posting date cannot be before the bill date ('+dm(r.bill.post)+')');
+    if(v.c+v.tx+((used&&used.get(r.d.ag))||0)>r.bal0+EPS)return bad('More than the open balance ('+money(r.bal0)+')');
+    const L2=ld();if(!L2.dr)return false;const x=L2.dr.find(e=>e.id===r.d.id);if(!x)return false;x.col=v.c;x.tds=v.tx;x.type=r.ty.value;x.ref=r.c.rf.value.trim();if(r.c.rd.value)x.rd=r.c.rd.value;else delete x.rd;
+    window.RDLDDEL&&RDLDDEL(L2,[x.id]);L2.dr=L2.dr.filter(e=>e.id!==x.id);const n=nextNo(L2,'DZ');r._res={k:'DZ',cu:x.cu,doc:'DZ-'+String(n).padStart(6,'0'),d:pdv};
+    L2.dz.push({bill:'DZ-'+String(n).padStart(6,'0'),doc:'DZ',pt:Date.now(),ag:x.ag,cu:x.cu,co:x.co,nm:x.nm,col:x.col,tds:x.tds,...(x.xt?{xt:x.xt}:{}),type:x.type,ref:x.ref,...(x.rd?{rd:x.rd}:{}),date:pdv,...(x.dcr?{dcr:x.dcr}:{}),...(x.bd?{bd:x.bd}:{}),...(x.manual?{manual:1}:{})});
+    try{sv(L2)}catch(e){return bad('Could not save on this device')}if(used)used.set(r.d.ag,((used.get(r.d.ag))||0)+v.c+v.tx);return true};
+  const live0=()=>rowsAll.filter(r=>r.tr.isConnected),tick=()=>live0().filter(r=>r.ck.checked);
+  const sel=el('div','pc-sel');[['Select all',true],['Deselect all',false]].forEach(([tx,v])=>{const b=el('button','sx-b',tx);b.type='button';b.onclick=()=>{live0().forEach(r=>r.ck.checked=v);sum()};sel.appendChild(b)});
+  card0.appendChild(sel);
+  groups.forEach(g=>{
+    const c={rows:[],cos:[]},gx=el('div','pc-cu'),hd=el('div','pc-h'),gck=mkCk(),tgb=el('span','pc-tg','\u25BE'),nm=el('div','pc-nm'),am=el('div','pc-am'),bd=el('div','pc-b');custs.push(c);c.ck=gck;c.am=am;
+    const all=[...g.cos.values()].sort((x,y)=>R.coCmp?R.coCmp(x.co,y.co):0),drs=[].concat(...all.map(o=>o.list)),tys=[...new Set(drs.map(d=>d.type))];
+    nm.appendChild(el('b',null,g.nm));const sm=el('small',null,g.cu+' \u2022 '+drs.length+(drs.length===1?' bill':' bills')+' \u2022 '+(tys.length===1?tys[0]:'Mixed'));nm.appendChild(sm);
+    hd.appendChild(gck);hd.appendChild(tgb);hd.appendChild(nm);hd.appendChild(am);gx.appendChild(hd);gx.appendChild(bd);tgb.onclick=()=>{const h=bd.style.display==='none';bd.style.display=h?'':'none';tgb.textContent=h?'\u25BE':'\u25B8'};
+    const ref=el('div','pc-ref');c.refW=ref;const mkI=(lab,type,val)=>{const l=el('label',null,lab),i=el('input');i.type=type;i.value=val||'';l.appendChild(i);ref.appendChild(l);return i};
+    c.rf=mkI('Cheque / BEFTN No','text',(drs.find(d=>d.ref)||{}).ref);c.rd=mkI('Date','date',(drs.find(d=>d.rd)||{}).rd);
+    const pv=(drs.find(d=>d.pdt&&d.pdt<=t)||{}).pdt||t;c.pd=mkI('Posting date','date',pv);c.pd.max=t;
+    c.rf.placeholder='Optional';bd.appendChild(ref);
+    c.rf.onchange=c.rd.onchange=()=>c.rows.forEach(persist);
+    const w=el('div','pc-w'),tb=el('table','pc-t');w.appendChild(tb);bd.appendChild(w);
+    const th=el('tr'),hck=mkCk();c.hck=hck;const th0=el('th');th0.appendChild(hck);th0.appendChild(document.createTextNode(' Bill No'));th.appendChild(th0);
+    ['Date','Balance','Type','Collected','TDS'].forEach((x,i)=>{const h=el('th',i===1||i>3?'r':null,x);th.appendChild(h)});tb.appendChild(th);
+    all.forEach(o=>{const bills=o.list.map(d=>({d,bill:(m?m.out:[]).find(x=>uid(x)===d.ag)}));const cc={rows:[]};c.cos.push(cc);
+      const cr=el('tr','pc-co'),cd=el('td');cd.colSpan=6;const cck=mkCk();cc.ck=cck;cc.tr=cr;cd.appendChild(cck);cd.appendChild(document.createTextNode(' '+(R.coName?R.coName(o.co):String(o.co))));
+      const cs=el('span',null,money(bills.reduce((a,x)=>a+(x.bill?bal(x.bill):0),0)));cd.appendChild(cs);cr.appendChild(cd);tb.appendChild(cr);
+      bills.forEach(({d,bill})=>{const bal0=bill?bal(bill):0,tr=el('tr','pc-r'+(String(d.type).toLowerCase()==='cash'?' cash':'')),mr=el('tr','pc-mr'),mt=el('td','stt');mt.colSpan=6;mr.appendChild(mt);mr.style.display='none';
+        const r={d,bill,bal0,tr,mr,mt,c,cc};r.ck=mkCk();
+        const t1=el('td');t1.appendChild(r.ck);t1.appendChild(document.createTextNode(' '));t1.appendChild(el('b',null,d.bn));tr.appendChild(t1);
+        const t2=el('td',null,dd2(bill&&bill.post));if(bill&&bill.post)t2.appendChild(el('small',null,ageD(bill.post)+'d'));tr.appendChild(t2);
+        tr.appendChild(el('td','r',bill?nf(bal0):'\u2014'));
+        const t4=el('td');r.ty=el('select');[['Cash','Cash'],['Cheque','Chq'],['BEFTN','BEFTN']].forEach(([v,l])=>{const op=el('option',null,l);op.value=v;r.ty.appendChild(op)});r.ty.value=d.type;t4.appendChild(r.ty);tr.appendChild(t4);
+        const mkN=v=>{const td=el('td','r'),i=el('input');i.type='number';i.step='any';i.min='0';i.value=v;td.appendChild(i);tr.appendChild(td);return i};
+        r.col=mkN(d.col);r.tds=mkN(d.tds||0);
+        r.col.oninput=r.tds.oninput=()=>{live(r);sum()};r.col.onchange=r.tds.onchange=()=>persist(r);
+        r.ty.onchange=()=>{tr.classList.toggle('cash',r.ty.value==='Cash');persist(r);sum()};r.ck.onchange=sum;
+        tb.appendChild(tr);tb.appendChild(mr);live(r);rowsAll.push(r);c.rows.push(r);cc.rows.push(r)});
+      cck.onchange=()=>{cc.rows.forEach(r=>{if(r.tr.isConnected)r.ck.checked=cck.checked});sum()}});
+    const tot=el('tr','pc-tot');c.tot=tot;tb.appendChild(tot);
+    gck.onchange=hck.onchange=function(){const v=this.checked;c.rows.forEach(r=>{if(r.tr.isConnected)r.ck.checked=v});sum()};
+    card0.appendChild(gx)});
+  const ft=el('div','pc-ft'),fi=el('div','s'),fm=el('b'),fs=el('span'),db=el('button','st-btn od-clear','Delete'),pb=el('button','st-btn','Post selected'),fx=el('div','stt');db.type=pb.type='button';fi.appendChild(fm);fi.appendChild(fs);ft.appendChild(fi);ft.appendChild(db);ft.appendChild(pb);
+  P.appendChild(el('div','pc-sp'));P.appendChild(ft);
+  function sum(){let tot=0,td=0,cash=0,ch=0;const on=tick();on.forEach(r=>{tot+=(+r.col.value||0)+(+r.tds.value||0);td+=+r.tds.value||0;r.ty.value==='Cash'?cash++:ch++});
+    fm.textContent=on.length+(on.length===1?' bill':' bills')+' \u2022 '+money(tot);fs.textContent='TDS '+nf(td)+' \u2022 Cash '+cash+' \u2022 Chq/BEFTN '+ch;pb.disabled=db.disabled=!on.length;
+    custs.forEach(c=>{const rl=c.rows.filter(r=>r.tr.isConnected),o=rl.filter(r=>r.ck.checked);if(!rl.length)return;
+      [c.ck,c.hck].forEach(k=>{k.checked=o.length===rl.length;k.indeterminate=o.length>0&&o.length<rl.length});
+      c.cos.forEach(cc=>{const a=cc.rows.filter(r=>r.tr.isConnected),b=a.filter(r=>r.ck.checked);cc.ck.checked=!!a.length&&b.length===a.length;cc.ck.indeterminate=b.length>0&&b.length<a.length});
+      c.am.textContent='';c.am.appendChild(el('b',null,money(o.reduce((a,r)=>a+(+r.col.value||0)+(+r.tds.value||0),0))));c.am.appendChild(el('small',null,o.length+' ticked'));
+      c.refW.style.display=rl.some(r=>r.ty.value!=='Cash')?'':'none';
+      const sm=f=>rl.reduce((a,r)=>a+(f(r)||0),0);c.tot.textContent='';[['Total '+rl.length+(rl.length===1?' bill':' bills'),''],['',''],[nf(sm(r=>r.bal0)),'r'],['',''],[nf(sm(r=>+r.col.value)),'r'],[nf(sm(r=>+r.tds.value)),'r']].forEach(([x,k])=>c.tot.appendChild(el('td',k,x)))})}
+  pb.onclick=async()=>{const s=tick();if(!s.length)return;const tt=s.reduce((a,r)=>a+(+r.col.value||0)+(+r.tds.value||0),0),txt=s.length+' bill'+(s.length===1?'':'s')+' \u2022 '+money(tt)+'. Post now?';
+    const ok=window.RDLUI&&RDLUI.ask?await RDLUI.ask({title:'Post selected bills?',msg:txt,ok:'Post'}):confirm('Post selected bills? '+txt);if(!ok)return;
+    const used=new Map();let done=0,left=0;s.forEach(r=>{if(doPost(r,used)){done++;r._ok=1}else left++});
+    if(done){cards();document.dispatchEvent(new Event('visibilitychange'))}
+    if(!left){buildDrafts(kind);const rs=s.map(b=>b._res).filter(Boolean);
+      if(rs.length&&window.RDL&&RDL.openReg){const k=rs.some(r=>r.k==='RV')?'RV':'DZ',a=rs.filter(r=>r.k===k);let q='';
+        if(a.length===1)q=a[0].doc;else if(a.every(r=>String(r.cu)===String(a[0].cu)))q=String(a[0].cu);else{const ds=a.map(r=>r.d).filter(Boolean).sort();R.historyRange=ds.length?{a:ds[0],b:ds[ds.length-1]}:null}
+        window.RDL.openUpload();Promise.resolve().then(()=>RDL.openReg([k],q,true))}return}
+    s.forEach(r=>{if(r._ok){r.tr.remove();r.mr.remove()}});
+    custs.forEach(c=>{c.cos.forEach(cc=>{if(!cc.rows.some(r=>r.tr.isConnected))cc.tr.remove()});if(!c.rows.some(r=>r.tr.isConnected)){const g=c.ck.closest('.pc-cu');if(g)g.remove()}});
+    sum();fs.textContent=done+' posted \u2022 '+left+' stay in draft (see the red message under each row)'};
+  db.onclick=async()=>{const s=tick();if(!s.length)return;const ok=window.RDLUI&&RDLUI.ask?await RDLUI.ask({title:'Delete selected drafts?',msg:s.length+' draft'+(s.length===1?'':'s')+'. The bills stay open.',ok:'Delete'}):confirm('Delete '+s.length+' drafts?');if(!ok)return;
+    const L2=ld(),ids=s.map(r=>r.d.id);window.RDLDDEL&&RDLDDEL(L2,ids);L2.dr=(L2.dr||[]).filter(e=>!ids.includes(e.id));try{sv(L2)}catch(e){return}buildDrafts(kind)};
+  sum()}
 /* ===== SALES DRAFTS: Quick Sales bills wait here; the RV number is given only when you press Post ===== */
 function salesDrafts(P){
   const L=ld(),sd=(L.sd||[]).slice().sort((a,b)=>b.at-a.at),t=ymd(new Date()),dm=v=>v?v.slice(8,10)+'/'+v.slice(5,7)+'/'+v.slice(0,4):'\u2014';
@@ -10790,14 +10823,88 @@ html body .sap .rv-t{--bg:#e0f3f2;--bd:#b5e0dd;--dv:#6fc4bf;--tx:#1d6f6a}
 html body .sap .rv-r{--bg:#fde8ec;--bd:#f5c3cd;--dv:#e58aa0;--tx:#b3261e}
 html body .sap .st-card.wk-box{background:#e8f1fd;border:1px solid #c8dcf5;border-left:4px solid #2f7fd0;box-shadow:none}
 html body .sap .st-card.wk-box.today{background:#e3f4e8;border-color:#bfe3c9;border-left-color:#4cb36b}
-.sel-bar{display:flex;gap:8px;margin:6px 0 10px;padding:0 2px}
-.sel-b{flex:none;border:1px solid #2f7fd0;background:#e6f1fd;color:#2f7fd0;border-radius:6px;padding:6px 12px;font-size:12.5px;font-weight:600}
+.pc-sel{display:flex;gap:8px;margin:2px 0 8px}
+.pc-cu{border:1px solid #dde5ee;border-radius:10px;margin:10px 0;overflow:hidden;background:#fff;box-shadow:0 1px 2px #0000000d}
+.pc-h{display:flex;align-items:center;gap:8px;padding:10px 10px;background:#e3eefc}
+.pc-h .dr-ck{margin:0}.pc-tg{color:#2f7fd0;font-size:16px;cursor:pointer;padding:0 2px}
+.pc-nm{flex:1;min-width:0}.pc-nm b{display:block;font-size:14.5px;color:#1d3b5c;line-height:1.2}.pc-nm small{font-size:11.5px;color:#66727f}
+.pc-am{text-align:right;white-space:nowrap;color:#1d3b5c;font-size:14px}.pc-am small{display:block;font-size:11px;font-weight:400;color:#66727f}
+.pc-ref{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;background:#fdf3dc;color:#7a5a00;padding:8px 10px;font-size:12px;font-weight:600}
+.pc-ref label{display:flex;align-items:center;gap:5px}.pc-ref input{border:1px solid #c5cfda;border-radius:6px;padding:5px 7px;font:inherit;font-size:13px;background:#fff;color:#24303c;width:128px}
+.pc-w{overflow-x:auto}
+.pc-t{width:100%;border-collapse:collapse;font-size:11.5px;table-layout:fixed}.pc-t th:nth-child(1){width:29%}.pc-t th:nth-child(2){width:11%}.pc-t th:nth-child(3){width:15%}.pc-t th:nth-child(4){width:15%}.pc-t th:nth-child(5){width:17%}.pc-t th:nth-child(6){width:13%}.pc-t td:first-child{white-space:nowrap}
+.pc-t th{background:#e9eff6;color:#66727f;font-weight:600;text-align:left;padding:6px 4px;border-bottom:1px solid #dde5ee;white-space:nowrap}
+.pc-t td{padding:5px 4px;border-bottom:1px solid #e4e9f0;vertical-align:middle;color:#24303c}
+.pc-t .r{text-align:right}.pc-t td small{display:block;color:#66727f;font-size:11px}
+html body .sap .pc-t .dr-ck,html body .sap .pc-h .dr-ck{width:17px!important;height:17px!important;min-width:0!important;margin:0 3px 0 0;flex:none}.pc-ref{gap:4px 8px!important}.pc-ref input{width:104px!important;padding:4px 6px!important}.pc-ft .s{font-size:11px!important}
+.pc-t tr.pc-co td{background:#efeafb;color:#5a3f9c;font-weight:700}.pc-t tr.pc-co span{float:right}
+.pc-t tr.pc-tot td{background:#e3f4e8;color:#1f6b3a;font-weight:700;border-bottom:0}
+.pc-t tr.pc-r td:first-child{border-left:3px solid #4a90d9}.pc-t tr.pc-r.cash td:first-child{border-left-color:#4cb36b}
+.pc-t tr.pc-bad td{background:#fdecec}
+.pc-t input[type=number],.pc-t select{width:100%;min-width:0;border:1px solid #c5cfda;border-radius:5px;padding:4px 2px;font:inherit;font-size:11.5px;background:#fff;color:#24303c}
+.pc-t input[type=number]{text-align:right}.pc-t input,.pc-t select{box-sizing:border-box!important;max-width:100%}.pc-t input[type=number]{-moz-appearance:textfield;appearance:textfield;padding:4px 3px!important}.pc-t input[type=number]::-webkit-inner-spin-button,.pc-t input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}.pc-t th:nth-child(1){width:28%!important}.pc-t th:nth-child(2){width:10%!important}.pc-t th:nth-child(3){width:13%!important}.pc-t th:nth-child(4){width:15%!important}.pc-t th:nth-child(5){width:18%!important}.pc-t th:nth-child(6){width:16%!important}
+.pc-t tr.pc-mr td{padding:2px 6px;border-bottom:1px solid #e4e9f0}
+.pc-ft{position:sticky;bottom:88px;margin-top:8px;z-index:30;background:#fff;border:1px solid #dde5ee;border-top:2px solid #2f7fd0;border-radius:10px;padding:8px 10px;display:flex;gap:8px;align-items:center;box-shadow:0 4px 14px #0003}
+.pc-ft .s{flex:1;min-width:0;font-size:11.5px;color:#66727f}.pc-ft .s b{display:block;font-size:14px;color:#24303c}
+.pc-ft .st-btn{width:auto;margin:0;padding:9px 12px}.pc-sp{height:6px}
+html body .sap .hubf:has(.pc-cu){padding:6px}.pc-t th{padding:6px 2px}.pc-t td{padding:5px 2px}
+
+/* ---- Quick Collection: SAP table look ---- */
+html body #collection.sap .st-top{background:linear-gradient(#e8f1fd,#d3e4f7)!important;border-bottom:2px solid #2f7fd0;border-radius:10px 10px 0 0;padding:10px 12px;margin:0 0 10px;box-shadow:none}
+html body #collection.sap .st-top h2{font-size:17px!important;font-weight:700!important;color:#1d3b5c!important}
+html body #collection.sap .st-card{background:#fff!important;border:1px solid #dde5ee!important;border-radius:10px!important;box-shadow:0 1px 2px #0000000d!important;padding:0!important;overflow:hidden;margin:10px 0}
+html body #collection.sap .st-card>h3{background:#e3eefc!important;color:#1d3b5c!important;font-size:15px!important;font-weight:700!important;text-align:left!important;margin:0!important;padding:10px 12px!important;border-bottom:1px solid #dde5ee}
+html body #collection.sap .st-card.wk-box.today{background:#e3f4e8!important;border-color:#bfe3c9!important;border-left:4px solid #4cb36b!important}
+html body #collection.sap .st-card.wk-box.today>h3{background:transparent!important;border:0;color:#1f6b3a!important;padding:10px 12px!important}
+html body #collection.sap .st-card>div,html body #collection.sap .st-card>.cl-f,html body #collection.sap .st-card>.stt{margin-left:12px;margin-right:12px}
+html body #collection.sap .st-card>div:last-child{margin-bottom:12px}
+html body #collection.sap .cl-f small,html body #collection.sap .cl-f>small{color:#66727f!important;font-size:12px!important;font-weight:600!important}
+html body #collection.sap .list-search{border:1px solid #c5cfda!important;border-radius:6px!important;background:#fff!important;box-shadow:none!important;padding:8px 10px!important;font-size:14px!important}
+html body #collection.sap .rq button{border:1px solid #dde5ee!important;background:#fff!important;color:#24303c!important;border-radius:14px!important;padding:4px 12px!important;font-size:12.5px!important;box-shadow:none!important}
+html body #collection.sap .rq button.on{background:#2f7fd0!important;border-color:#2f7fd0!important;color:#fff!important}
+html body #collection.sap .st-btn{background:#2f7fd0!important;border-radius:6px!important;box-shadow:none!important;font-size:14px!important;padding:10px!important}
+html body #collection.sap .od-company-box{border:1px solid #dde5ee;border-radius:8px;background:#fff;box-shadow:none}
+html body #collection.sap .od-company-box>summary{background:#eef5fd;color:#2f7fd0;font-weight:600;border-radius:8px}
+.qc-hd,.qc-r{display:grid!important;grid-template-columns:24px 1.15fr .75fr .8fr 1.2fr;align-items:center;gap:4px;padding:6px 6px;margin:0!important}
+.qc-hd{background:#e9eff6;color:#66727f;font-size:11.5px;font-weight:600;border-bottom:1px solid #dde5ee}
+.qc-r{border-bottom:1px solid #e4e9f0;font-size:12px;color:#24303c}
+.qc-r:has(input[type=checkbox]:checked){background:#f2f8ff}
+.qc-r .qc-bn b{display:block;font-size:12px}.qc-r .qc-bn small{display:block;font-size:10.5px;color:#66727f}
+.qc-r .qc-bl{text-align:right;color:#1c5aa8;font-weight:600}.qc-r .qc-dt{font-size:11.5px}
+.qc-r .pb-amt{width:100%!important;min-width:0;box-sizing:border-box;padding:4px 3px;border-radius:5px!important;font-size:12px;text-align:right}
+.qc-r input[type=checkbox]{width:17px;height:17px;accent-color:#2f7fd0}
+
+/* ---- Review Collection Draft: flat SAP look ---- */
+html body #collection.sap .ci-head{background:#e3eefc!important;color:#1d3b5c!important;box-shadow:none!important;border:1px solid #c8dcf5;border-radius:10px!important;align-items:flex-start!important;text-align:left!important}
+html body #collection.sap .ci-head strong,html body #collection.sap .ci-head .ci-bp{text-align:left!important;color:#1d3b5c!important}
+html body #collection.sap .ci-head small{color:#66727f!important;opacity:1}
+html body #collection.sap .ci-head .ci-cos{align-items:flex-start!important}
+html body #collection.sap .ci-head .ci-cos span{background:#fff!important;border:1px solid #c8dcf5!important;color:#1c5aa8!important}
+html body #collection.sap .ci-meta-it{background:#fff!important;border:1px solid #dde5ee!important;color:#24303c!important;box-shadow:none!important}
+html body #collection.sap .ci-meta-it *{color:#24303c!important}
+html body #collection.sap .ci-mini{background:#fff!important;border:1px solid #dde5ee!important;border-left:4px solid #4a90d9!important;box-shadow:none!important;border-radius:8px!important}
+html body #collection.sap .ci-mini:nth-child(2){border-left-color:#e0a030!important;background:#fdf6e3!important}
+html body #collection.sap .ci-mini:nth-child(3){border-left-color:#4cb36b!important;background:#e8f6ec!important}
+html body #collection.sap .ci-mini:nth-child(4){border-left-color:#8a6fdc!important;background:#f1edfb!important}
+html body #collection.sap .ci-mini:nth-child(1){background:#e8f1fd!important}
+html body #collection.sap .cm{background:#fff!important;border:1px solid #dde5ee!important;border-left:4px solid #4cb36b!important;box-shadow:none!important;border-radius:8px!important}
+html body #collection.sap .ck-head{background:#efeafb!important;color:#5a3f9c!important}
+html body #collection.sap .ck-row{background:#fff!important;border-color:#e4e9f0!important}
+html body #collection.sap .od-table thead th{background:#e9eff6!important;color:#66727f!important;font-weight:600!important}
+html body #collection.sap .od-table tbody tr{background:#fff!important}
+html body #collection.sap .od-table tbody tr:nth-child(even){background:#f5f8fc!important}
+html body #collection.sap .od-table tbody td{color:#24303c!important}
+html body #collection.sap .od-label{color:#1c5aa8!important}
+html body #collection.sap .st-btn.od-clear{background:#fff!important;color:#2f7fd0!important;border:1px solid #2f7fd0!important}
+html body #collection.sap .od-table tbody td{background:transparent!important}
+.sx-bar{display:flex;gap:8px;margin:6px 0 10px;padding:0 2px}
+.sx-b{flex:none;border:1px solid #2f7fd0;background:#e6f1fd;color:#2f7fd0;border-radius:6px;padding:6px 12px;font-size:12.5px;font-weight:600}
 </style>
 <script>(function(){var mk=function(t,c,x){var e=document.createElement(t);if(c)e.className=c;if(x)e.textContent=x;return e};
 window.RDLSelUI={
-btns:function(a,n){var b=mk('div','sel-bar');[['Select all',a],['Deselect all',n]].forEach(function(p){var x=mk('button','sel-b',p[0]);x.type='button';x.onclick=function(e){e.preventDefault();e.stopPropagation();p[1]()};b.appendChild(x)});return b},
+btns:function(a,n){var b=mk('div','sx-bar');[['Select all',a],['Deselect all',n]].forEach(function(p){var x=mk('button','sx-b',p[0]);x.type='button';x.onclick=function(e){e.preventDefault();e.stopPropagation();p[1]()};b.appendChild(x)});return b},
 tick:function(root,v,sel){root.querySelectorAll(sel||'input[type=checkbox]').forEach(function(i){if(i.disabled||i.checked===v)return;i.checked=v;i.dispatchEvent(new Event('change'))})},
-bar:function(card){var s=this,f=card.querySelector('.cg');if(!f||card.querySelector('.sel-bar'))return;card.insertBefore(s.btns(function(){s.tick(card,true,'.cg>.cg-h .dr-ck')},function(){s.tick(card,false,'.cg>.cg-h .dr-ck')}),f)}};
-['collection','drf'].forEach(function(i){var e=document.getElementById(i);if(e)e.classList.add('sap')})})();</script>
+bar:function(card){var s=this,f=card.querySelector('.cg');if(!f||card.querySelector('.sx-bar'))return;card.insertBefore(s.btns(function(){s.tick(card,true,'.cg>.cg-h .dr-ck')},function(){s.tick(card,false,'.cg>.cg-h .dr-ck')}),f)}};
+['collection','drf'].forEach(function(i){var e=document.getElementById(i);if(!e)return;var f=function(){if(!e.classList.contains('sap'))e.classList.add('sap')};f();new MutationObserver(f).observe(e,{attributes:true,attributeFilter:['class']})})})();</script>
 </body>
 </html>
