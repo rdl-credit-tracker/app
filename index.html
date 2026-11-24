@@ -4043,7 +4043,7 @@ window.addEventListener('popstate',()=>{
   if(!mState||!$('#collection').classList.contains('on')){mState=0;return}
   if(mState===2){mState=1;if(mBack)mBack();window.scrollTo(0,0);return}
   mState=0;render('c')});
-const QCS=[],QF={cu:'',co:'',bill:'',ty:'',ref:'',date:'',tds:'',col:'',tot:'',left:'',sk:'',sd:1};   /* QF = header filters / sort of the Saved Collections table */
+const QCS=[],QF={cu:[],co:[],bill:[],ty:[],ref:[],date:[],tds:[],col:[],tot:[],left:[],sk:'',sd:1};   /* QF = header filters / sort of the Saved Collections table */
    /* Quick Collection: collections saved on the page, waiting for one combined Review */
 /* ---------- Collection By Manually: the same options as the Collection & Order collection update, but typed in by hand ---------- */
 function manualPage(P,ttl,bk){
@@ -4066,7 +4066,14 @@ function manualPage(P,ttl,bk){
   const bv={};[['Collected','col'],['TDS','tds'],['Total','tot'],['Balance','bal']].forEach(([l,k])=>{const d=el('div','sq-bi');d.appendChild(el('small',null,l));bv[k]=d.appendChild(el('b',null,__m(0).replace('/=','')));bar.appendChild(d)});bar.appendChild(pb);
   function barUpd(){let c=0,t=0,tt=0;blocks.forEach(o=>{if(o.covered)return;c+=o.col();t+=o.tdv();tt+=o.chosen().reduce((x,b)=>x+bal(b),0)});
     const rem=Math.max(0,+(tt-c-t).toFixed(2));const q=x=>__m(x).replace('/=','');bv.col.textContent=q(c);bv.tds.textContent=q(t);bv.tot.textContent=q(c+t);bv.bal.textContent=q(rem);bv.bal.className=tt>0?(rem>0.005?'sq-rem':'sq-ok'):''}
+  const dock=form.appendChild(el('div'));{dock.className='sq-dock';dock.style.cssText='position:sticky;bottom:92px;z-index:20';dock.appendChild(st);dock.appendChild(bar);bar.style.position='static';bar.style.marginTop='0';
+   if(!document.getElementById('sq-dock-css')){const sy=document.createElement('style');sy.id='sq-dock-css';sy.textContent='.sq-dock>.stt:empty{display:none}.sq-dock>.stt{background:#fff;border:1px solid #cfd9ea;border-radius:8px;padding:5px 9px;margin:0 0 4px;box-shadow:0 -2px 8px #0a3a7a22}';document.head.appendChild(sy)}}
   let bp=null;const cos=new Set(),blocks=new Map();
+  /* the amount boxes (Selected / Collected / status / TDS) of the company box you are working in ride in the bottom dock, above the Save Collection bar */
+  const ad=el('div','st-card sapq'),adt=el('div');ad.style.cssText='display:none;margin:0 0 4px;padding:6px 8px;box-shadow:0 -2px 8px #0a3a7a22';adt.style.cssText='font-weight:800;font-size:12.5px;color:#0b2a5b;margin-bottom:2px';ad.appendChild(adt);dock.insertBefore(ad,st);dock.style.maxHeight='62vh';dock.style.overflow='auto';
+  let act=null;
+  const setActive=o=>{if(act===o)return;if(act&&act.amt)act.body.appendChild(act.amt);act=o;if(o){ad.appendChild(o.amt);adt.textContent=(names.get(String(bp))||'')+' • '+o.title()+' — amounts';ad.style.display=''}else ad.style.display='none'};
+  const pickAct=()=>{if(act&&blocks.get(String(act.co))===act&&!act.covered)return;setActive([...blocks.values()].find(o=>!o.covered)||null)};
   const findBp=()=>{const v=cu.value.trim();if(!v)return null;const k=v.split(' — ')[0].trim();if(names.has(k))return k;
     const q=v.toLowerCase();for(const [c,n] of names)if(String(n).toLowerCase()===q)return c;return null};
 
@@ -4144,6 +4151,8 @@ function manualPage(P,ttl,bk){
       if(!o.combined){o.cos=new Set([String(co)]);o.tcos=new Set([String(co)]);copt.querySelectorAll('input').forEach(i=>i.checked=i.value===String(co));sumCsum()}
       rebuildBills();buildTcos();refreshCovered()};
     ty.onchange=mode;ck.onchange=mode;am.oninput=()=>{o.pm=false;upd()};fx.onchange=()=>{if(fx.checked){o.pm=false;o.pa=new Map()}upd()};td.oninput=()=>{o.tdsAuto=false;upd()};
+    {const amt=el('div','sq-body');[sa.closest('.cl-f'),amRow.closest('.cl-f'),du,td.closest('.cl-f'),tsw&&tsw.w,tdb,tdh,tF].forEach(x=>{if(x)amt.appendChild(x)});body.appendChild(amt);o.amt=amt;o.title=()=>R.coName(co);
+      box.addEventListener('click',e=>{const t=e.target;if(act===o)return;setActive(o);if(t&&t.focus&&/^(INPUT|SELECT)$/.test(t.tagName)&&t.type!=='checkbox')t.focus()})}   /* after the tap is finished, so the dock never covers the thing being tapped */
     o.snap=()=>({co:String(co),ty:ty.value,rf:rf.value,rd:rd.value,cb:ck.checked,cos:[...o.cos],tcos:[...o.tcos],tsep:o.tsep,tm:[...o.tm],sel:[...o.sel],pm:o.pm,pa:[...o.pa],fx:fx.checked,am:am.value,td:td.value,tdsAuto:o.tdsAuto});
     o.restore=x=>{ty.value=x.ty;rf.value=x.rf;rd.value=x.rd;ck.checked=x.cb;o.sel=new Set(x.sel);o.pm=x.pm;o.pa=new Map(x.pa);o.tsep=x.tsep;o.tm=new Map(x.tm);if(tsw&&tsw.k)tsw.k.checked=x.tsep;
       o.cos=new Set(x.cos);o.tcos=new Set(x.tcos);copt.querySelectorAll('input').forEach(i=>i.checked=o.cos.has(i.value));sumCsum();mode();
@@ -4151,14 +4160,14 @@ function manualPage(P,ttl,bk){
     rebuildBills();buildTcos();return o}
   /* other company boxes of this customer that are part of a combined payment are covered by it */
   function refreshCovered(){const all=[...blocks.values()];
-    all.forEach(o=>{o.covered=false;o.body.style.display='';o.cov.style.display='none'});
+    all.forEach(o=>{o.covered=false;o.body.style.display='';o.amt.style.display='';o.cov.style.display='none'});
     all.forEach(h=>{if(!h.combined||h.covered)return;all.forEach(r=>{if(r===h||r.combined||r.covered)return;
-      if(h.cos.has(String(r.co))){r.covered=true;r.body.style.display='none';r.cov.style.display='';r.cov.textContent='✓ Included in the combined payment of '+R.coName(h.co)}})})}
+      if(h.cos.has(String(r.co))){r.covered=true;r.body.style.display='none';r.amt.style.display='none';r.cov.style.display='';r.cov.textContent='✓ Included in the combined payment of '+R.coName(h.co)}})});pickAct()}
   function syncBlocks(){
-    for(const [c,o] of [...blocks])if(!cos.has(c)||bp==null){o.box.remove();blocks.delete(c)}
+    for(const [c,o] of [...blocks])if(!cos.has(c)||bp==null){if(act===o)setActive(null);o.box.remove();blocks.delete(c)}
     [...cos].sort(R.coCmp).forEach(c=>{let o=blocks.get(c);if(!o){o=makeBlock(c);blocks.set(c,o)}holder.appendChild(o.box)});refreshCovered();barUpd()}
   const sumCos=()=>{csum.textContent=cos.size?[...cos].sort(R.coCmp).map(c=>R.coName(c)).join(', '):(bp==null?'Choose a customer first':'Tap to choose companies')};
-  function loadCos(){bp=findBp();copt.textContent='';cos.clear();blocks.forEach(o=>o.box.remove());blocks.clear();
+  function loadCos(){bp=findBp();copt.textContent='';cos.clear();setActive(null);blocks.forEach(o=>o.box.remove());blocks.clear();
     if(bp!=null){const cs=[...new Set(m.out.filter(b=>String(b.cu)===String(bp)&&bal(b)>0).map(b=>String(b.co)))].sort(R.coCmp);
       cs.forEach(c=>{const b=el('button',null,R.coName(c));b.type='button';b.dataset.c=c;b.onclick=()=>{cos.has(c)?cos.delete(c):cos.add(c);b.classList.toggle('on',cos.has(c));b.setAttribute('aria-pressed',cos.has(c));sumCos();syncBlocks()};copt.appendChild(b)});
       if(cs.length===1){cos.add(cs[0]);const b0=copt.querySelector('button');b0.classList.add('on');b0.setAttribute('aria-pressed',true)}else if(!cs.length)copt.appendChild(el('div','hint','No open bills for this customer'))}
@@ -4253,14 +4262,14 @@ function manualPage(P,ttl,bk){
       msg.c='✓ Saved '+n+' collection draft'+(n===1?'':'s')+' • '+__m(gc+gt)+'. Review and post it from Posting Center → Drafts.';cards();document.dispatchEvent(new Event('visibilitychange'));render('c');hubReload()};
     window.scrollTo(0,0)}
   /* ---------- Save Collection / Saved Collections box ---------- */
-  let editId=null;const sbox=form.insertBefore(el('div','st-card sapq'),card);
+  let editId=null;const sbox=form.insertBefore(el('div','st-card sapq'),card),dbox=form.insertBefore(el('div'),card);
   const small='padding:6px 14px;font-size:13px;min-height:0;width:auto;margin:0';
   const resetForm=()=>{cu.value='';sg.textContent='';pd.value=t0;loadCos()};
   const restore=e=>{const x=e.snap;cu.value=x.cu;pd.value=x.f;loadCos();cos.clear();
     copt.querySelectorAll('button').forEach(b=>{const on=x.cos.includes(b.dataset.c);if(on)cos.add(b.dataset.c);b.classList.toggle('on',on);b.setAttribute('aria-pressed',on)});sumCos();syncBlocks();
     x.blocks.forEach(y=>{const o=blocks.get(String(y.co));if(o)o.restore(y)});refreshCovered();barUpd()};
   const dirty=()=>!editId&&bp!=null&&[...blocks.values()].some(o=>!o.covered&&(o.sel.size>0||o.col()>0||o.tdv()>0));
-  function renderSaved(){sbox.textContent='';if(!QCS.length){sbox.style.display='none';return}sbox.style.display='';
+  function renderSaved(){sbox.textContent='';dbox.textContent='';if(!QCS.length){sbox.style.display='none';return}sbox.style.display='';
     sbox.appendChild(el('h3',null,'Saved Collections'));
     const parts=QCS.flatMap(e=>e.parts),groups=QCS.flatMap(e=>e.groups),q=x=>money(x).replace('/=',''),qn=x=>q(x).replace(/^\S+\s*/,''),tx=x=>(x.t||0)+(x.xt||0);
     const gc=sum(groups,g=>g.col),gt=sum(groups,g=>g.tds);
@@ -4272,31 +4281,50 @@ function manualPage(P,ttl,bk){
     const cm=by(x=>String(x.b.co));tbl('Business-wise total',['Business','Collected','TDS','Total'],[...cm.keys()].sort(R.coCmp).map(k=>{const r=cm.get(k);return[R.coName(k),qn(r.c),qn(r.t),qn(r.c+r.t)]}));
     const tm=by(x=>x.o.ty.value);tbl('Payment type-wise total',['Type','Collected','TDS','Total'],['Cash','Cheque','BEFTN'].filter(k=>tm.has(k)).map(k=>{const r=tm.get(k);return[k+' ('+r.n.size+')',qn(r.c),qn(r.t),qn(r.c+r.t)]}));
     const sst=el('div','stt'),F=QF;
-    sbox.appendChild(el('div','hint','Saved collections — filter or sort from the table header')).style.cssText='font-weight:800;margin:10px 0 4px';
+    sbox.appendChild(el('div','hint','Saved collections')).style.cssText='font-weight:800;margin:10px 0 4px';
     const rows=[];QCS.forEach(e=>e.groups.forEach(g=>g.ps.forEach(x=>rows.push({e,cu:e.nm,code:String(e.bp),co:String(x.b.co),bill:String(x.b.bill),ty:g.o.ty.value,ref:g.o.rf.value.trim(),date:e.f,col:x.c,tds:tx(x),tot:x.c+tx(x),left:x.left}))));
     const editE=e=>{if(dirty()){sst.className='stt bad';sst.textContent='The collection on the form below is not saved yet. Press Save Collection first.';return}editId=e.id;restore(e);renderSaved();st.className='stt warn';st.textContent='Editing '+e.nm+' — change it and press Save Collection to update.';card.scrollIntoView({behavior:'smooth'})};
     const delE=async e=>{const ok=await RDLUI.ask({title:'Delete saved collection?',msg:e.nm+' ('+e.bp+') will be removed from the saved list.',ok:'Delete',danger:true});if(!ok)return;QCS.splice(QCS.indexOf(e),1);if(editId===e.id){editId=null;resetForm();st.textContent='';st.className='stt'}renderSaved()};
-    const CS='width:100%;min-width:64px;max-width:96px;font-size:12px;padding:4px 3px;box-sizing:border-box;border:1px solid #b8c7e0;border-radius:6px;background:#fff;color:#0b2a5b;margin:0;height:auto';
-    const sel=(k,opts)=>{const c=el('select');c.style.cssText=CS;c.appendChild(new Option('All',''));opts.forEach(([v,t])=>c.appendChild(new Option(t,v)));if(!opts.some(o=>o[0]===F[k]))F[k]='';c.value=F[k];c.onchange=()=>{F[k]=c.value;draw()};return c};
-    const inp=(k,ph,num)=>{const c=el('input');c.style.cssText=CS;c.placeholder=ph;if(num){c.type='number';c.min='0'}c.value=F[k];c.oninput=()=>{F[k]=c.value;draw()};return c};
-    const uniq=f=>[...new Map(rows.map(r=>[f(r),f(r)])).keys()];
-    const COLS=[['Customer','cu',()=>sel('cu',[...new Map(rows.map(r=>[r.code,r.cu])).entries()])],['Co','co',()=>sel('co',uniq(r=>r.co).sort(R.coCmp).map(c=>[c,R.coName(c)]))],['Bill No','bill',()=>inp('bill','Bill…')],
-      ['Type','ty',()=>sel('ty',['Cash','Cheque','BEFTN'].filter(t=>rows.some(r=>r.ty===t)).map(t=>[t,t]))],['Ref No.','ref',()=>inp('ref','Ref…')],['Date','date',()=>sel('date',uniq(r=>r.date).sort().map(d=>[d,dq(d)]))],
-      ['Collected','col',()=>inp('col','≥',1)],['TDS','tds',()=>sel('tds',[['with','With TDS'],['no','No TDS']])],['Total','tot',()=>inp('tot','≥',1)],['Balance','left',()=>sel('left',[['clr','Cleared'],['rem','Remaining']])]];
     const NUM=new Set(['col','tds','tot','left']);
-    const pass=r=>(F.cu===''||r.code===F.cu)&&(F.co===''||r.co===F.co)&&r.bill.includes(F.bill.trim())&&(F.ty===''||r.ty===F.ty)&&(r.ref||'').toLowerCase().includes(F.ref.trim().toLowerCase())&&(F.date===''||r.date===F.date)
-      &&(F.tds===''||(F.tds==='with'?r.tds>EPS:r.tds<=EPS))&&(F.col===''||r.col>=(+F.col||0)-EPS)&&(F.tot===''||r.tot>=(+F.tot||0)-EPS)&&(F.left===''||(F.left==='clr'?r.left<=EPS:r.left>EPS));
-    const wrap=sbox.appendChild(el('div','sq-scroll')),tab=el('table','sq-tbl'),th=el('thead'),h1=el('tr'),h2=el('tr'),tb=el('tbody'),tf=el('tfoot');
-    const arrows=new Map();
-    COLS.forEach(([lab,k,mk],j)=>{const t=el('th',NUM.has(k)?'num':(j===0?'sq-r1':null));t.style.cursor='pointer';t.style.whiteSpace='nowrap';t.appendChild(document.createTextNode(lab+' '));const ar=el('span',null,'');ar.style.opacity='.8';t.appendChild(ar);arrows.set(k,ar);
-      t.onclick=()=>{if(F.sk!==k){F.sk=k;F.sd=1}else if(F.sd===1)F.sd=-1;else{F.sk='';F.sd=1}draw()};h1.appendChild(t);
-      const f=el('th',j===0?'sq-r1':null);f.style.padding='4px';f.style.background='#eef4ff';f.appendChild(mk());h2.appendChild(f)});
-    const ah=el('th',null,'Action'),ac=el('th'),clr=el('button',null,'Clear');ac.style.cssText='padding:4px;background:#eef4ff';clr.type='button';clr.style.cssText='font-size:12px;padding:4px 8px;border:1px solid #b8c7e0;border-radius:6px;background:#fff;color:#0b2a5b;font-weight:700';
-    clr.onclick=()=>{Object.keys(F).forEach(k=>F[k]=k==='sd'?1:'');renderSaved()};ac.appendChild(clr);h1.appendChild(ah);h2.appendChild(ac);th.appendChild(h1);th.appendChild(h2);tab.appendChild(th);tab.appendChild(tb);tab.appendChild(tf);wrap.appendChild(tab);
+    const KEY={cu:r=>r.code,co:r=>r.co,bill:r=>r.bill,ty:r=>r.ty,ref:r=>r.ref||'',date:r=>r.date,col:r=>(+r.col).toFixed(2),tds:r=>r.tds>EPS?r.tds.toFixed(2):'0',tot:r=>(+r.tot).toFixed(2),left:r=>r.left<=EPS?'0':r.left.toFixed(2)};
+    const LAB={cu:r=>r.cu+' ('+r.code+')',co:r=>R.coName(r.co),bill:r=>r.bill,ty:r=>r.ty,ref:r=>r.ref||'—',date:r=>dq(r.date),col:r=>qn(r.col),tds:r=>r.tds>EPS?qn(r.tds):'—',tot:r=>qn(r.tot),left:r=>r.left<=EPS?'✓ Cleared':qn(r.left)};
+    const SV=(r,k)=>NUM.has(k)?+KEY[k](r):(k==='date'?r.date:String(LAB[k](r)));
+    const COLS=[['Customer','cu'],['Co','co'],['Bill No','bill'],['Type','ty'],['Ref No.','ref'],['Date','date'],['Collected','col'],['TDS','tds'],['Total','tot'],['Balance','left']];
+    const OPT=k=>{const m=new Map();rows.forEach(r=>{const v=KEY[k](r),o=m.get(v)||{v,l:LAB[k](r),n:0,s:SV(r,k)};o.n++;m.set(v,o)});return[...m.values()].sort((x,y)=>NUM.has(k)?x.s-y.s:String(x.s).localeCompare(String(y.s),undefined,{numeric:true}))};
+    COLS.forEach(([,k])=>{const ok=new Set(OPT(k).map(o=>o.v));F[k]=F[k].filter(v=>ok.has(v))});
+    const pass=r=>COLS.every(([,k])=>!F[k].length||F[k].includes(KEY[k](r)));
+    const anyF=()=>COLS.some(([,k])=>F[k].length>0);
+    const bar0=sbox.appendChild(el('div'));bar0.style.cssText='display:flex;justify-content:space-between;align-items:center;gap:8px;margin:0 0 4px';
+    const fi=el('small',null,'Tap a header to filter / sort');fi.style.opacity='.8';bar0.appendChild(fi);
+    const clrAll=el('button',null,'Clear all filters');clrAll.type='button';clrAll.style.cssText='font-size:12px;padding:4px 10px;border:1px solid #b8c7e0;border-radius:8px;background:#fff;color:#0b2a5b;font-weight:700;width:auto;min-height:0;margin:0';clrAll.onclick=()=>{COLS.forEach(([,k])=>F[k]=[]);F.sk='';F.sd=1;draw()};bar0.appendChild(clrAll);
+    const wrap=sbox.appendChild(el('div','sq-scroll')),tab=el('table','sq-tbl'),th=el('thead'),h1=el('tr'),tb=el('tbody'),tf=el('tfoot');
+    const mark=new Map();
+    /* header tap -> filter / sort panel: tick one, many or none (none = everything) */
+    function openFilter(lab,k){const opts=OPT(k),sel=new Set(F[k]);
+      const ov=document.createElement('div');ov.style.cssText='position:fixed;inset:0;background:rgba(5,20,50,.55);z-index:100000;display:flex;align-items:center;justify-content:center;padding:14px';
+      const pn=el('div');pn.style.cssText='background:#fff;color:#0b2a5b;border-radius:14px;width:100%;max-width:360px;max-height:82vh;display:flex;flex-direction:column;box-shadow:0 10px 40px rgba(0,0,0,.4);overflow:hidden';ov.appendChild(pn);
+      const bt=(t,fn,pri)=>{const b=el('button',null,t);b.type='button';b.style.cssText='flex:1;padding:8px 6px;font-size:13px;font-weight:800;border-radius:9px;border:1px solid #9fb6d6;min-height:0;width:auto;margin:0;'+(pri?'background:#0a4fd0;color:#fff;border-color:#0a4fd0':'background:#eef4ff;color:#0b2a5b');b.onclick=fn;return b};
+      const close=()=>ov.remove();
+      const hd=el('div',null,lab+' — filter');hd.style.cssText='padding:12px 14px;font-weight:800;font-size:15px;background:#dfe9fa';pn.appendChild(hd);
+      const sr=el('div');sr.style.cssText='display:flex;gap:8px;padding:10px 12px 0';sr.appendChild(bt('Sort ▲ (small → big)',()=>{F.sk=k;F.sd=1;close();draw()}));sr.appendChild(bt('Sort ▼',()=>{F.sk=k;F.sd=-1;close();draw()}));pn.appendChild(sr);
+      let q=null;if(opts.length>6){q=el('input');q.placeholder='Search…';q.style.cssText='margin:10px 12px 0;padding:8px;border:1px solid #b8c7e0;border-radius:8px;font-size:14px;width:auto';pn.appendChild(q)}
+      const lr=el('div');lr.style.cssText='display:flex;gap:8px;padding:10px 12px 4px';pn.appendChild(lr);
+      const ls=el('div');ls.style.cssText='overflow:auto;padding:0 12px 6px;flex:1;min-height:60px';pn.appendChild(ls);
+      const items=opts.map(o=>{const lb=el('label');lb.style.cssText='display:flex;align-items:center;gap:10px;padding:9px 4px;border-bottom:1px solid #e6eefb;font-size:14px';const c=el('input');c.type='checkbox';c.style.cssText='width:20px;height:20px;flex:none;accent-color:#0a4fd0';c.checked=sel.has(o.v);c.onchange=()=>{c.checked?sel.add(o.v):sel.delete(o.v);cnt()};lb.appendChild(c);const t=el('span',null,o.l);t.style.flex='1';lb.appendChild(t);const n=el('small',null,String(o.n));n.style.opacity='.6';lb.appendChild(n);ls.appendChild(lb);return{lb,c,o}});
+      const cnt=()=>{inf.textContent=sel.size?sel.size+' selected':'None selected = show all'};
+      const vis=()=>items.filter(x=>x.lb.style.display!=='none');
+      lr.appendChild(bt('Select all',()=>{vis().forEach(x=>{x.c.checked=true;sel.add(x.o.v)});cnt()}));lr.appendChild(bt('Clear',()=>{vis().forEach(x=>{x.c.checked=false;sel.delete(x.o.v)});cnt()}));
+      if(q)q.oninput=()=>{const t=q.value.trim().toLowerCase();items.forEach(x=>x.lb.style.display=!t||x.o.l.toLowerCase().includes(t)?'flex':'none')};
+      const inf=el('div');inf.style.cssText='padding:2px 14px 6px;font-size:12px;opacity:.75';pn.appendChild(inf);cnt();
+      const ft=el('div');ft.style.cssText='display:flex;gap:8px;padding:10px 12px;border-top:1px solid #dfe9fa';ft.appendChild(bt('Cancel',close));ft.appendChild(bt('Apply',()=>{F[k]=sel.size>=opts.length?[]:[...sel];close();draw()},1));pn.appendChild(ft);
+      ov.onclick=e=>{if(e.target===ov)close()};document.body.appendChild(ov)}
+    COLS.forEach(([lab,k],j)=>{const t=el('th',NUM.has(k)?'num':(j===0?'sq-r1':null));t.style.cssText='cursor:pointer;white-space:nowrap';t.appendChild(document.createTextNode(lab+' '));const sp=el('span');t.appendChild(sp);mark.set(k,sp);t.onclick=()=>openFilter(lab,k);h1.appendChild(t)});
+    h1.appendChild(el('th',null,'Action'));th.appendChild(h1);tab.appendChild(th);tab.appendChild(tb);tab.appendChild(tf);wrap.appendChild(tab);
     const TY={Cash:['#0b7a4b','#d6f5e7'],Cheque:['#0a3fa8','#dbe9ff'],BEFTN:['#6d28d9','#ede4ff']};
     function draw(){let list=rows.filter(pass);
-      if(F.sk){const k=F.sk,n=NUM.has(k);list=list.map((r,i)=>[r,i]).sort((x,y)=>{const a=x[0][k],b=y[0][k],c=n?a-b:String(a).localeCompare(String(b),undefined,{numeric:true});return c?c*F.sd:x[1]-y[1]}).map(x=>x[0])}
-      arrows.forEach((ar,k)=>ar.textContent=F.sk===k?(F.sd===1?'▲':'▼'):'');
+      if(F.sk){const k=F.sk;list=list.map((r,i)=>[r,i]).sort((x,y)=>{const a=SV(x[0],k),b=SV(y[0],k),c=NUM.has(k)?a-b:String(a).localeCompare(String(b),undefined,{numeric:true});return c?c*F.sd:x[1]-y[1]}).map(x=>x[0])}
+      mark.forEach((sp,k)=>{const on=F[k].length>0;sp.textContent=(F.sk===k?(F.sd===1?'▲ ':'▼ '):'')+(on?'● ':'')+'▾';sp.style.color=on?'#ffe066':'';sp.style.fontWeight=on?'900':''});
+      clrAll.style.display=anyF()||F.sk?'':'none';
       tb.textContent='';tf.textContent='';
       if(!list.length){const r=el('tr'),c=el('td','hint','No saved collection matches the filter');c.colSpan=COLS.length+1;c.style.textAlign='center';r.appendChild(c);tb.appendChild(r)}
       list.forEach(r=>{const tr=el('tr');if(r.e.id===editId)tr.style.background='#fff8e1';
@@ -4316,7 +4344,13 @@ function manualPage(P,ttl,bk){
     draw();
     sbox.appendChild(sst);
     const rb=el('button','st-btn','Review Collection');rb.type='button';rb.style.cssText='display:block;width:100%;margin-top:8px';
-    rb.onclick=()=>{if(dirty()){sst.className='stt bad';sst.textContent='The collection on the form below is not saved yet. Press Save Collection first.';return}if(!QCS.length)return;showReview()};sbox.appendChild(rb)}
+    rb.onclick=()=>{if(dirty()){sst.className='stt bad';sst.textContent='The collection on the form below is not saved yet. Press Save Collection first.';return}if(!QCS.length)return;showReview()};sbox.appendChild(rb);
+    {const L0=ld(),[w1,w2]=wk(today());
+      const rvx=(host,items)=>{const g=host.appendChild(el('div','rvx'));items.forEach(([k,v,sb,c,full])=>{const d=el('div',c+(full?' full':''));d.appendChild(el('small',null,k));d.appendChild(el('strong',null,v));if(sb)d.appendChild(el('em',null,sb));g.appendChild(d)})};
+      const detBox=(title,rr)=>{const c0=sum(rr,x=>+x.col||0),t1=sum(rr,x=>+x.tds||0),bx=dbox.appendChild(el('details','st-card sapq sq-fold'));bx.appendChild(el('summary',null,title));
+        const cn=a=>{const n=new Set(a.map(x=>x.bill)).size;return n+(n===1?' collection':' collections')},ty=t=>rr.filter(x=>x.type===t),cs=t=>sum(ty(t),x=>+x.col||0);
+        rvx(bx,[['Collected (DZ)',money(c0),cn(rr),'rv-b'],['TDS',money(t1),'','rv-a'],['Total Settled',money(c0+t1),'','rv-i'],['Cash',money(cs('Cash')),cn(ty('Cash')),'rv-v'],['Cheque',money(cs('Cheque')),cn(ty('Cheque')),'rv-t'],['BEFTN',money(cs('BEFTN')),cn(ty('BEFTN')),'rv-r']])};
+      detBox('Today Collection Details',L0.dz.filter(x=>x.date===t0));detBox('This Week Collection Details',L0.dz.filter(x=>x.date>=w1&&x.date<=w2))}}
   pb.onclick=()=>{const en=buildEntry();if(!en)return;
     if(QCS.some(e=>e.id!==editId&&String(e.bp)===String(en.bp))){st.className='stt bad';st.textContent=en.nm+' is already saved. Edit or delete it in Saved Collections first.';return}
     en.snap={cu:cu.value,f:pd.value,cos:[...cos],blocks:[...blocks.values()].map(o=>o.snap())};
