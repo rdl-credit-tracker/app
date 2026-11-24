@@ -4361,7 +4361,7 @@ function manualPage(P,ttl,bk){
         cell(qn(r.tot),'num').style.fontWeight='800';
         const bl=cell(r.left<=EPS?'✓ Cleared':qn(r.left),'num');bl.style.cssText=r.left<=EPS?'color:#0b7a4b;font-weight:800':'color:#c0392b;font-weight:800';
         const ac=cell(null);ac.style.whiteSpace='nowrap';
-        [['✎','Edit this customer',()=>editE(r.e),'#0a4fd0'],['🗑','Delete this customer',()=>delE(r.e),'#c0392b']].forEach(([ic,tt,fn,col])=>{const b=el('button',null,ic);b.type='button';b.title=tt;b.setAttribute('aria-label',tt);b.style.cssText='border:1px solid '+col+';color:'+col+';background:#fff;border-radius:8px;padding:3px 8px;margin-right:4px;font-size:14px;min-height:0;width:auto';b.onclick=fn;ac.appendChild(b)});
+        [['edit','Edit this customer',()=>editE(r.e)],['del','Delete this customer',()=>delE(r.e)]].forEach(([ic,tt,fn])=>{ac.appendChild(icBtn(ic,tt,fn))});
         tb.appendChild(tr)});
       const ft=el('tr'),l=el('td','sq-r1','Total • '+list.length+' of '+rows.length+' rows');l.colSpan=6;l.style.textAlign='left';ft.appendChild(l);
       ['col','tds','tot','left'].forEach(k=>ft.appendChild(el('td','num',qn(sum(list,r=>r[k])))));ft.appendChild(el('td'));tf.appendChild(ft)}
@@ -4382,7 +4382,7 @@ function manualPage(P,ttl,bk){
     editId=null;resetForm();renderSaved();st.className='stt ok';st.textContent='✓ '+en.nm+' saved • '+money(sum(en.groups,g=>g.col+g.tds))+'. Choose the next customer, or press Send to Pending Collections in Saved Collections.';window.scrollTo(0,0)};
   loadCos();renderSaved()}
 function render(w,rev){window.RDLNav&&RDLNav.level(w,rev?1:0,()=>render(w));if(rev!=='manual'&&mState){const n=mState;mState=0;try{history.go(-n)}catch(e){}}
-  const K=KIND[w],P=$('#'+K.id);P.className='pg st'+(P.classList.contains('on')?' on':'');P.textContent='';
+  const K=KIND[w],P=$('#'+K.id);P.className='pg st'+(P.classList.contains('on')?' on':'')+(rev==='manual'?' qk-on':'');P.textContent='';
   const top=el('div','st-top'),bk=el('button');bk.type='button';bk.innerHTML='<svg class="bk-ar" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 12h-15M10.5 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="4.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';bk.setAttribute('aria-label','Back');
   const ttl=el('h2',null,rev?'Review Entries':tab[w]==='post'?'Smart Post':K.title);
   bk.onclick=rev?()=>render(w):tab[w]==='post'?()=>window.RDL.openUpload():(w==='a'&&R.fromHub)?()=>{R.fromHub=false;window.RDL.openUpload()}:home;top.appendChild(bk);top.appendChild(ttl);P.appendChild(top);
@@ -4439,6 +4439,13 @@ const BKS='<svg class="bk-ar" viewBox="0 0 24 24" aria-hidden="true"><path d="M1
 /* ===== Pending Collections / Pending Sales: summary box on top (tick, edit, delete, Post selected) ===== */
 const PCF=new Set(['cash','cheque','beftn']),pcAll=()=>{PCF.clear();['cash','cheque','beftn'].forEach(x=>PCF.add(x))};let PEND_NOTE=null;
 const pcQ=v=>money(v).replace(/^\S+\s*/,'').replace('/=',''),pcT=(bl,t)=>bl.reduce((a,b)=>{const i=b._info();return a+(String(i.t).toLowerCase()===t?i.c:0)},0);
+const IC_SVG={edit:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="14" height="14" rx="3.2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M9.2 15.6l.7-3.6 8.2-8.2a1.9 1.9 0 012.7 0l.1.1a1.9 1.9 0 010 2.7l-8.2 8.2z" fill="currentColor"/></svg>',del:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9.5 7V4.6h5V7M6.5 7l.9 12.4h9.2L17.5 7M10 11v5.4M14 11v5.4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'};
+function icBtn(kind,tt,fn){const b=document.createElement('button');b.type='button';b.className='ic-b ic-'+kind;b.title=tt;b.setAttribute('aria-label',tt);b.innerHTML=IC_SVG[kind];b.onclick=fn;return b}
+/* a customer block is read-only (plain text) until its pencil in the Summary is pressed; Done saves and locks it again */
+function roSet(gx,on){gx.classList.toggle('ro',!!on);
+  if(!on)gx.querySelectorAll('.sq-drt>tbody>tr:not(.sq-dt)').forEach(r=>{const d=r.nextElementSibling;if(d&&d.classList.contains('sq-dt')&&d.style.display==='none')r.click()})}   /* opens the bill rows so they can be edited in place */
+function roTw(inp,fmt,host){const t=document.createElement('span');t.className='ro-t';host.appendChild(t);const u=()=>{t.textContent=fmt(inp.value)};inp.addEventListener('input',u);inp.addEventListener('change',u);u();return t}
+function doneBtn(gx,cks){const b=el('button','pc-done','Done');b.type='button';b.onclick=e=>{e.stopPropagation();let ok=true;cks.forEach(x=>x.blks.forEach(k=>{if(k.isConnected&&k._save&&!k._save())ok=false}));if(!ok)return;roSet(gx,true);gx.dispatchEvent(new Event('change'))};return b}
 function pendSummary(sx,GS,o){
   sx.textContent='';
   const blksOf=s=>s.cks.reduce((a,x)=>a.concat(x.blks.filter(b=>b.isConnected)),[]);
@@ -4451,32 +4458,32 @@ function pendSummary(sx,GS,o){
   if(!GS.length)return;
   const bar=sx.appendChild(el('div','pc-bar')),info=el('span','pc-i'),btn=el('button','st-btn','Post Selected');btn.type='button';bar.appendChild(info);bar.appendChild(btn);
   const wrap=sx.appendChild(el('div','sq-scroll')),tb=el('table','sq-tbl pc-tbl'),th=el('thead'),hr=el('tr'),tbd=el('tbody'),tf=el('tfoot');
-  const allC=mkCk(),h0=el('th');h0.appendChild(allC);hr.appendChild(h0);hr.appendChild(el('th',null,'Customer'));o.cols.forEach(c=>hr.appendChild(el('th','num',c[0])));hr.appendChild(el('th',null,''));
+  const allC=mkCk(),h0=el('th','pc-c0');h0.appendChild(allC);hr.appendChild(h0);hr.appendChild(el('th','pc-c1','Customer'));o.cols.forEach(c=>hr.appendChild(el('th','num',c[0])));hr.appendChild(el('th',null,''));
   th.appendChild(hr);tb.appendChild(th);tb.appendChild(tbd);tb.appendChild(tf);wrap.appendChild(tb);
   const openSet=new Set();
   const chosen=()=>GS.reduce((a,s)=>a.concat(s.cks.filter(x=>x.ck.checked).reduce((b,x)=>b.concat(x.blks.filter(z=>z.isConnected)),[])),[]);
   const updInfo=()=>{const sel=chosen(),tot=sel.reduce((a,b)=>a+(b._amt?b._amt():0),0);
-    info.textContent=sel.length?sel.length+' bill'+(sel.length===1?'':'s')+' • '+money(tot):'Tick customers to post their bills together';btn.disabled=!sel.length;
+    info.textContent=sel.length?sel.length+' bill'+(sel.length===1?'':'s')+' • '+money(tot):'';btn.disabled=!sel.length;
     const live=GS.filter(x=>blksOf(x).length),on=live.filter(x=>x.gck.checked).length;allC.checked=!!live.length&&on===live.length;allC.indeterminate=on>0&&on<live.length};
   const sync=s=>{if(s.rc){s.rc.checked=s.gck.checked;s.rc.indeterminate=s.gck.indeterminate}updInfo()};
   GS.forEach(s=>{s.gck.addEventListener('change',()=>sync(s));s.cks.forEach(x=>x.ck.addEventListener('change',()=>sync(s)))});
   allC.onchange=()=>{const v=allC.checked;GS.forEach(s=>{if(!blksOf(s).length)return;s.gck.checked=v;s.gck.indeterminate=false;s.gck.dispatchEvent(new Event('change'))})};
   const refresh=()=>{if(!sx.isConnected)return;tbd.textContent='';tf.textContent='';const tot=o.cols.map(()=>0);let n=0;
     GS.forEach(s=>{const bl=blksOf(s);if(!bl.length)return;n++;
-      const tr=el('tr'),c0=el('td'),rc=mkCk();s.rc=rc;rc.checked=s.gck.checked;rc.indeterminate=s.gck.indeterminate;c0.appendChild(rc);tr.appendChild(c0);
+      const tr=el('tr'),c0=el('td','pc-c0'),rc=mkCk();s.rc=rc;rc.checked=s.gck.checked;rc.indeterminate=s.gck.indeterminate;c0.appendChild(rc);tr.appendChild(c0);
       rc.onchange=()=>{s.gck.checked=rc.checked;s.gck.indeterminate=false;s.gck.dispatchEvent(new Event('change'))};
-      const nm=el('td','pc-n',(openSet.has(s.cu)?'▾ ':'▸ ')+s.nm+' • '+s.cu);nm.onclick=()=>{openSet.has(s.cu)?openSet.delete(s.cu):openSet.add(s.cu);refresh()};tr.appendChild(nm);
+      const nm=el('td','pc-n pc-c1',(openSet.has(s.cu)?'▾ ':'▸ ')+s.nm);nm.onclick=()=>{openSet.has(s.cu)?openSet.delete(s.cu):openSet.add(s.cu);refresh()};tr.appendChild(nm);
       o.cols.forEach((c,i)=>{const v=c[1](bl);tot[i]+=v;tr.appendChild(el('td','num',c[2]===false?String(v):pcQ(v)))});
-      const ac=el('td','pc-a'),mk=(txt,tt,col,fn)=>{const b=el('button',null,txt);b.type='button';b.title=tt;b.setAttribute('aria-label',tt);b.style.cssText='border:1px solid '+col+';color:'+col+';background:#fff;border-radius:8px;padding:3px 8px;margin-left:4px;font-size:14px;min-height:0;width:auto';b.onclick=fn;ac.appendChild(b)};
-      mk('✎','Edit this customer','#0a4fd0',()=>{s.gx.scrollIntoView({behavior:'smooth',block:'start'});s.gx.classList.add('pc-flash');setTimeout(()=>s.gx.classList.remove('pc-flash'),1600);
-        blksOf(s).forEach(b=>{const d=b.nextElementSibling;if(d&&d.classList.contains('sq-dt')&&d.style.display==='none')b.click()})});   /* opens the bill rows so they can be edited in place */
-      mk('🗑','Delete this customer\'s pending bills','#c0392b',async()=>{const bk=blksOf(s),ids=bk.map(b=>b._id).filter(Boolean),tt=bk.reduce((a,b)=>a+(b._amt?b._amt():0),0);if(!ids.length)return;
+      const ac=el('td','pc-a'),mk=(kind,tt,fn)=>{const b=icBtn(kind,tt,fn);ac.appendChild(b);return b};
+      const eb=mk('edit','Edit this customer\'s bills',()=>{s.setRO&&s.setRO(false);s.gx.scrollIntoView({behavior:'smooth',block:'start'});s.gx.classList.add('pc-flash');setTimeout(()=>s.gx.classList.remove('pc-flash'),1600);refresh()});
+      if(!s.gx.classList.contains('ro'))eb.classList.add('on');
+      mk('del','Delete this customer\'s pending bills',async()=>{const bk=blksOf(s),ids=bk.map(b=>b._id).filter(Boolean),tt=bk.reduce((a,b)=>a+(b._amt?b._amt():0),0);if(!ids.length)return;
         const txt=s.nm+' • '+ids.length+' bill'+(ids.length===1?'':'s')+' • '+money(tt)+'. The bills stay open.';
         const ok=window.RDLUI&&RDLUI.ask?await RDLUI.ask({title:'Delete these pending bills?',msg:txt,ok:'Delete'}):confirm('Delete these pending bills? '+txt);if(!ok)return;
         const L2=ld();window.RDLDDEL&&RDLDDEL(L2,ids);L2[o.key]=(L2[o.key]||[]).filter(e=>!ids.includes(e.id));try{sv(L2)}catch(e){return}cards();document.dispatchEvent(new Event('visibilitychange'));o.rebuild()});
       tr.appendChild(ac);tbd.appendChild(tr);
       if(openSet.has(s.cu)){const dr=el('tr','pc-dt'),dc=el('td'),dl=el('div','pc-dl');dc.colSpan=o.cols.length+3;bl.forEach(b=>{const i=b._info?b._info():null;if(i)dl.appendChild(el('div',null,o.line(i)))});dc.appendChild(dl);dr.appendChild(dc);tbd.appendChild(dr)}});
-    const ft=el('tr','pc-tot');ft.appendChild(el('td'));ft.appendChild(el('td',null,'Total • '+n+' customer'+(n===1?'':'s')));o.cols.forEach((c,i)=>ft.appendChild(el('td','num',c[2]===false?String(tot[i]):pcQ(tot[i]))));ft.appendChild(el('td'));tf.appendChild(ft);updInfo()};
+    const ft=el('tr','pc-tot');ft.appendChild(el('td','pc-c0'));ft.appendChild(el('td','pc-c1','Total • '+n));o.cols.forEach((c,i)=>ft.appendChild(el('td','num',c[2]===false?String(tot[i]):pcQ(tot[i]))));ft.appendChild(el('td'));tf.appendChild(ft);updInfo()};
   GS.forEach(s=>{s.gx.addEventListener('input',e=>{if(e.target.type!=='checkbox')refresh()});s.gx.addEventListener('change',e=>{if(e.target.type!=='checkbox')refresh()})});
   btn.onclick=async()=>{const sel=chosen();if(!sel.length)return;const tot=sel.reduce((a,b)=>a+(b._amt?b._amt():0),0),txt=sel.length+' bill'+(sel.length===1?'':'s')+' • '+money(tot)+'. Post now?';
     const ok=window.RDLUI&&RDLUI.ask?await RDLUI.ask({title:'Post selected bills?',msg:txt,ok:'Post'}):confirm('Post selected bills? '+txt);if(!ok)return;
@@ -4496,6 +4503,7 @@ function pendSummary(sx,GS,o){
       if(!blksOf(x).length&&x.gx.isConnected)x.gx.remove()});
     const card0=o.card&&o.card(),hint=card0&&card0.querySelector('.dr-c');
     if(card0&&hint){const all=[...card0.querySelectorAll('.cl-card,.sq-drt>tbody>tr:not(.sq-dt)')],tt=all.reduce((a,b)=>a+(b._amt?b._amt():0),0),mm=hint.textContent.match(/^(\d+ drafts? • .*?\/=)(\..*)$/);if(mm)hint.textContent=all.length+' draft'+(all.length===1?'':'s')+' • '+money(tt)+mm[2]}
+    sel.forEach(b=>{if(b._ok)return;const gs=GS.find(x=>x.cks.some(c=>c.blks.includes(b)));if(gs&&gs.setRO)gs.setRO(false)});   /* a bill that failed shows its red message: its customer opens for editing */
     msg.className='stt warn';msg.textContent=done+' posted • '+left+' could not be posted and stay pending (see the red message under each one).';refresh();
     const f1=sel.find(b=>!b._ok&&b.isConnected);if(f1)f1.scrollIntoView({block:'center',behavior:'smooth'})};
   refresh()}
@@ -4541,7 +4549,7 @@ function buildDrafts(kind){const P=$('#drf');P.textContent='';const L=ld(),all0=
   const names=new Map(),groups=new Map();
   dr.forEach(d=>{const k=String(d.cu);let g=groups.get(k);if(!g){g={cu:d.cu,nm:d.nm||('Customer '+d.cu),cos:new Map()};groups.set(k,g)}
     const ck=String(d.co);let c=g.cos.get(ck);if(!c){c={co:d.co,list:[]};g.cos.set(ck,c)}c.list.push(d)});
-  let gi=0;groups.forEach(g=>{const gx=el('div','cg cu'+(gi++%8)),gh=el('div','cg-h'),cks=[],gck=mkCk();gh.appendChild(gck);gh.appendChild(el('b',null,g.nm+' • '+g.cu));gh.appendChild(el('span','cg-n',g.cos.size+(g.cos.size===1?' company':' companies')));gx.appendChild(gh);
+  let gi=0;groups.forEach(g=>{const gx=el('div','cg ro cu'+(gi++%8)),gh=el('div','cg-h'),cks=[],gck=mkCk();gh.appendChild(gck);gh.appendChild(el('b',null,g.nm+' • '+g.cu));gh.appendChild(el('span','cg-n',g.cos.size+(g.cos.size===1?' company':' companies')));gh.appendChild(doneBtn(gx,cks));gx.appendChild(gh);
     [...g.cos.values()].sort((x,y)=>R.coCmp?R.coCmp(x.co,y.co):0).forEach(c=>{
       const row=el('div','cg-co '+coCls(c.co)),rh=el('div','cg-h cg-ch'),body=el('div','cg-b');
       const cck=mkCk(),blks=[];rh.appendChild(cck);rh.appendChild(el('b',null,R.coName?R.coName(c.co):String(c.co)));row.appendChild(rh);row.appendChild(body);
@@ -4559,9 +4567,9 @@ function buildDrafts(kind){const P=$('#drf');P.textContent='';const L=ld(),all0=
         /* row: Bill No | Open Bal | Collect | TDS | Type | Post Date | status dot */
         const c1=el('td','sq-r1'),tg=el('span','sq-tg','\u25B8'),dot=el('span','sq-dot','\u25CF');c1.appendChild(tg);c1.appendChild(dot);c1.appendChild(document.createTextNode(' '+d.bn));blk.appendChild(c1);
         cell(null,'num').textContent=bill?money(bal0).replace(/^\S+\s*/,'').replace('/=',''):'\u2014';
-        const col=I('number',d.col),tds=I('number',d.tds||0);col.step=tds.step='any';cell(col,'num');cell(tds,'num');
-        const ty=el('select','list-search');['Cash','Cheque','BEFTN'].forEach(x=>{const o=el('option',null,x);o.value=x;ty.appendChild(o)});ty.value=d.type;cell(ty);
-        const pd=I('date',d.pdt&&d.pdt<=t?d.pdt:t);pd.max=t;if(bill&&bill.post)pd.min=bill.post;cell(pd);
+        const col=I('number',d.col),tds=I('number',d.tds||0);col.step=tds.step='any';const nf=v=>pcQ(+v||0);roTw(col,nf,cell(col,'num'));roTw(tds,nf,cell(tds,'num'));
+        const ty=el('select','list-search');['Cash','Cheque','BEFTN'].forEach(x=>{const o=el('option',null,x);o.value=x;ty.appendChild(o)});ty.value=d.type;roTw(ty,v=>v,cell(ty));
+        const pd=I('date',d.pdt&&d.pdt<=t?d.pdt:t);pd.max=t;if(bill&&bill.post)pd.min=bill.post;roTw(pd,dm,cell(pd));
         /* details (tap the row): message, cheque / BEFTN fields, Save / Post / Delete */
         bd.appendChild(el('div','sq-meta','Against '+d.bn+' \u2022 '+(d.manual?'Manual entry':'DCR '+dm(d.dcr))+' \u2022 '+(age?age+' day'+(age===1?'':'s')+' in draft':'saved today')));
         const du=el('div','stt');bd.appendChild(du);const tdh=el('div','hint');bd.appendChild(tdh);
@@ -4570,7 +4578,7 @@ function buildDrafts(kind){const P=$('#drf');P.textContent='';const L=ld(),all0=
         RDLCalc.attach(col,{label:'Collected Amount'});RDLCalc.attach(tds,{label:'TDS'});
         const stt=el('div','stt'),act=el('div','od-actions'),mkB=(tx,cls)=>{const b=el('button',cls,tx);b.type='button';act.appendChild(b);return b};
         const opn=on=>{dt.style.display=on?'':'none';tg.textContent=on?'\u25BE':'\u25B8';if(on)bd.style.width=Math.max(220,wrap0.clientWidth-16)+'px'};
-        blk.addEventListener('click',e=>{if(e.target.closest('input,select,button'))return;opn(dt.style.display==='none')});
+        blk.addEventListener('click',e=>{if(e.target.closest('input,select,button')||gx.classList.contains('ro'))return;opn(dt.style.display==='none')});
         const read=()=>{const c2=+col.value||0,tx=+tds.value||0;if(c2<0||tx<0||!(c2+tx>0)){stt.className='stt bad';stt.textContent='Enter a collected amount';opn(true);return null}return{c:c2,tx}};
         /* live message + the coloured dot in the row */
         const live=()=>{const c2=+col.value||0,tx=+tds.value||0;let cls,txt;
@@ -4582,7 +4590,7 @@ function buildDrafts(kind){const P=$('#drf');P.textContent='';const L=ld(),all0=
           du.className='stt '+cls;du.textContent=txt;tdh.textContent=tx>0?'TDS '+money(tx):'';stt.textContent='';stt.className='stt';dot.className='sq-dot '+cls;blk.classList.toggle('sq-bad',cls==='bad');dot.title=txt};
         col.addEventListener('input',live);tds.addEventListener('input',live);live();if(!bill)opn(true);
         const upd=(L2,v)=>{const x=L2.dr.find(e=>e.id===d.id);x.col=v.c;x.tds=v.tx;x.type=ty.value;x.ref=rf.value.trim();if(rd.value)x.rd=rd.value;else delete x.rd;return x};
-        mkB('Save','st-btn od-clear').onclick=()=>{const v=read();if(!v)return;const L2=ld();if(!L2.dr)return;upd(L2,v);try{sv(L2)}catch(e){stt.className='stt bad';stt.textContent='Could not save';return}totUp();stt.className='stt ok';stt.textContent='\u2713 Saved'};
+        const doSave=()=>{const v=read();if(!v)return false;const L2=ld();if(!L2.dr)return false;upd(L2,v);try{sv(L2)}catch(e){stt.className='stt bad';stt.textContent='Could not save';return false}totUp();stt.className='stt ok';stt.textContent='\u2713 Saved';return true};blk._save=doSave;mkB('Save','st-btn od-clear').onclick=doSave;
         const doPost=(used)=>{const v=read();if(!v)return false;const bad=x=>{stt.className='stt bad';stt.textContent=x;opn(true);return false};
           if(!bill)return bad('This bill is no longer open (the database changed). Delete this draft.');if(!pd.value)return bad('Choose a posting date');if(pd.value>t)return bad('Posting date cannot be after today');if(bill.post&&pd.value<bill.post)return bad('Posting date cannot be before the bill date ('+dm(bill.post)+')');
           if(v.c+v.tx+((used&&used.get(d.ag))||0)>bal0+EPS)return bad('More than the open balance ('+money(bal0)+')');
@@ -4594,7 +4602,7 @@ function buildDrafts(kind){const P=$('#drf');P.textContent='';const L=ld(),all0=
         bd.appendChild(act);bd.appendChild(stt)});
       row.appendChild(ft);gx.appendChild(row);cks.push({ck:cck,blks,row,totUp})});
     bulkBar(gx,gck,cks,()=>buildDrafts(kind));   /* its tick logic is kept; the Post button now lives in the summary box on top */
-    GS.push({cu:g.cu,nm:g.nm,gx,gck,cks});card0.appendChild(gx)});
+    GS.push({cu:g.cu,nm:g.nm,gx,gck,cks,setRO:on=>roSet(gx,on)});card0.appendChild(gx)});
   pendSummary(sx,GS,pcOpts)}
 /* ===== SALES DRAFTS: Quick Sales bills wait here; the RV number is given only when you press Post ===== */
 function salesDrafts(P){
@@ -4607,7 +4615,7 @@ function salesDrafts(P){
   card0.appendChild(el('p','hint dr-c',sd.length+' draft'+(sd.length===1?'':'s')+' \u2022 '+money(sd.reduce((a,d)=>a+(+d.amt||0),0))+'. Check each bill, then Post. A manual bill gets its RV number when you post; a bill from the SAP file keeps its SAP number.'));
   const groups=new Map();
   sd.forEach(d=>{const k=String(d.cu);let g=groups.get(k);if(!g){g={cu:d.cu,nm:d.nm||('Customer '+d.cu),cos:new Map()};groups.set(k,g)}const ck=String(d.co);let c=g.cos.get(ck);if(!c){c={co:d.co,list:[]};g.cos.set(ck,c)}c.list.push(d)});
-  groups.forEach(g=>{const gx=card0.appendChild(el('div','cg cu-sale')),gh=el('div','cg-h'),cks=[],gck=mkCk();gh.appendChild(gck);gh.appendChild(el('b',null,g.nm+' \u2022 '+g.cu));gh.appendChild(el('span','cg-n',g.cos.size+(g.cos.size===1?' company':' companies')));gx.appendChild(gh);
+  groups.forEach(g=>{const gx=card0.appendChild(el('div','cg ro cu-sale')),gh=el('div','cg-h'),cks=[],gck=mkCk();gh.appendChild(gck);gh.appendChild(el('b',null,g.nm+' \u2022 '+g.cu));gh.appendChild(el('span','cg-n',g.cos.size+(g.cos.size===1?' company':' companies')));gh.appendChild(doneBtn(gx,cks));gx.appendChild(gh);
     [...g.cos.values()].sort((x,y)=>R.coCmp?R.coCmp(x.co,y.co):0).forEach(c=>{
       const row=el('div','cg-co co-sale'),rh=el('div','cg-h cg-ch'),body=el('div','cg-b'),cck=mkCk(),blks=[];rh.appendChild(cck);rh.appendChild(el('b',null,coLab(c.co)));row.appendChild(rh);row.appendChild(body);
       const ft=el('div','cg-ft'),ftV=el('span',null,'');ft.appendChild(el('span',null,'Draft total'));ft.appendChild(ftV);
@@ -4619,12 +4627,13 @@ function salesDrafts(P){
         const F=(lab,node)=>{const x=el('div','cl-f');x.appendChild(el('small',null,lab));x.appendChild(node);bd.appendChild(x);return node},I=(type,val)=>{const i=el('input','list-search');i.type=type;i.value=val;return i};
         const am=F('Sales amount',I('number',d.amt)),pd=F('Posting date (cannot be after today)',I('date',d.post)),dl=F('Days Limit',I('number',d.days));
         am.step='any';am.min='0';pd.max=t;dl.min='1';dl.step='1';if(d.sap){am.readOnly=pd.readOnly=dl.readOnly=true}else if(window.RDLCalc)RDLCalc.attach(am,{label:'Sales amount'});
+        roTw(am,v=>pcQ(+v||0),am.parentNode);roTw(pd,dm,pd.parentNode);roTw(dl,v=>v,dl.parentNode);
         const info=el('div','hint');bd.appendChild(info);const up=()=>{info.textContent=pd.value&&+dl.value>0?'Payment date: '+dm(addD(pd.value,parseInt(dl.value))):''};pd.addEventListener('input',up);dl.addEventListener('input',up);up();
         const stt=el('div','stt'),act=el('div','od-actions'),mkB=(tx,cls)=>{const b=el('button',cls,tx);b.type='button';act.appendChild(b);return b},bad=x=>{stt.className='stt bad';stt.textContent=x;return null};
         let dupOk=false;
         const read=()=>{const a=+am.value,dys=parseInt(dl.value),f=pd.value;if(!(a>0))return bad('Enter a sales amount greater than zero');if(!f)return bad('Choose a posting date');if(f>t)return bad('Posting date cannot be after today');if(!(dys>0))return bad('Enter the Days Limit');return{a,dys,f}};
         const upd=(L2,v)=>{const x=(L2.sd||[]).find(e=>e.id===d.id);if(!x)return null;x.amt=v.a;x.post=v.f;x.days=v.dys;return x};
-        if(!d.sap)mkB('Save','st-btn od-clear').onclick=()=>{const v=read();if(!v)return;const L2=ld();if(!upd(L2,v))return;try{sv(L2)}catch(e){return bad('Could not save')}totUp();stt.className='stt ok';stt.textContent='\u2713 Saved'};
+        const doSave=()=>{const v=read();if(!v)return false;const L2=ld();if(!upd(L2,v))return false;try{sv(L2)}catch(e){bad('Could not save');return false}totUp();stt.className='stt ok';stt.textContent='\u2713 Saved';return true};blk._save=d.sap?(()=>true):doSave;if(!d.sap)mkB('Save','st-btn od-clear').onclick=doSave;
         const pb=mkB('Post','st-btn');
         const doPost=()=>{const v=read();if(!v)return false;const L2=ld(),x=upd(L2,v);if(!x)return false;
           if(d.sap&&d.doc){const mo=(()=>{try{return JSON.parse(localStorage.getItem('rdl.master.v1')||'null')||{}}catch(e){return{}}})(),same=z=>String(z.bill)===String(d.doc)&&String(z.co)===String(x.co)&&String(z.cu)===String(x.cu);
@@ -4640,7 +4649,7 @@ function salesDrafts(P){
         bd.appendChild(act);bd.appendChild(stt)});
       row.appendChild(ft);gx.appendChild(row);cks.push({ck:cck,blks,row,totUp})});
     bulkBar(gx,gck,cks,()=>buildDrafts('Sales'));   /* tick logic kept; the Post button now lives in the summary box on top */
-    GS.push({cu:g.cu,nm:g.nm,gx,gck,cks})});
+    GS.push({cu:g.cu,nm:g.nm,gx,gck,cks,setRO:on=>roSet(gx,on)})});
   pendSummary(sx,GS,pcOpts)}
 function draftHub(P,all0){
   /* SAP-style: one small table instead of big buttons. Tap a row to open that list. */
@@ -5023,6 +5032,7 @@ function manualSales(P,ttl,bk){
 /* ---------- Quick Actions: Sales Upload / Collection Upload now offer an option sheet ---------- */
 function showPage(id){document.querySelectorAll('.pg').forEach(x=>x.classList.remove('on'));document.querySelectorAll('.nav button').forEach(x=>x.classList.remove('on'));$('#'+id).classList.add('on');const nb=$('.nav button[data-p=\"'+id+'\"]');if(nb)nb.classList.add('on');window.scrollTo(0,0)}
 function openManual(w){if(window.RDL_ROLE==='admin')return;tab[w]='search';msg[w]='';render(w,'manual');showPage(w==='s'?'sales':'collection')}
+window.RDL.openQuick=w=>openManual(w);
 window.RDL.openManual=openManual;
 document.querySelectorAll('.nav button').forEach(b=>{if(b.dataset.p==='sales')b.addEventListener('click',()=>{tab.s='search';msg.s='';render('s')});if(b.dataset.p==='collection')b.addEventListener('click',()=>{tab.c='search';msg.c='';render('c')})});
 function chooser(title,opts){
@@ -9939,7 +9949,7 @@ html,body{overscroll-behavior-y:contain}
   }
   window.__rdlSavePage=function(){
     var p=$('.pg.on'),n=$('.nav button.on'),id=p?p.id:'home',l=(last&&last.p===id)?last:null;
-    try{sessionStorage.setItem(K,JSON.stringify({page:id,nav:n?n.dataset.p:'home',y:window.scrollY||0,last:l}))}catch(e){}
+    try{sessionStorage.setItem(K,JSON.stringify({page:id,nav:n?n.dataset.p:'home',y:window.scrollY||0,last:l,qk:(p&&p.classList.contains('qk-on'))?1:0}))}catch(e){}
   };
   var raw=null;try{raw=sessionStorage.getItem(K);sessionStorage.removeItem(K)}catch(e){}
   var st=null;if(raw){try{st=JSON.parse(raw)}catch(e){st=null}}
@@ -9967,11 +9977,12 @@ html,body{overscroll-behavior-y:contain}
     return o}
   function open(){
     var id=st.page,R=window.RDL||{};
+    if(st.qk&&(id==='sales'||id==='collection')&&R.openQuick){R.openQuick(id==='sales'?'s':'c');return}   /* Quick Sales / Quick Collection reopen themselves, not the register */
     if(id==='customer'||id==='sales'||id==='collection'||id==='more'){nav(id);return}
     if(id==='settings'){var ib=document.querySelectorAll('.hdr>.ib');if(ib[1])ib[1].click();return}
     if(id==='notif'){var ib2=document.querySelectorAll('.hdr>.ib');if(ib2[0])ib2[0].click();return}
     if(id==='upl'&&R.openUpload){R.openUpload();return}
-    if(id==='drf'&&R.openDrafts){R.openDrafts();return}
+    if(id==='drf'&&R.openDrafts){var lk=st.last&&/^(openPendingCollections|openPendingSales|openDrafts)$/.test(st.last.k)&&typeof R[st.last.k]==='function'?st.last:null;if(lk){try{R[lk.k].apply(R,lk.a||[])}catch(e){R.openDrafts()}}else R.openDrafts();return}
     if(MORE[id]){nav('more');var it=[].filter.call(document.querySelectorAll('#more .set-item'),function(x){return MORE[id].test(x.textContent)})[0];if(it)it.click();if(curId()===id)return}
     /* 1) replay the exact opener (with its arguments) that built this page */
     if(st.last&&typeof R[st.last.k]==='function'){
@@ -11077,16 +11088,37 @@ html body .sq-dock,html body .sq-bar{bottom:80px!important}
 @media (min-width:1000px){html body .sq-dock,html body .sq-bar{bottom:10px!important}}
 </style>
 <style id="pcSumCss">/* Pending Collections / Pending Sales: summary box */
-.pc-sum .pc-bar{display:flex;align-items:center;gap:10px;margin:6px 0 8px;flex-wrap:wrap}
-.pc-sum .pc-i{flex:1 1 150px;font-size:13px;font-weight:700;color:#12306b}
-.pc-sum .pc-bar .st-btn{width:auto;flex:none;margin:0;padding:10px 18px;font-size:14px}
+.pc-sum .rq{justify-content:center;overflow-x:auto}
+.pc-sum .pc-bar{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;margin:4px 0 10px}
+.pc-sum .pc-i{flex:none;font-size:13px;font-weight:700;color:#12306b;text-align:center}
+.pc-sum .pc-i:empty{display:none}
+.pc-sum .pc-bar .st-btn{width:auto;flex:none;margin:0;padding:6px 16px;font-size:12.5px;border-radius:8px;min-height:0}
 .pc-sum .pc-tbl th,.pc-sum .pc-tbl td{white-space:nowrap}
-.pc-sum .pc-tbl td.pc-n{white-space:normal;min-width:130px;font-weight:700;cursor:pointer}
+.pc-sum .pc-tbl .pc-c0{position:sticky;left:0;z-index:3;width:26px;min-width:26px;max-width:26px;padding:4px 2px;text-align:center;background:#fff}
+.pc-sum .pc-tbl .pc-c1{position:sticky;left:26px;z-index:3;width:86px;min-width:86px;max-width:86px;white-space:normal;word-break:break-word;overflow-wrap:anywhere;font-weight:700;line-height:1.25;text-align:left;background:#fff;border-right:1px solid #b9c9de}
+.pc-sum .pc-tbl td.pc-n{cursor:pointer}
+.pc-sum .pc-tbl th.pc-c0,.pc-sum .pc-tbl th.pc-c1{background:#dfe9f5}
+.pc-sum .pc-tbl tfoot .pc-c0,.pc-sum .pc-tbl tfoot .pc-c1,.pc-sum .pc-tbl tr.pc-tot .pc-c0,.pc-sum .pc-tbl tr.pc-tot .pc-c1{background:#eaf2ff}
 .pc-sum .pc-tbl td.pc-a{white-space:nowrap}
 .pc-sum .pc-dt td{white-space:normal;background:#f6f9ff;font-size:12px}
 .pc-sum .pc-dl div{padding:3px 0;border-bottom:1px dashed #d4e1f5}
 .pc-sum .pc-tot td{font-weight:800;background:#eaf2ff}
 .cg.pc-flash{box-shadow:0 0 0 3px #1a73e8}
+/* edit / delete icons (same size everywhere) */
+.ic-b{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;width:32px;height:26px;min-height:0;padding:0;margin:0 0 0 4px;border-radius:8px;border:1.5px solid;cursor:pointer;vertical-align:middle;line-height:1;box-shadow:inset 0 1px 0 #fff,0 1px 2px #0a2a6a26}
+.ic-b svg{width:16px;height:16px;display:block;pointer-events:none}
+.ic-edit{color:#0a4fd0;border-color:#0a4fd0;background:linear-gradient(#f4f8ff,#d3e4ff)}
+.ic-del{color:#c0392b;border-color:#c0392b;background:linear-gradient(#fff6f5,#ffdad6)}
+.ic-b.on{background:#0a4fd0;color:#fff}
+/* Pending bills: plain text until the customer's pencil is pressed */
+.cg .ro-t{display:inline}
+.cg:not(.ro) .ro-t{display:none}
+.cg.ro .sq-drt>tbody>tr:not(.sq-dt) :is(input,select),.cg.ro .cl-card :is(input,select){display:none!important}
+.cg.ro .sq-drt>tbody>tr.sq-dt,.cg.ro .dr-ck,.cg.ro .sq-tg,.cg.ro .cl-card .od-actions{display:none!important}
+.cg.ro .sq-drt>tbody>tr:not(.sq-dt){cursor:default}
+.cg.ro .sq-drt>tbody>tr:not(.sq-dt) td.num .ro-t{display:block;text-align:right}
+.cg.ro .pc-done{display:none}
+.cg .pc-done{margin-left:auto;border:0;border-radius:8px;padding:4px 14px;font-size:12.5px;font-weight:800;color:#fff;background:linear-gradient(135deg,#0b8a4f,#16a34a);cursor:pointer;min-height:0;width:auto}
 </style>
 </body>
 </html>
