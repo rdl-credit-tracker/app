@@ -1416,6 +1416,101 @@ html body .pg .rvx em{font-size:9px}
 try{document.documentElement.classList.add('rdl-restoring');setTimeout(function(){document.documentElement.classList.remove('rdl-restoring')},sessionStorage.getItem('rdl.ptrPage')?6000:2500)}catch(e){}
 </script>
 <style id="rdl-restore-css">html.rdl-restoring .app,html.rdl-restoring .nav{visibility:hidden}</style>
+<style id="sapQuickCss">
+/* ===== SAP-style compact Quick Collection (form page only) ===== */
+.st-card.sapq{border-radius:8px;padding:8px 8px 6px;margin-bottom:8px;box-shadow:none;border:1px solid #b9c9de}
+.st-card.sapq h3{font-size:13px;margin:0 0 4px;padding:3px 7px;background:#dfe9f5;color:#0a3a7a;border-radius:4px}
+.sq-top,.sq-body{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:2px 6px;align-items:end}
+.sq-top>*,.sq-body>*{grid-column:span 6;margin-top:0}
+.sq-top>h3{margin-bottom:2px}
+.sq-top>.sq-3,.sq-body>.sq-3{grid-column:span 3}
+.sq-top>.sq-3{grid-column:span 4}
+.sapq .cl-f{margin-top:4px}
+.sapq .cl-f small{font-size:11px;margin-bottom:1px}
+.sapq input.list-search,.sapq select.list-search{height:30px;padding:3px 7px;font-size:13px;border-radius:5px}
+.sapq .rq{margin:2px 0 2px;padding:2px}
+.sapq .rq button{padding:4px 11px;font-size:12px}
+.sapq .cl-amrow{gap:4px}
+.sapq .stt{margin-top:2px;font-size:11.5px}
+.sq-bsum{font-size:11px;color:#4a5d80;margin-bottom:2px}
+.sq-scroll{overflow-x:auto;border:1px solid #b9c9de;border-radius:4px;-webkit-overflow-scrolling:touch}
+.sq-tbl{border-collapse:separate;border-spacing:0;min-width:0;width:100%;font-size:11.5px}
+.sq-tbl th{background:#dfe9f5;color:#0a3a7a;font-weight:700;font-size:10.5px;padding:5px 3px;text-align:left;border-bottom:1px solid #b9c9de;border-right:1px solid #cfdcee;white-space:nowrap}
+.sq-tbl td{padding:4px 3px;border-bottom:1px solid #e1e9f4;border-right:1px solid #eef3fa;white-space:nowrap;background:#fff;color:#10223f}
+.sq-tbl .num{text-align:right}
+.sq-tbl .sq-c1{position:sticky;left:0;z-index:2;width:28px;min-width:28px;text-align:center;padding:4px 2px}
+.sq-tbl .sq-c2{position:sticky;left:28px;z-index:2;border-right:1px solid #b9c9de}
+.sq-tbl th.sq-c1,.sq-tbl th.sq-c2{background:#dfe9f5}
+.sq-tbl input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:#16a34a}
+.sq-tbl tr.cs-late td{background:#ffe6ea;color:#c0182f}
+.sq-tbl tr.cs-soon td{background:#fff3d1;color:#9a6200}
+.sq-tbl tr.sq-on td{font-weight:700}
+.sq-tbl .pb-amt{width:64px;margin:0;padding:2px 3px;font-size:11.5px;border-radius:5px}
+.sq-tbl td,.sq-tbl th{padding-left:2px;padding-right:2px}
+.sq-tbl .sq-c1{width:24px;min-width:24px}.sq-tbl .sq-c2{left:24px}
+.sq-bar{position:sticky;bottom:92px;z-index:20;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:2px 6px;background:#eef4fc;border:1px solid #9fb6d6;border-radius:8px;padding:6px 8px;box-shadow:0 -2px 8px #0a3a7a22;margin-top:6px}
+.sq-bi small{display:block;font-size:10.5px;color:#4a5d80}
+.sq-bi b{font-size:12px;color:#10223f;white-space:nowrap}
+.sq-bi b.sq-ok{color:#0b7a4b}.sq-bi b.sq-rem{color:#c0182f}
+.sq-bar .st-btn{grid-column:1/-1;margin:3px 0 0;padding:8px;font-size:14px;border-radius:8px}
+/* ===== SAP-style compact Review Collection Draft ===== */
+.sq-strip{display:flex;flex-wrap:wrap;gap:3px 8px;font-size:12px;padding:5px 7px;background:#eef4fc;border:1px solid #cfdcee;border-radius:4px}
+.sq-strip span+span:before{content:'\00b7';margin-right:8px;color:#7a8fb0}
+.sq-strip .sq-nm{font-weight:700;color:#0a3a7a}
+.sq-sum{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;margin-top:6px}
+.sq-sum .sq-bi{border:1px solid #cfdcee;border-radius:4px;padding:4px 6px;background:#fff}
+.sq-sum .sq-bi b{display:block}
+.sq-sum .sq-bi em{display:block;font-style:normal;font-size:10px;color:#0b7a4b}
+.sq-tbl .sq-r1{position:sticky;left:0;z-index:2;font-weight:600;border-right:1px solid #b9c9de}
+.sq-tbl th.sq-r1{background:#dfe9f5}
+.sq-tbl tfoot td{background:#dfe9f5;color:#0a3a7a;font-weight:700;border-top:2px solid #9fb6d6;border-bottom:0}
+.sq-act{position:sticky;bottom:92px;z-index:20;display:flex;gap:8px;background:#eef4fc;border:1px solid #9fb6d6;border-radius:8px;padding:6px 8px;box-shadow:0 -2px 8px #0a3a7a22;margin-top:6px}
+.sq-act .st-btn{flex:1;margin:0;padding:9px;font-size:14px;border-radius:8px}
+.sq-fold>summary{font-weight:700;font-size:13px;color:#0a3a7a;cursor:pointer;padding:2px 4px}
+.sq-fold[open]>summary{margin-bottom:6px}
+/* ===== SAP-style compact Pending Collections (drafts) ===== */
+.sq-dr{padding:6px}
+.sq-dr>h3{font-size:13px!important;text-align:left!important;margin:0 0 3px!important;padding:3px 7px;background:#dfe9f5;color:#0a3a7a;border-radius:4px}
+.sq-dr .dr-c{font-size:11.5px;margin:0 0 4px;line-height:1.3}
+.sq-dr .cg{margin:6px 0;padding:4px;border-radius:8px;border-width:1px}
+.sq-dr .cg-h{padding:5px 8px!important;margin:0 0 4px!important;border-radius:6px!important;flex-direction:row!important;justify-content:flex-start!important;gap:6px!important;text-align:left!important}
+.sq-dr .cg-h b{font-size:12.5px!important;width:auto!important;text-align:left!important;flex:1}
+.sq-dr .cg-h .cg-n{align-self:center!important;font-size:11px}
+.sq-dr .dr-ck{width:18px;height:18px;margin:0 4px 0 0}
+.sq-dr .cg-co{margin:4px 0 0;border-width:1px;border-radius:6px;box-shadow:none}
+.sq-dr .cg-co>.cg-ch{padding:4px 8px!important}
+.sq-dr .cg-co>.cg-ch b{font-size:12.5px!important}
+.sq-dr .cg-co>.cg-b{padding:0!important}
+.sq-dr .cg-ft{padding:4px 8px;font-size:12px}
+.sq-drt{min-width:0}
+.sq-drt .num input,.sq-drt input[type=number]{width:70px;margin:0;padding:2px 3px;height:26px;font-size:11.5px;text-align:right;border-radius:5px}
+.sq-drt select{width:68px;height:26px;padding:0 2px;font-size:11.5px;border-radius:5px}
+.sq-drt input[type=date]{width:112px;height:26px;padding:0 3px;font-size:11.5px;border-radius:5px;margin:0}
+.sq-drt td{padding:3px 2px}
+.sq-drt .sq-tg{color:#4a5d80;font-size:10px}
+.sq-drt .sq-dot{font-size:12px;margin:0 2px}.sq-dot.ok{color:#16a34a}.sq-dot.warn{color:#e0a100}.sq-dot.bad{color:#d93025}
+.sq-drt tr.sq-bad td{box-shadow:inset 0 -2px 0 #d93025}
+.sq-drt tr.sq-dt td{background:#f8fbff;white-space:normal;padding:6px 8px}
+.sq-dbody{position:sticky;left:0;box-sizing:border-box;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px 8px}
+.sq-dbody>*{grid-column:span 2}
+.sq-dbody>.cl-f{grid-column:span 1;margin-top:2px}
+.sq-meta{font-size:11px;color:#4a5d80}
+.sq-dbody .od-actions{display:flex;gap:6px}
+.sq-dbody .st-btn{flex:1;margin:0;padding:6px 8px!important;font-size:12.5px!important;border-radius:8px!important}
+.sq-dr .dr-bulk{position:sticky;bottom:92px;z-index:20;margin-top:4px;border:1px solid #9fb6d6;border-radius:8px;box-shadow:0 -2px 8px #0a3a7a22;padding:6px 8px}
+.sq-dr .dr-bulk .st-btn{padding:7px 14px;font-size:13px;border-radius:8px}
+/* ===== SAP-style Pending Drafts hub ===== */
+.sq-hub{min-width:0}
+.sq-hub td{padding:8px 6px;font-size:13px}
+.sq-hub tr[class^=hb-]:not(.hb-gh):not(.hb-tot){cursor:pointer}
+.sq-hub .hb-gh td{background:#dfe9f5;color:#0a3a7a;font-weight:700;font-size:11.5px;padding:4px 6px}
+.sq-hub .hb-tot td{background:#eef4fc;font-weight:700;border-top:1px solid #9fb6d6}
+.sq-hub .hb-t{font-weight:700}
+.sq-hub .hb-go{width:18px;text-align:center;font-size:18px;color:#4a5d80}
+.sq-hub .hb-g .hb-t{border-left:4px solid #34d399}.sq-hub .hb-b .hb-t{border-left:4px solid #4f9bff}.sq-hub .hb-v .hb-t{border-left:4px solid #9a88f5}.sq-hub .hb-a .hb-t{border-left:4px solid #f8c24d}
+.sq-hub tr.hb-0 td{color:#8a97ad}
+.sq-hub td.hb-t{position:static}
+</style>
 </head>
 <body>
 <script>
@@ -3954,16 +4049,21 @@ function manualPage(P,ttl,bk){
   const form=P.appendChild(el('div')),pv=P.appendChild(el('div'));pv.style.display='none';
   const byDue=(a,b)=>(a.post||'')<(b.post||'')?-1:(a.post||'')>(b.post||'')?1:(a.due||'')<(b.due||'')?-1:(a.due||'')>(b.due||'')?1:String(a.bill)<String(b.bill)?-1:1;  /* oldest Posting date first, same as the date shown in the list */
   const dmy=v=>v?v.slice(8,10)+'/'+v.slice(5,7)+'/'+v.slice(0,4):'—';
-  const card=form.appendChild(el('div','st-card'));card.appendChild(el('h3',null,'Collection details'));
+  const dq=v=>v?v.slice(8,10)+'/'+v.slice(5,7)+'/'+v.slice(2,4):'—';
+  const T6=(()=>{const d=new Date(t0+'T00:00:00');d.setDate(d.getDate()+6);return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2)})();   /* overdue = red, due within the next 7 days = amber (same as the rest of the app) */
+  const card=form.appendChild(el('div','st-card sapq sq-top'));card.appendChild(el('h3',null,'Collection details'));
   const F=(label,node,host)=>{const x=el('div','cl-f');x.appendChild(el('small',null,label));x.appendChild(node);(host||card).appendChild(x);return x};
   const names=new Map();m.cr.forEach(r=>names.set(String(r.bp),r.nm));m.out.forEach(b=>{if(!names.has(String(b.cu)))names.set(String(b.cu),b.nm)});
   const cu=el('input','list-search');cu.placeholder='Code or Customer Name';const sg=el('div','od-suggestions');
   const cuF=F('Customer',cu);cuF.appendChild(sg);
   const csum=el('summary'),copt=el('div','rq');F('Code',copt);   /* swipeable tap-to-select chips instead of the dropdown box */
-  const pd=el('input','list-search');pd.type='date';pd.value=t0;pd.max=t0;F('Posting date (cannot be after today)',pd);
+  const pd=el('input','list-search');pd.type='date';pd.value=t0;pd.max=t0;F('Posting date (cannot be after today)',pd).classList.add('sq-3');
   const holder=form.appendChild(el('div'));
   const st=form.appendChild(el('div','stt'));
-  const pb=form.appendChild(el('button','st-btn','Review Collection'));pb.type='button';
+  const bar=form.appendChild(el('div','sq-bar')),pb=el('button','st-btn','Review Collection');pb.type='button';
+  const bv={};[['Collected','col'],['TDS','tds'],['Total','tot'],['Balance','bal']].forEach(([l,k])=>{const d=el('div','sq-bi');d.appendChild(el('small',null,l));bv[k]=d.appendChild(el('b',null,__m(0).replace('/=','')));bar.appendChild(d)});bar.appendChild(pb);
+  function barUpd(){let c=0,t=0,tt=0;blocks.forEach(o=>{if(o.covered)return;c+=o.col();t+=o.tdv();tt+=o.chosen().reduce((x,b)=>x+bal(b),0)});
+    const rem=Math.max(0,+(tt-c-t).toFixed(2));const q=x=>__m(x).replace('/=','');bv.col.textContent=q(c);bv.tds.textContent=q(t);bv.tot.textContent=q(c+t);bv.bal.textContent=q(rem);bv.bal.className=tt>0?(rem>0.005?'sq-rem':'sq-ok'):''}
   let bp=null;const cos=new Set(),blocks=new Map();
   const findBp=()=>{const v=cu.value.trim();if(!v)return null;const k=v.split(' — ')[0].trim();if(names.has(k))return k;
     const q=v.toLowerCase();for(const [c,n] of names)if(String(n).toLowerCase()===q)return c;return null};
@@ -3971,24 +4071,24 @@ function manualPage(P,ttl,bk){
   /* one full collection box per selected company; with Cheque / BEFTN it can be a Combined payment over several companies */
   const avail=()=>bp==null?[]:[...new Set(m.out.filter(b=>String(b.cu)===String(bp)&&bal(b)>0).map(b=>String(b.co)))].sort(R.coCmp);
   function makeBlock(co){
-    const box=el('div','st-card');box.appendChild(el('h3',null,R.coName(co)));
+    const box=el('div','st-card sapq');box.appendChild(el('h3',null,R.coName(co)));
     const cov=el('div','stt ok');cov.style.display='none';box.appendChild(cov);
-    const body=el('div');box.appendChild(body);
+    const body=el('div','sq-body');box.appendChild(body);
     const G=(label,node,hidden)=>{const x=F(label,node,body);if(hidden)x.style.display='none';return x};
-    const ty=el('select','list-search');['Cash','Cheque','BEFTN'].forEach(x=>ty.appendChild(new Option(x)));G('Payment type',ty);
+    const ty=el('select','list-search');['Cash','Cheque','BEFTN'].forEach(x=>ty.appendChild(new Option(x)));G('Payment type',ty).classList.add('sq-3');
     const rf=el('input','list-search');rf.placeholder='Number (optional)';const rfW=G('Cheque / BEFTN number (optional)',rf,true);
-    const rd=el('input','list-search');rd.type='date';rd.max=t0;const rdW=G('Cheque / BEFTN date (optional)',rd,true);
+    const rd=el('input','list-search');rd.type='date';rd.max=t0;const rdW=G('Cheque / BEFTN date (optional)',rd,true);rfW.classList.add('sq-3');rdW.classList.add('sq-3');
     /* Combined (optional): only for Cheque / BEFTN */
     const cw=el('label','cl-comb');cw.appendChild(el('span',null,'Combined'));const ck=el('input');ck.type='checkbox';cw.appendChild(ck);cw.style.display='none';body.appendChild(cw);
     const cdet=el('details','od-company-box'),csum=el('summary'),copt=el('div','od-company-options');cdet.appendChild(csum);cdet.appendChild(copt);const cF=G('Company Code (tick every company this payment covers)',cdet,true);
-    const bdet=el('details','od-company-box'),bsum=el('summary'),bopt=el('div','od-company-options');bdet.appendChild(bsum);if(window.RDLSelUI)bdet.appendChild(RDLSelUI.btns(()=>RDLSelUI.tick(bopt,true),()=>RDLSelUI.tick(bopt,false)));bdet.appendChild(bopt);G('Against Bill',bdet);
+    const bdet=el('div','sq-bills'),bsum=el('div','sq-bsum'),bopt=el('div','sq-scroll');bdet.appendChild(bsum);bdet.appendChild(bopt);G('Against Bill',bdet);
     /* Selected Amount (fixed) -> Collected Amount (+ tick: same as Selected) -> status -> TDS (auto, red minus) */
-    const sa=el('input','list-search');sa.type='text';sa.readOnly=true;sa.placeholder='Tick bills to see the selected amount';G('Selected Amount',sa);
+    const sa=el('input','list-search');sa.type='text';sa.readOnly=true;sa.placeholder='Tick bills to see the selected amount';G('Selected Amount',sa).classList.add('sq-3');
     const am=el('input','list-search');am.type='number';am.step='any';am.placeholder='Collected amount';
     const fx=el('input');fx.type='checkbox';fx.checked=true;const fxL=el('label','cl-same cl-only');fxL.appendChild(fx);fxL.title='Same as Selected';
-    const amRow=el('div','cl-amrow');amRow.appendChild(am);amRow.appendChild(fxL);G('Collected Amount',amRow);
+    const amRow=el('div','cl-amrow');amRow.appendChild(am);amRow.appendChild(fxL);G('Collected Amount',amRow).classList.add('sq-3');
     const du=el('div','stt');body.appendChild(du);   /* the status message sits between Collected Amount and TDS, like the upload review page */
-    const td=el('input','list-search');td.type='number';td.step='any';td.placeholder='TDS (auto when the gap is small)';G('TDS (deducted by customer)',td);
+    const td=el('input','list-search');td.type='number';td.step='any';td.placeholder='TDS (auto when the gap is small)';G('TDS (deducted by customer)',td).classList.add('sq-3');
     RDLCalc.attach(sa,{label:'Selected Amount',viewOnly:true});RDLCalc.attach(am,{label:'Collected Amount'});RDLCalc.attach(td,{label:'TDS'});
     const tdb=el('button','cl-set');tdb.type='button';tdb.style.display='none';body.appendChild(tdb);
     const tdh=el('div','hint');body.appendChild(tdh);
@@ -4021,11 +4121,22 @@ function manualPage(P,ttl,bk){
       const tOK=b=>!(o.combined&&o.cos.size>1)||o.tcos.has(String(b.co));
       const A=pc.AL;o.lastA=A;
       o.ibs.forEach((ib,k)=>{const on=bl.some(b=>uid(b)===k);ib.style.display=on?'':'none';if(on&&document.activeElement!==ib){const v=A.amt.get(k);ib.value=v==null?'':String(v)}});
-      const [cls,txt]=tdsMsg(bl.length,tot,col,tds,what);du.className='stt '+cls;du.textContent=txt}
-    function rebuildBills(){bopt.textContent='';o.ibs.clear();const all=bills();if(all.length){const hd=el('div','qc-hd');['','Bill No','Date','Balance','Collected'].forEach(x=>hd.appendChild(el('span',null,x)));bopt.appendChild(hd)}o.sel=new Set([...o.sel].filter(k=>all.some(b=>uid(b)===k)));
-      all.forEach(b=>{const lb=el('label'),i=el('input');i.type='checkbox';i.checked=o.sel.has(uid(b));i.onchange=()=>{i.checked?o.sel.add(uid(b)):(o.sel.delete(uid(b)),o.pa.delete(uid(b)));o.tdsAuto=true;upd()};
-        lb.appendChild(i);lb.classList.add('qc-r');{const s1=el('span','qc-bn');s1.appendChild(el('b',null,String(b.bill||'')));s1.appendChild(el('small',null,R.coName(b.co)));lb.appendChild(s1);lb.appendChild(el('span','qc-dt',dmy(b.post)));lb.appendChild(el('span','qc-bl',(+bal(b)).toLocaleString('en-IN',{maximumFractionDigits:2})))}
-        const ib=billAmtBox(b,v=>{if(!o.pm){o.pm=true;o.pa=new Map();(o.lastA?o.lastA.amt:new Map()).forEach((x,k)=>o.pa.set(k,x))}o.pa.set(uid(b),v);o.tdsAuto=true;upd()},()=>upd());o.ibs.set(uid(b),ib);lb.classList.add('pb-row');lb.appendChild(ib);bopt.appendChild(lb)});upd()}
+      const [cls,txt]=tdsMsg(bl.length,tot,col,tds,what);du.className='stt '+cls;du.textContent=txt;barUpd()}
+    function rebuildBills(){bopt.textContent='';o.ibs.clear();const all=bills();o.sel=new Set([...o.sel].filter(k=>all.some(b=>uid(b)===k)));
+      const mc=o.cos.size>1,tb=el('table','sq-tbl'),hr=el('tr'),hk=el('th','sq-c1'),hc=el('input');hc.type='checkbox';hc.setAttribute('aria-label','Select all bills');hk.appendChild(hc);hr.appendChild(hk);
+      ['Bill No'].concat(mc?['Co']:[],['Posting','Due','Open Bal','Collect']).forEach((x,j)=>hr.appendChild(el('th',j===0?'sq-c2':(x==='Open Bal'||x==='Collect'?'num':null),x)));
+      const th=el('thead');th.appendChild(hr);tb.appendChild(th);const tbd=el('tbody');tb.appendChild(tbd);const rows=[];
+      const sync=()=>{hc.checked=rows.length>0&&rows.every(x=>x[1].checked);rows.forEach(x=>x[2].classList.toggle('sq-on',x[1].checked))};
+      all.forEach(b=>{const k=uid(b),r=el('tr',b.due&&b.due<t0?'cs-late':(b.due&&b.due<=T6?'cs-soon':null)),c1=el('td','sq-c1'),i=el('input');i.type='checkbox';i.checked=o.sel.has(k);
+        i.onchange=()=>{i.checked?o.sel.add(k):(o.sel.delete(k),o.pa.delete(k));o.tdsAuto=true;sync();upd()};
+        c1.appendChild(i);r.appendChild(c1);r.appendChild(el('td','sq-c2',String(b.bill)));
+        if(mc)r.appendChild(el('td',null,R.coName(b.co)));
+        r.appendChild(el('td',null,dq(b.post)));r.appendChild(el('td',null,dq(b.due)));r.appendChild(el('td','num',__m(bal(b)).replace(/^\S+\s*/,'').replace('/=','')));
+        const cc=el('td','num'),ib=billAmtBox(b,v=>{if(!o.pm){o.pm=true;o.pa=new Map();(o.lastA?o.lastA.amt:new Map()).forEach((x,k2)=>o.pa.set(k2,x))}o.pa.set(uid(b),v);o.tdsAuto=true;upd()},()=>upd());o.ibs.set(k,ib);cc.appendChild(ib);r.appendChild(cc);
+        r.onclick=e=>{if(e.target===i||e.target===ib)return;i.checked=!i.checked;i.onchange()};
+        rows.push([k,i,r]);tbd.appendChild(r)});
+      hc.onchange=()=>{rows.forEach(([k,i])=>{i.checked=hc.checked;hc.checked?o.sel.add(k):(o.sel.delete(k),o.pa.delete(k))});o.tdsAuto=true;sync();upd()};
+      sync();if(all.length)bopt.appendChild(tb);else bopt.appendChild(el('div','hint','No open bills'));upd()}
     const mode=()=>{const nc=ty.value!=='Cash';rfW.style.display=rdW.style.display=cw.style.display=nc?'':'none';if(!nc)ck.checked=false;o.combined=nc&&ck.checked;
       cF.style.display=o.combined?'':'none';
       if(!o.combined){o.cos=new Set([String(co)]);o.tcos=new Set([String(co)]);copt.querySelectorAll('input').forEach(i=>i.checked=i.value===String(co));sumCsum()}
@@ -4039,7 +4150,7 @@ function manualPage(P,ttl,bk){
       if(h.cos.has(String(r.co))){r.covered=true;r.body.style.display='none';r.cov.style.display='';r.cov.textContent='✓ Included in the combined payment of '+R.coName(h.co)}})})}
   function syncBlocks(){
     for(const [c,o] of [...blocks])if(!cos.has(c)||bp==null){o.box.remove();blocks.delete(c)}
-    [...cos].sort(R.coCmp).forEach(c=>{let o=blocks.get(c);if(!o){o=makeBlock(c);blocks.set(c,o)}holder.appendChild(o.box)});refreshCovered()}
+    [...cos].sort(R.coCmp).forEach(c=>{let o=blocks.get(c);if(!o){o=makeBlock(c);blocks.set(c,o)}holder.appendChild(o.box)});refreshCovered();barUpd()}
   const sumCos=()=>{csum.textContent=cos.size?[...cos].sort(R.coCmp).map(c=>R.coName(c)).join(', '):(bp==null?'Choose a customer first':'Tap to choose companies')};
   function loadCos(){bp=findBp();copt.textContent='';cos.clear();blocks.forEach(o=>o.box.remove());blocks.clear();
     if(bp!=null){const cs=[...new Set(m.out.filter(b=>String(b.cu)===String(bp)&&bal(b)>0).map(b=>String(b.co)))].sort(R.coCmp);
@@ -4084,60 +4195,34 @@ function manualPage(P,ttl,bk){
     const rvx=(host,items)=>{const g=host.appendChild(el('div','rvx'));items.forEach(([k,v,sb,c,full])=>{const d=el('div',c+(full?' full':''));d.appendChild(el('small',null,k));d.appendChild(el('strong',null,v));if(sb)d.appendChild(el('em',null,sb));g.appendChild(d)})};   /* review boxes: centred, colour-tinted, rows split by a dotted line */
     /* 1) Today Collection Details, 2) This Week Collection Details */
     const detBox=(title,hintTxt,rows,inRange,outMsg)=>{
-      const c0=sum(rows,x=>+x.col||0),t1=sum(rows,x=>+x.tds||0),bx=pv.appendChild(el('div','st-card'));
-      bx.appendChild(el('h3','rv-ttl',title));
+      const c0=sum(rows,x=>+x.col||0),t1=sum(rows,x=>+x.tds||0),bx=pv.appendChild(el('details','st-card sapq sq-fold'));
+      bx.appendChild(el('summary',null,title));
       const cn=a=>{const n=new Set(a.map(x=>x.bill)).size;return n+(n===1?' collection':' collections')},ty=t=>rows.filter(x=>x.type===t),cs=t=>sum(ty(t),x=>+x.col||0);
       rvx(bx,[['Collected (DZ)',money(c0),cn(rows),'rv-b'],['TDS',money(t1),'','rv-a'],['Total Settled',money(c0+t1),'','rv-i'],['Cash',money(cs('Cash')),cn(ty('Cash')),'rv-v'],['Cheque',money(cs('Cheque')),cn(ty('Cheque')),'rv-t'],['BEFTN',money(cs('BEFTN')),cn(ty('BEFTN')),'rv-r']])};
     detBox('Today Collection Details',dd(t0)+' • posted amounts only',L0.dz.filter(x=>x.date===t0),inToday,'This posting date ('+dd(f)+') is not today, so the Today collection will not change.');
     detBox('This Week Collection Details','Saturday '+dd(w1)+' to Friday '+dd(w2)+' • posted amounts only',L0.dz.filter(x=>x.date>=w1&&x.date<=w2),inWk,'This posting date ('+dd(f)+') is outside this week, so the This Week collection will not change.');
     /* 3) Collection Information Details */
-    const ic=pv.appendChild(el('div','st-card'));ic.appendChild(el('h3','rv-ttl','Collection Information Details'));pv.insertBefore(ic,pv.firstChild);   /* page order: Collection Information Details, Today, This Week */
+    const ic=pv.appendChild(el('div','st-card sapq'));ic.appendChild(el('h3','rv-ttl','Collection Information Details'));pv.insertBefore(ic,pv.firstChild);   /* page order: Collection Information Details, Today, This Week */
     const nb=parts.length,coSet=new Set(parts.map(x=>String(x.b.co))),types=[...new Set(groups.map(g=>g.o.ty.value))];
-    const hd=ic.appendChild(el('div','ci-head'));hd.appendChild(el('strong',null,names.get(String(bp))||('Customer '+bp)));hd.appendChild(el('span','ci-bp',String(bp)));
-    const cl=hd.appendChild(el('div','ci-cos ci-cos-row'));[...coSet].sort(R.coCmp).forEach(c=>cl.appendChild(el('span',null,R.coName(c))));   /* company codes side by side in one row */
-    const leftAll=sum(parts,x=>x.left),cleared=leftAll<=EPS;
-    const nonCash=groups.filter(g=>g.o.ty.value!=='Cash'),uq=a=>[...new Set(a.filter(Boolean))];
-    const tn=uq(nonCash.map(g=>g.o.ty.value)),tl=tn.length===1?tn[0]:'Cheque / BEFTN';
-    const refs=uq(nonCash.map(g=>g.o.rf.value.trim())),dts=uq(nonCash.map(g=>g.o.rd.value)).sort().map(x=>dmy(x));
-    /* Payment Type + Posting Date sit under the codes, inside the blue box */
-    const ml=hd.appendChild(el('div','ci-meta'));
-    [['Payment Type',types.join(', ')],['Posting Date',dd(f)]].forEach(([k,v])=>{const d=el('div','ci-meta-it');d.appendChild(el('small',null,k));d.appendChild(el('strong',null,v));ml.appendChild(d)});
-    ic.classList.add('ci2');   /* new card look (scoped, so the Sales review card is untouched) */
-    const mg=ic.appendChild(el('div','ci-mini ci-two'));
-    const addT=(k,v,c,sb)=>{const d=el('div','cm '+c);d.appendChild(el('small',null,k));if(sb){const l=el('div','cm-line');l.appendChild(el('strong',null,v));l.appendChild(el('em',null,sb));d.appendChild(l)}else d.appendChild(el('strong',null,v));mg.appendChild(d);return d};
-    const addChips=(k,arr,c)=>{const d=el('div','cm '+c);d.appendChild(el('small',null,k));const w=el('div','cm-chips');(arr.length?arr:['\u2014']).forEach(x=>w.appendChild(el('span',null,x)));d.appendChild(w);mg.appendChild(d)};
-    /* row 1: one cheque / BEFTN and no cash -> number + date boxes side by side; otherwise one row per payment (cheque, BEFTN, cash) with its companies, collected amount and TDS */
-    if(groups.length===1&&nonCash.length===1){addChips(tl+' No.',refs,'cm-2');addChips(tl+' Date',dts,'cm-2')}
-    else if(groups.length){
-      const pays=[...groups.filter(g=>g.o.ty.value!=='Cash'),...groups.filter(g=>g.o.ty.value==='Cash')].map(g=>({type:g.o.ty.value,no:(g.o.rf.value||'').trim(),date:g.o.rd.value||'',cos:[...new Set(g.ps.map(x=>String(x.b.co)))].sort(R.coCmp).map(c=>R.coName(c)),amt:g.col,tds:g.tds}));
-      const bx=el('div','cm cm-2 ck'),hh=el('div','ck-head');
-      hh.appendChild(el('small',null,(!nonCash.length?'Cash':tn.length===1?tn[0]:'Cheque / BEFTN')+' Details'));hh.appendChild(el('b',null,pays.length+(pays.length===1?' payment':' payments')));bx.appendChild(hh);
-      const list=el('div','ck-list');
-      pays.forEach((p,i)=>{const cash=p.type==='Cash',r=el('div','ck-row'+(cash?' cash':'')+(i>=3?' hid':'')),l=el('div');
-        l.appendChild(el('span','ck-no',cash?'Cash':(p.no||'\u2014')));
-        const dl=el('div','ck-dl');if(p.date)dl.appendChild(el('span','ck-dt',dmy(p.date)));if(p.type==='BEFTN'||p.type==='Cheque')dl.appendChild(el('i','ck-tg',p.type));l.appendChild(dl);
-        const co=el('div','ck-co');p.cos.forEach(c=>co.appendChild(el('span',null,c)));
-        const am=el('div','ck-amt',money(p.amt));if(p.tds>0)am.appendChild(el('small',null,'TDS '+money(p.tds)));
-        r.appendChild(l);r.appendChild(co);r.appendChild(am);list.appendChild(r)});
-      bx.appendChild(list);
-      const hid=pays.length-3;
-      if(hid>0){const btn=el('button','ck-more','Show '+hid+' more');btn.type='button';btn.onclick=()=>{const o=bx.classList.toggle('open');btn.textContent=o?'Show less':'Show '+hid+' more'};bx.appendChild(btn)}
-      mg.appendChild(bx)}
-    /* row 2: Collected + TDS */
-    addT('Collected',money(gc),'cm-4');addT('TDS',money(gt),'cm-5');
-    /* row 3: Total + Balance */
-    addT('Total',money(gc+gt),'cm-6');addT('Balance',money(cleared?0:leftAll),cleared?'cm-ok':'cm-rem',cleared?'Fully cleared':'Remaining');
+    const leftAll=sum(parts,x=>x.left),cleared=leftAll<=EPS,q=x=>money(x).replace('/=','');
+    const strip=ic.appendChild(el('div','sq-strip')),dep=(()=>{try{const v=RDLDEPOT.td(bp).textContent.trim();return v==='—'||v==='-'?'':v}catch(e){return ''}})();
+    [[names.get(String(bp))||('Customer '+bp),'sq-nm'],[String(bp),null],[[...coSet].sort(R.coCmp).map(c=>R.coName(c)).join(', '),null],[types.join(', '),null],[dd(f),null],[dep,null]].forEach(([v,c])=>{if(v)strip.appendChild(el('span',c,v))});
+    const mg=ic.appendChild(el('div','sq-sum'));
+    const addT=(k,v,c,sb)=>{const d=el('div','sq-bi');d.appendChild(el('small',null,k));d.appendChild(el('b',c,v));if(sb)d.appendChild(el('em',null,sb));mg.appendChild(d)};
+    addT('Collected',q(gc),null);addT('TDS',q(gt),null);addT('Total',q(gc+gt),null);addT('Balance',q(cleared?0:leftAll),cleared?'sq-ok':'sq-rem',cleared?'Fully cleared':'Remaining');
     const xs=parts.reduce((x,e)=>x+(e.xt||0),0);if(xs>EPS)ic.appendChild(el('div','stt ok','Excess TDS '+money(xs)+' is not applied to a bill. It is kept in the TDS Ledger so the challan matches.'));
     /* 4) Post / Cancel buttons come right below, then the Collection table */
-    const tc=el('div','st-card cx-fill');
-    tc.appendChild(el('label','od-label','Collection • '+nb+' DZ collection'+(nb===1?'':'s')+' • '+money(gc)+(gt?' • TDS '+money(gt):'')));
-    const wrap=el('div','od-table-wrap'),tb=el('table','od-table');tb.style.minWidth='1076px';
-    const th=el('thead'),hr=el('tr');['Depot Name','Customer Name','Company','Against Bill','Payment Type','Cheque / BEFTN No.','Cheque / BEFTN Date','Collected','TDS','Total'].forEach(x=>hr.appendChild(el('th',null,x)));th.appendChild(hr);tb.appendChild(th);
+    const tc=el('div','st-card sapq');
+    tc.appendChild(el('h3',null,'Collection • '+nb+' DZ collection'+(nb===1?'':'s')));
+    const wrap=el('div','sq-scroll'),tb=el('table','sq-tbl');
+    const th=el('thead'),hr=el('tr');const hasRef=groups.some(g=>g.o.ty.value!=='Cash'),qn=x=>q(x).replace(/^\S+\s*/,'');
+    ['Bill No','Co','Type'].concat(hasRef?['Ref No.','Ref Date']:[],['Collected','TDS','Total']).forEach((x,j)=>hr.appendChild(el('th',j===0?'sq-r1':(x==='Collected'||x==='TDS'||x==='Total'?'num':null),x)));th.appendChild(hr);tb.appendChild(th);
     const tbd=el('tbody');tb.appendChild(tbd);
-    groups.forEach(g=>g.ps.forEach(x=>{const r=el('tr','row-ok');r.appendChild(RDLDEPOT.td(bp));const n=el('td','c-name'),nc=el('div','chip-g cn',names.get(String(bp)));nc.appendChild(el('small',null,'Code: '+bp));n.appendChild(nc);r.appendChild(n);
-      const cell=(v,cls,chip)=>{const td=el('td',cls),sp=el('span','chip-g '+(chip||''),v);td.appendChild(sp);r.appendChild(td)};
-      cell(R.coName(x.b.co),'c-co','cc');cell(String(x.b.bill),'c-dt','cd');cell(g.o.ty.value,'c-lim','cl');cell(g.o.rf.value.trim()||'—','c-lim','cl');cell(g.o.rd.value?dmy(g.o.rd.value):'—','c-dt','cd');
-      cell(money(x.c),'num','cn2');cell(money(x.t),'num','cn2');cell(money(x.c+x.t),'num','cn2 cb');tbd.appendChild(r)}));
+    groups.forEach(g=>g.ps.forEach(x=>{const r=el('tr',x.b.due&&x.b.due<t0?'cs-late':(x.b.due&&x.b.due<=T6?'cs-soon':null));
+      const cell=(v,cls)=>r.appendChild(el('td',cls,v));
+      cell(String(x.b.bill),'sq-r1');cell(R.coName(x.b.co));cell(g.o.ty.value);if(hasRef){cell(g.o.rf.value.trim()||'—');cell(g.o.rd.value?dq(g.o.rd.value):'—')}
+      cell(qn(x.c),'num');cell(qn(x.t),'num');cell(qn(x.c+x.t),'num');tbd.appendChild(r)}));
+    {const tf=el('tfoot'),r=el('tr'),l=el('td','sq-r1','Total');l.colSpan=hasRef?5:3;l.style.textAlign='left';r.appendChild(l);r.appendChild(el('td','num',qn(gc)));r.appendChild(el('td','num',qn(gt)));r.appendChild(el('td','num',qn(gc+gt)));tf.appendChild(r);tb.appendChild(tf)}
     wrap.appendChild(tb);tc.appendChild(wrap);
     /* warnings (do not block posting) */
     const warns=[];
@@ -4146,8 +4231,8 @@ function manualPage(P,ttl,bk){
     if(parts.some(x=>x.b.post&&f<x.b.post))warns.push('Posting date is earlier than the date of one or more selected bills.');
     const wn=warns.map(w=>el('div','stt warn','⚠ '+w));
     /* 4) Post / Cancel */
-    const act=pv.appendChild(el('div','od-actions')),go=el('button','st-btn','Save to Draft'),cn=el('button','st-btn od-clear','Back to Edit');go.type=cn.type='button';act.appendChild(go);act.appendChild(cn);
-    const st2=pv.appendChild(el('div','stt'));pv.appendChild(tc);pv.insertBefore(act,ic.nextSibling);pv.insertBefore(st2,act.nextSibling);{let rf=st2;wn.forEach(x=>{pv.insertBefore(x,rf.nextSibling);rf=x})}   /* buttons sit right under the Information Details box, then any warnings */
+    const act=pv.appendChild(el('div','od-actions sq-act')),go=el('button','st-btn','Save to Draft'),cn=el('button','st-btn od-clear','Back to Edit');go.type=cn.type='button';act.appendChild(go);act.appendChild(cn);
+    const st2=el('div','stt');pv.insertBefore(tc,ic.nextSibling);pv.insertBefore(st2,tc.nextSibling);{let rf=st2;wn.forEach(x=>{pv.insertBefore(x,rf.nextSibling);rf=x});pv.insertBefore(act,rf.nextSibling)}   /* buttons sit right under the Information Details box, then any warnings */
     function back(){window.RDLNav&&RDLNav.level('c',1);pv.style.display='none';form.style.display='';if(cd0)cd0.style.display='';ttl.textContent='Quick Collection';bk.onclick=formBack;window.scrollTo(0,0)}
     cn.onclick=detBack;
     go.onclick=()=>{go.disabled=true;const L2=ld();let n=0;L2.dr=L2.dr||[];   /* goes to Drafts first; nothing is posted until you press Post there */
@@ -4236,98 +4321,73 @@ function bulkBar(gx,gck,cks,rebuild){
     cks.forEach(x=>{if(x.totUp)x.totUp();if(!live(x).length&&x.row.isConnected)x.row.remove()});
     const cn=gx.querySelector('.cg-n');if(cn){const n=cks.filter(x=>live(x).length).length;cn.textContent=n+(n===1?' company':' companies')}
     const card0=gx.closest('.st-card'),hint=card0&&card0.querySelector('.dr-c');
-    if(card0&&hint){const all=[...card0.querySelectorAll('.cl-card')],tt=all.reduce((a,b)=>a+(b._amt?b._amt():0),0),mm=hint.textContent.match(/^(\d+ drafts? • .*?\/=)(\..*)$/);if(mm)hint.textContent=all.length+' draft'+(all.length===1?'':'s')+' • '+money(tt)+mm[2]}
+    if(card0&&hint){const all=[...card0.querySelectorAll('.cl-card,.sq-drt>tbody>tr:not(.sq-dt)')],tt=all.reduce((a,b)=>a+(b._amt?b._amt():0),0),mm=hint.textContent.match(/^(\d+ drafts? • .*?\/=)(\..*)$/);if(mm)hint.textContent=all.length+' draft'+(all.length===1?'':'s')+' • '+money(tt)+mm[2]}
     msg.className='stt warn';msg.textContent=done+' posted • '+left+' could not be posted and stay in draft (see the red message under each one).';upd()};
   upd();return bar}
-function buildDrafts(kind){const P=$('#drf');P.textContent='';const L=ld(),all0=(L.dr||[]).slice().sort((a,b)=>b.at-a.at),dr=kind?all0.filter(e=>String(e.type||'').toLowerCase()===kind.toLowerCase()):all0,m=R.master,t=ymd(new Date()),EPS=0.005,dm=v=>v?v.slice(8,10)+'/'+v.slice(5,7)+'/'+v.slice(0,4):'—';
+function buildDrafts(kind){const P=$('#drf');P.textContent='';const L=ld(),all0=(L.dr||[]).slice().sort((a,b)=>b.at-a.at),dr=kind?all0.filter(e=>String(e.type||'').toLowerCase()===kind.toLowerCase()):all0,m=R.master,t=ymd(new Date()),T6=(()=>{const x=new Date();x.setDate(x.getDate()+6);return ymd(x)})(),EPS=0.005,dm=v=>v?v.slice(8,10)+'/'+v.slice(5,7)+'/'+v.slice(0,4):'—';
   const top=el('div','st-top'),bb=el('button');bb.type='button';bb.innerHTML=BKS;bb.setAttribute('aria-label','Back');bb.onclick=kind?()=>buildDrafts():()=>window.RDL.openUpload();top.appendChild(bb);top.appendChild(el('h2',null,kind==='Sales'?'Pending Sales':kind?'Pending Collections ('+kind+')':'Pending Drafts'));P.appendChild(top);
   if(!kind){draftHub(P,all0);return}
   if(kind==='Sales'){salesDrafts(P);return}
   if(!dr.length){P.appendChild(el('p','hint','No '+kind+' drafts. '+kind+' collections from Review Upload wait here until you post them.'));return}
-  const card0=P.appendChild(el('div','st-card hubf hub-c'));{const h0=el('h3',null,kind+' Drafts');h0.style.cssText='text-align:center;font-size:18px;font-weight:800';card0.appendChild(h0)}
+  const card0=P.appendChild(el('div','st-card hubf hub-c sapq sq-dr'));{const h0=el('h3',null,kind+' Drafts');h0.style.cssText='text-align:center;font-size:18px;font-weight:800';card0.appendChild(h0)}
   card0.appendChild(el('p','hint dr-c',dr.length+' draft'+(dr.length===1?'':'s')+' • '+money(dr.reduce((a,d)=>a+d.col+d.tds,0))+'. Posting date: any day up to today (not before the bill date).'));
   /* same layout as Review Upload Entries: customer banner -> one coloured card per company -> one block per draft */
   const names=new Map(),groups=new Map();
   dr.forEach(d=>{const k=String(d.cu);let g=groups.get(k);if(!g){g={cu:d.cu,nm:d.nm||('Customer '+d.cu),cos:new Map()};groups.set(k,g)}
     const ck=String(d.co);let c=g.cos.get(ck);if(!c){c={co:d.co,list:[]};g.cos.set(ck,c)}c.list.push(d)});
-  /* ===== Pending Collections (SAP style): one table block per customer; Cheque/BEFTN no + date and posting date are set once per customer; one row per draft; edits save by themselves; Post selected / Delete work on the ticked rows ===== */
-  const nf=v=>(+v||0).toLocaleString('en-IN',{maximumFractionDigits:2}),ageD=v=>v?Math.max(0,Math.round((new Date(t)-new Date(v))/864e5)):0,dd2=v=>v?v.slice(8,10)+'.'+v.slice(5,7):'—';
-  const rowsAll=[],custs=[];
-  const setM=(r,x)=>{r.mt.textContent='';if(x){const sp=document.createElement('span');sp.className='pcm';sp.textContent=x;r.mt.appendChild(sp)}};
-  const readRow=r=>{const c2=+r.col.value||0,tx=+r.tds.value||0;if(c2<0||tx<0||!(c2+tx>0))return null;return{c:c2,tx}};
-  const live=r=>{const c2=+r.col.value||0,tx=+r.tds.value||0;let cls='',txt='';
-    if(!r.bill){cls='bad';txt='This bill is no longer open (the database changed). Delete this draft.'}
-    else if(!(c2+tx>0)){cls='warn';txt='Enter the collected amount or the TDS'}
-    else if(c2+tx>r.bal0+EPS){cls='bad';txt=money(c2+tx)+' is more than the open balance ('+money(r.bal0)+')'}
-    else{const rem=+(r.bal0-c2-tx).toFixed(2);if(rem>EPS){cls='warn';txt='Remaining on this bill: '+money(rem)}}
-    r.mt.className='stt '+cls;setM(r,txt);r.mr.style.display=txt?'':'none';r.tr.classList.toggle('pc-bad',cls==='bad')};
-  const persist=r=>{const v=readRow(r);if(!v)return;const L2=ld();if(!L2.dr)return;const x=L2.dr.find(e=>e.id===r.d.id);if(!x)return;x.col=v.c;x.tds=v.tx;x.type=r.ty.value;if(x.type==='Cash'){x.ref='';delete x.rd}else{x.ref=r.c.rf.value.trim();if(r.c.rd.value)x.rd=r.c.rd.value;else delete x.rd}try{sv(L2)}catch(e){}};
-  const doPost=(r,used)=>{const v=readRow(r),bad=x=>{r.mt.className='stt bad';setM(r,x);r.mr.style.display='';return false};
-    if(!v)return bad('Enter a collected amount');if(!r.bill)return bad('This bill is no longer open (the database changed). Delete this draft.');
-    const pdv=r.c.pd.value;if(!pdv)return bad('Choose a posting date');if(pdv>t)return bad('Posting date cannot be after today');if(r.bill.post&&pdv<r.bill.post)return bad('Posting date cannot be before the bill date ('+dm(r.bill.post)+')');
-    if(v.c+v.tx+((used&&used.get(r.d.ag))||0)>r.bal0+EPS)return bad('More than the open balance ('+money(r.bal0)+')');
-    const L2=ld();if(!L2.dr)return false;const x=L2.dr.find(e=>e.id===r.d.id);if(!x)return false;x.col=v.c;x.tds=v.tx;x.type=r.ty.value;if(x.type==='Cash'){x.ref='';delete x.rd}else{x.ref=r.c.rf.value.trim();if(r.c.rd.value)x.rd=r.c.rd.value;else delete x.rd}
-    window.RDLDDEL&&RDLDDEL(L2,[x.id]);L2.dr=L2.dr.filter(e=>e.id!==x.id);const n=nextNo(L2,'DZ');r._res={k:'DZ',cu:x.cu,doc:'DZ-'+String(n).padStart(6,'0'),d:pdv};
-    L2.dz.push({bill:'DZ-'+String(n).padStart(6,'0'),doc:'DZ',pt:Date.now(),ag:x.ag,cu:x.cu,co:x.co,nm:x.nm,col:x.col,tds:x.tds,...(x.xt?{xt:x.xt}:{}),type:x.type,ref:x.ref,...(x.rd?{rd:x.rd}:{}),date:pdv,...(x.dcr?{dcr:x.dcr}:{}),...(x.bd?{bd:x.bd}:{}),...(x.manual?{manual:1}:{})});
-    try{sv(L2)}catch(e){return bad('Could not save on this device')}if(used)used.set(r.d.ag,((used.get(r.d.ag))||0)+v.c+v.tx);return true};
-  const live0=()=>rowsAll.filter(r=>r.tr.isConnected),tick=()=>live0().filter(r=>r.ck.checked);
-  const sel=el('div','pc-sel');[['Select all',true],['Deselect all',false]].forEach(([tx,v])=>{const b=el('button','sx-b',tx);b.type='button';b.onclick=()=>{live0().forEach(r=>r.ck.checked=v);sum()};sel.appendChild(b)});
-  card0.appendChild(sel);
-  groups.forEach(g=>{
-    const c={rows:[],cos:[]},gx=el('div','pc-cu'),hd=el('div','pc-h'),gck=mkCk(),tgb=el('span','pc-tg','\u25BE'),nm=el('div','pc-nm'),am=el('div','pc-am'),bd=el('div','pc-b');custs.push(c);c.ck=gck;c.am=am;
-    const all=[...g.cos.values()].sort((x,y)=>R.coCmp?R.coCmp(x.co,y.co):0),drs=[].concat(...all.map(o=>o.list)),tys=[...new Set(drs.map(d=>d.type))];
-    nm.appendChild(el('b',null,g.nm));const sm=el('small',null,g.cu+' \u2022 '+drs.length+(drs.length===1?' bill':' bills')+' \u2022 '+(tys.length===1?tys[0]:'Mixed'));nm.appendChild(sm);
-    hd.appendChild(gck);hd.appendChild(tgb);hd.appendChild(nm);hd.appendChild(am);gx.appendChild(hd);gx.appendChild(bd);tgb.onclick=()=>{const h=bd.style.display==='none';bd.style.display=h?'':'none';tgb.textContent=h?'\u25BE':'\u25B8'};
-    const ref=el('div','pc-ref');c.refW=ref;const mkI=(lab,type,val)=>{const l=el('label',null,lab),i=el('input');i.type=type;i.value=val||'';l.appendChild(i);ref.appendChild(l);return i};
-    c.rf=mkI('Cheque / BEFTN No','text',(drs.find(d=>d.ref)||{}).ref);c.rd=mkI('Date','date',(drs.find(d=>d.rd)||{}).rd);
-    const pv=(drs.find(d=>d.pdt&&d.pdt<=t)||{}).pdt||t;c.pd=mkI('Posting date','date',pv);c.pd.max=t;
-    c.rf.placeholder='Optional';bd.appendChild(ref);
-    c.rf.onchange=c.rd.onchange=()=>c.rows.forEach(persist);
-    const w=el('div','pc-w'),tb=el('table','pc-t');w.appendChild(tb);bd.appendChild(w);
-    const th=el('tr'),hck=mkCk();c.hck=hck;const th0=el('th');th0.appendChild(hck);th0.appendChild(document.createTextNode(' Bill No'));th.appendChild(th0);
-    ['Date','Balance','Type','Collected','TDS'].forEach((x,i)=>{const h=el('th',i===1||i>3?'r':null,x);th.appendChild(h)});tb.appendChild(th);
-    all.forEach(o=>{const bills=o.list.map(d=>({d,bill:(m?m.out:[]).find(x=>uid(x)===d.ag)}));const cc={rows:[]};c.cos.push(cc);
-      const cr=el('tr','pc-co'),cd=el('td');cd.colSpan=6;const cck=mkCk();cc.ck=cck;cc.tr=cr;cd.appendChild(cck);cd.appendChild(document.createTextNode(' '+(R.coName?R.coName(o.co):String(o.co))));
-      const cs=el('span',null,money(bills.reduce((a,x)=>a+(x.bill?bal(x.bill):0),0)));cd.appendChild(cs);cr.appendChild(cd);tb.appendChild(cr);
-      bills.forEach(({d,bill})=>{const bal0=bill?bal(bill):0,tr=el('tr','pc-r'+(String(d.type).toLowerCase()==='cash'?' cash':'')),mr=el('tr','pc-mr'),mt=el('td','stt');mt.colSpan=6;mr.appendChild(mt);mr.style.display='none';
-        const r={d,bill,bal0,tr,mr,mt,c,cc};r.ck=mkCk();
-        const t1=el('td');t1.appendChild(r.ck);t1.appendChild(document.createTextNode(' '));t1.appendChild(el('b',null,d.bn));tr.appendChild(t1);
-        const t2=el('td',null,dd2(bill&&bill.post));if(bill&&bill.post)t2.appendChild(el('small',null,ageD(bill.post)+'d'));tr.appendChild(t2);
-        tr.appendChild(el('td','r',bill?nf(bal0):'\u2014'));
-        const t4=el('td');r.ty=el('select');[['Cash','Cash'],['Cheque','Chq'],['BEFTN','BEFTN']].forEach(([v,l])=>{const op=el('option',null,l);op.value=v;r.ty.appendChild(op)});r.ty.value=d.type;t4.appendChild(r.ty);tr.appendChild(t4);
-        const mkN=v=>{const td=el('td','r'),i=el('input');i.type='number';i.step='any';i.min='0';i.value=v;td.appendChild(i);tr.appendChild(td);return i};
-        r.col=mkN(d.col);r.tds=mkN(d.tds||0);
-        r.col.oninput=r.tds.oninput=()=>{live(r);sum()};r.col.onchange=r.tds.onchange=()=>persist(r);
-        r.ty.onchange=()=>{tr.classList.toggle('cash',r.ty.value==='Cash');persist(r);sum()};r.ck.onchange=sum;
-        tb.appendChild(tr);tb.appendChild(mr);live(r);rowsAll.push(r);c.rows.push(r);cc.rows.push(r)});
-      cck.onchange=()=>{cc.rows.forEach(r=>{if(r.tr.isConnected)r.ck.checked=cck.checked});sum()}});
-    const tot=el('tr','pc-tot');c.tot=tot;tb.appendChild(tot);
-    gck.onchange=hck.onchange=function(){const v=this.checked;c.rows.forEach(r=>{if(r.tr.isConnected)r.ck.checked=v});sum()};
-    card0.appendChild(gx)});
-  const ft=el('div','pc-ft'),fi=el('div','s'),fm=el('b'),fs=el('span'),db=el('button','st-btn od-clear','Delete'),pb=el('button','st-btn','Post selected'),fx=el('div','stt');db.type=pb.type='button';fi.appendChild(fm);fi.appendChild(fs);ft.appendChild(fi);ft.appendChild(db);ft.appendChild(pb);
-  P.appendChild(el('div','pc-sp'));P.appendChild(ft);
-  function sum(){let tot=0,td=0,cash=0,ch=0;const on=tick();{const hn=card0.querySelector('.dr-c');if(hn){const lv=live0();hn.textContent=lv.length+(lv.length===1?' draft':' drafts')+' \u2022 '+money(lv.reduce((a,r)=>a+(+r.col.value||0)+(+r.tds.value||0),0))+'. Posting date: any day up to today (not before the bill date).'}}on.forEach(r=>{tot+=(+r.col.value||0)+(+r.tds.value||0);td+=+r.tds.value||0;r.ty.value==='Cash'?cash++:ch++});
-    fm.textContent=on.length+(on.length===1?' bill':' bills')+' \u2022 '+money(tot);fs.textContent='TDS '+nf(td)+' \u2022 Cash '+cash+' \u2022 Chq/BEFTN '+ch;pb.disabled=db.disabled=!on.length;
-    custs.forEach(c=>{const rl=c.rows.filter(r=>r.tr.isConnected),o=rl.filter(r=>r.ck.checked);if(!rl.length)return;
-      [c.ck,c.hck].forEach(k=>{k.checked=o.length===rl.length;k.indeterminate=o.length>0&&o.length<rl.length});
-      c.cos.forEach(cc=>{const a=cc.rows.filter(r=>r.tr.isConnected),b=a.filter(r=>r.ck.checked);cc.ck.checked=!!a.length&&b.length===a.length;cc.ck.indeterminate=b.length>0&&b.length<a.length});
-      c.am.textContent='';c.am.appendChild(el('b',null,money(o.reduce((a,r)=>a+(+r.col.value||0)+(+r.tds.value||0),0))));c.am.appendChild(el('small',null,o.length+' ticked'));
-      c.refW.style.display=rl.some(r=>r.ty.value!=='Cash')?'':'none';
-      const sm=f=>rl.reduce((a,r)=>a+(f(r)||0),0);c.tot.textContent='';[['Total '+rl.length+(rl.length===1?' bill':' bills'),''],['',''],[nf(sm(r=>r.bal0)),'r'],['',''],[nf(sm(r=>+r.col.value)),'r'],[nf(sm(r=>+r.tds.value)),'r']].forEach(([x,k])=>c.tot.appendChild(el('td',k,x)))})}
-  pb.onclick=async()=>{const s=tick();if(!s.length)return;const tt=s.reduce((a,r)=>a+(+r.col.value||0)+(+r.tds.value||0),0),txt=s.length+' bill'+(s.length===1?'':'s')+' \u2022 '+money(tt)+'. Post now?';
-    const ok=window.RDLUI&&RDLUI.ask?await RDLUI.ask({title:'Post selected bills?',msg:txt,ok:'Post'}):confirm('Post selected bills? '+txt);if(!ok)return;
-    const used=new Map();let done=0,left=0;s.forEach(r=>{if(doPost(r,used)){done++;r._ok=1}else left++});
-    if(done){cards();document.dispatchEvent(new Event('visibilitychange'))}
-    if(!left){buildDrafts(kind);const rs=s.map(b=>b._res).filter(Boolean);
-      if(rs.length&&window.RDL&&RDL.openReg){const k=rs.some(r=>r.k==='RV')?'RV':'DZ',a=rs.filter(r=>r.k===k);let q='';
-        if(a.length===1)q=a[0].doc;else if(a.every(r=>String(r.cu)===String(a[0].cu)))q=String(a[0].cu);else{const ds=a.map(r=>r.d).filter(Boolean).sort();R.historyRange=ds.length?{a:ds[0],b:ds[ds.length-1]}:null}
-        window.RDL.openUpload();Promise.resolve().then(()=>RDL.openReg([k],q,true))}return}
-    s.forEach(r=>{if(r._ok){r.tr.remove();r.mr.remove()}});
-    custs.forEach(c=>{c.cos.forEach(cc=>{if(!cc.rows.some(r=>r.tr.isConnected))cc.tr.remove()});if(!c.rows.some(r=>r.tr.isConnected)){const g=c.ck.closest('.pc-cu');if(g)g.remove()}});
-    sum();fs.textContent=done+' posted \u2022 '+left+' stay in draft (see the red message under each row)'};
-  db.onclick=async()=>{const s=tick();if(!s.length)return;const ok=window.RDLUI&&RDLUI.ask?await RDLUI.ask({title:'Delete selected drafts?',msg:s.length+' draft'+(s.length===1?'':'s')+'. The bills stay open.',ok:'Delete'}):confirm('Delete '+s.length+' drafts?');if(!ok)return;
-    const L2=ld(),ids=s.map(r=>r.d.id);window.RDLDDEL&&RDLDDEL(L2,ids);L2.dr=(L2.dr||[]).filter(e=>!ids.includes(e.id));try{sv(L2)}catch(e){return}buildDrafts(kind)};
-  sum()}
+  let gi=0;groups.forEach(g=>{const gx=el('div','cg cu'+(gi++%8)),gh=el('div','cg-h'),cks=[],gck=mkCk();gh.appendChild(gck);gh.appendChild(el('b',null,g.nm+' • '+g.cu));gh.appendChild(el('span','cg-n',g.cos.size+(g.cos.size===1?' company':' companies')));gx.appendChild(gh);
+    [...g.cos.values()].sort((x,y)=>R.coCmp?R.coCmp(x.co,y.co):0).forEach(c=>{
+      const row=el('div','cg-co '+coCls(c.co)),rh=el('div','cg-h cg-ch'),body=el('div','cg-b');
+      const cck=mkCk(),blks=[];rh.appendChild(cck);rh.appendChild(el('b',null,R.coName?R.coName(c.co):String(c.co)));row.appendChild(rh);row.appendChild(body);
+      const ft=el('div','cg-ft'),ftT=el('span',null,'Draft total'),ftV=el('span',null,'');ft.appendChild(ftT);ft.appendChild(ftV);
+      const totUp=()=>{const L3=ld(),mine=(L3.dr||[]).filter(e=>String(e.cu)===String(g.cu)&&String(e.co)===String(c.co));ftV.textContent=money(mine.reduce((x,e)=>x+e.col+e.tds,0))};totUp();
+      const tb=el('table','sq-tbl sq-drt'),thd=el('thead'),hr0=el('tr'),wrap0=el('div','sq-scroll');
+      ['Bill No','Open Bal','Collect','TDS','Type','Post Date'].forEach((x,j)=>hr0.appendChild(el('th',j===0?'sq-r1':(j>=1&&j<=3?'num':null),x)));thd.appendChild(hr0);tb.appendChild(thd);
+      const tbd=el('tbody');tb.appendChild(tbd);wrap0.appendChild(tb);body.appendChild(wrap0);
+      c.list.forEach(d=>{const bill=(m?m.out:[]).find(x=>uid(x)===d.ag),bal0=bill?bal(bill):0,blk=el('tr',bill&&bill.due?(bill.due<t?'cs-late':(bill.due<=T6?'cs-soon':null)):null),dt=el('tr','sq-dt'),age=Math.floor((Date.now()-d.at)/864e5);
+        tbd.appendChild(blk);tbd.appendChild(dt);blks.push(blk);
+        const dtd=el('td');dtd.colSpan=6;dt.appendChild(dtd);dt.style.display='none';const bd=el('div','sq-dbody');dtd.appendChild(bd);
+        const rm0=blk.remove.bind(blk);blk.remove=()=>{dt.remove();rm0()};   /* the detail row goes with its bill row */
+        const cell=(node,cls)=>{const td=el('td',cls);if(node)td.appendChild(node);blk.appendChild(td);return td},I=(type,val)=>{const i=el('input','list-search');i.type=type;i.value=val;return i};
+        const F=(lab,node)=>{const x=el('div','cl-f');x.appendChild(el('small',null,lab));x.appendChild(node);bd.appendChild(x);return node};
+        /* row: Bill No | Open Bal | Collect | TDS | Type | Post Date | status dot */
+        const c1=el('td','sq-r1'),tg=el('span','sq-tg','\u25B8'),dot=el('span','sq-dot','\u25CF');c1.appendChild(tg);c1.appendChild(dot);c1.appendChild(document.createTextNode(' '+d.bn));blk.appendChild(c1);
+        cell(null,'num').textContent=bill?money(bal0).replace(/^\S+\s*/,'').replace('/=',''):'\u2014';
+        const col=I('number',d.col),tds=I('number',d.tds||0);col.step=tds.step='any';cell(col,'num');cell(tds,'num');
+        const ty=el('select','list-search');['Cash','Cheque','BEFTN'].forEach(x=>{const o=el('option',null,x);o.value=x;ty.appendChild(o)});ty.value=d.type;cell(ty);
+        const pd=I('date',d.pdt&&d.pdt<=t?d.pdt:t);pd.max=t;if(bill&&bill.post)pd.min=bill.post;cell(pd);
+        /* details (tap the row): message, cheque / BEFTN fields, Save / Post / Delete */
+        bd.appendChild(el('div','sq-meta','Against '+d.bn+' \u2022 '+(d.manual?'Manual entry':'DCR '+dm(d.dcr))+' \u2022 '+(age?age+' day'+(age===1?'':'s')+' in draft':'saved today')));
+        const du=el('div','stt');bd.appendChild(du);const tdh=el('div','hint');bd.appendChild(tdh);
+        const rf=F('Cheque / BEFTN number (optional)',I('text',d.ref||'')),rd=F('Cheque / BEFTN date (optional, can be a future date)',I('date',d.rd||''));
+        const cashTg=()=>{const h=String(ty.value).toLowerCase()==='cash'?'none':'';rf.parentNode.style.display=h;rd.parentNode.style.display=h};ty.addEventListener('change',cashTg);cashTg();
+        RDLCalc.attach(col,{label:'Collected Amount'});RDLCalc.attach(tds,{label:'TDS'});
+        const stt=el('div','stt'),act=el('div','od-actions'),mkB=(tx,cls)=>{const b=el('button',cls,tx);b.type='button';act.appendChild(b);return b};
+        const opn=on=>{dt.style.display=on?'':'none';tg.textContent=on?'\u25BE':'\u25B8';if(on)bd.style.width=Math.max(220,wrap0.clientWidth-16)+'px'};
+        blk.addEventListener('click',e=>{if(e.target.closest('input,select,button'))return;opn(dt.style.display==='none')});
+        const read=()=>{const c2=+col.value||0,tx=+tds.value||0;if(c2<0||tx<0||!(c2+tx>0)){stt.className='stt bad';stt.textContent='Enter a collected amount';opn(true);return null}return{c:c2,tx}};
+        /* live message + the coloured dot in the row */
+        const live=()=>{const c2=+col.value||0,tx=+tds.value||0;let cls,txt;
+          if(!bill){cls='bad';txt='This bill is no longer open (the database changed). Delete this draft.'}
+          else if(!(c2+tx>0)){cls='warn';txt='Enter the collected amount or the TDS'}
+          else if(c2+tx>bal0+EPS){cls='bad';txt=money(c2)+(tx>0?' + '+money(tx)+' TDS':'')+' is more than the open balance ('+money(bal0)+')'}
+          else{const rem=+(bal0-c2-tx).toFixed(2);const line=money(c2)+' collected'+(tx>0?' + '+money(tx)+' TDS':'')+' against '+d.bn+'.';
+            if(rem>EPS){cls='warn';txt=line+' Remaining on this bill: '+money(rem)+'.'}else{cls='ok';txt=line+' The bill is fully cleared.'}}
+          du.className='stt '+cls;du.textContent=txt;tdh.textContent=tx>0?'TDS '+money(tx):'';stt.textContent='';stt.className='stt';dot.className='sq-dot '+cls;blk.classList.toggle('sq-bad',cls==='bad');dot.title=txt};
+        col.addEventListener('input',live);tds.addEventListener('input',live);live();if(!bill)opn(true);
+        const upd=(L2,v)=>{const x=L2.dr.find(e=>e.id===d.id);x.col=v.c;x.tds=v.tx;x.type=ty.value;x.ref=rf.value.trim();if(rd.value)x.rd=rd.value;else delete x.rd;return x};
+        mkB('Save','st-btn od-clear').onclick=()=>{const v=read();if(!v)return;const L2=ld();if(!L2.dr)return;upd(L2,v);try{sv(L2)}catch(e){stt.className='stt bad';stt.textContent='Could not save';return}totUp();stt.className='stt ok';stt.textContent='\u2713 Saved'};
+        const doPost=(used)=>{const v=read();if(!v)return false;const bad=x=>{stt.className='stt bad';stt.textContent=x;opn(true);return false};
+          if(!bill)return bad('This bill is no longer open (the database changed). Delete this draft.');if(!pd.value)return bad('Choose a posting date');if(pd.value>t)return bad('Posting date cannot be after today');if(bill.post&&pd.value<bill.post)return bad('Posting date cannot be before the bill date ('+dm(bill.post)+')');
+          if(v.c+v.tx+((used&&used.get(d.ag))||0)>bal0+EPS)return bad('More than the open balance ('+money(bal0)+')');
+          const L2=ld();if(!L2.dr)return;const x=upd(L2,v);window.RDLDDEL&&RDLDDEL(L2,[d.id]);L2.dr=L2.dr.filter(e=>e.id!==d.id);const n=nextNo(L2,'DZ');blk._res={k:'DZ',cu:x.cu,doc:'DZ-'+String(n).padStart(6,'0'),d:pd.value};
+          L2.dz.push({bill:'DZ-'+String(n).padStart(6,'0'),doc:'DZ',pt:Date.now(),ag:x.ag,cu:x.cu,co:x.co,nm:x.nm,col:x.col,tds:x.tds,...(x.xt?{xt:x.xt}:{}),type:x.type,ref:x.ref,...(x.rd?{rd:x.rd}:{}),date:pd.value,...(x.dcr?{dcr:x.dcr}:{}),...(x.bd?{bd:x.bd}:{}),...(x.manual?{manual:1}:{})});
+          try{sv(L2)}catch(e){return bad('Could not save on this device')}if(used)used.set(d.ag,((used.get(d.ag))||0)+v.c+v.tx);return true};
+        blk._post=doPost;blk._amt=()=>(+col.value||0)+(+tds.value||0);mkB('Post','st-btn').onclick=()=>{if(doPost()){cards();document.dispatchEvent(new Event('visibilitychange'));buildDrafts(kind)}};
+        mkB('Delete','st-btn od-clear').onclick=async()=>{const ok=window.RDLUI&&RDLUI.ask?await RDLUI.ask({title:'Delete this draft?',msg:(d.nm||d.cu)+' \u2022 '+money(d.col+d.tds)+'. The bill stays open.',ok:'Delete'}):confirm('Delete this draft?');if(!ok)return;const L2=ld();window.RDLDDEL&&RDLDDEL(L2,[d.id]);L2.dr=(L2.dr||[]).filter(e=>e.id!==d.id);try{sv(L2)}catch(e){return}buildDrafts(kind)};
+        bd.appendChild(act);bd.appendChild(stt)});
+      row.appendChild(ft);gx.appendChild(row);cks.push({ck:cck,blks,row,totUp})});
+    gx.appendChild(bulkBar(gx,gck,cks,()=>buildDrafts(kind)));card0.appendChild(gx)})}
 /* ===== SALES DRAFTS: Quick Sales bills wait here; the RV number is given only when you press Post ===== */
 function salesDrafts(P){
   const L=ld(),sd=(L.sd||[]).slice().sort((a,b)=>b.at-a.at),t=ymd(new Date()),dm=v=>v?v.slice(8,10)+'/'+v.slice(5,7)+'/'+v.slice(0,4):'\u2014';
@@ -4368,21 +4428,24 @@ function salesDrafts(P){
         mkB('Delete','st-btn od-clear').onclick=async()=>{const ok=window.RDLUI&&RDLUI.ask?await RDLUI.ask({title:'Delete this draft?',msg:(d.nm||d.cu)+' \u2022 '+money(d.amt)+'.',ok:'Delete'}):confirm('Delete this draft?');if(!ok)return;const L2=ld();window.RDLDDEL&&RDLDDEL(L2,[d.id]);L2.sd=(L2.sd||[]).filter(e=>e.id!==d.id);try{sv(L2)}catch(e){return}buildDrafts('Sales')};
         bd.appendChild(act);bd.appendChild(stt)});
       row.appendChild(ft);gx.appendChild(row);cks.push({ck:cck,blks,row,totUp})});
-    gx.appendChild(bulkBar(gx,gck,cks,()=>buildDrafts('Sales')))});window.RDLSelUI&&RDLSelUI.bar(card0)}
+    gx.appendChild(bulkBar(gx,gck,cks,()=>buildDrafts('Sales')))})}
 function draftHub(P,all0){
-  const money0=v=>money(v),PAL={g:['#fff','#d8f7ea','#a5e6cb','#34d399','#0b9a62','#065f46','#0b9a6255'],b:['#fff','#dbeafe','#a9c9f5','#4f9bff','#1650d8','#0f3ca3','#1650d855'],v:['#f8f4ff','#e3d8fb','#d0c0f3','#9a88f5','#6a52d9','#33248a','#6a52d966']};
-  const sd0=(ld().sd||[]),box=(title,n,tot,none)=>{const c=P.appendChild(el('div','st-card hubf '+(title==='Sales'?'hub-s':'hub-c'))),h=el('h3',null,title);h.style.cssText='text-align:center;font-size:18px;font-weight:800';c.appendChild(h);
-    c.appendChild(el('p','hint dr-c',n?n+' draft'+(n===1?'':'s')+' \u2022 '+money0(tot)+'. Open one to review, correct and post it.':none));const g=el('div');g.style.cssText='display:grid;gap:10px;margin-top:10px';c.appendChild(g);return g};
-  const gr=box('Collection',all0.length,all0.reduce((a,d)=>a+d.col+d.tds,0),'No collection drafts. Quick Collection and Cash / Cheque / BEFTN from Review Upload wait here until you post them.');
-  const gr2=box('Sales',sd0.length,sd0.reduce((a,d)=>a+(+d.amt||0),0),'No sales drafts. Bills typed in with Quick Sales wait here until you post them.');
-  PAL.a=['#fffdf5','#ffeac4','#f3d794','#f8c24d','#d98200','#6b4200','#d9820055'];
-  [['Cash','g','i-wal'],['Cheque','b','i-stmt'],['BEFTN','v','i-doc'],['Sales','a','i-sales']].forEach(([t,k,ic])=>{
-    const C=PAL[k],list=t==='Sales'?sd0:all0.filter(e=>String(e.type||'').toLowerCase()===t.toLowerCase()),tot=list.reduce((a,d)=>a+(t==='Sales'?(+d.amt||0):d.col+d.tds),0);
-    const b=el('button','st-btn');b.type='button';
-    b.style.cssText='display:flex;align-items:center;gap:12px;text-align:left;margin:0;padding:12px 14px;border-radius:18px;font-size:16px;font-weight:800;color:'+C[5]+';background:linear-gradient(135deg,'+C[0]+','+C[1]+');border:1px solid '+C[2]+';box-shadow:0 8px 14px -9px '+C[6]+',inset 0 2px 0 #ffffffcc';
-    const i=el('span');i.style.cssText='flex:none;width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,'+C[3]+','+C[4]+');box-shadow:0 3px 0 '+C[4]+'66';i.innerHTML='<svg viewBox="0 0 24 24" style="width:21px;height:21px;fill:#fff"><use href="#'+ic+'"/></svg>';
-    const l=el('span');l.style.cssText='flex:1;min-width:0';l.appendChild(el('div',null,t));const sm=el('small',null,list.length+' draft'+(list.length===1?'':'s')+' • '+money0(tot));sm.style.cssText='display:block;font-size:12.5px;font-weight:600;opacity:.85;margin-top:2px';l.appendChild(sm);
-    b.appendChild(i);b.appendChild(l);b.onclick=()=>{buildDrafts(t);window.scrollTo(0,0)};(t==='Sales'?gr2:gr).appendChild(b)})}
+  /* SAP-style: one small table instead of big buttons. Tap a row to open that list. */
+  const sd0=(ld().sd||[]),q=v=>money(v).replace(/^\S+\s*/,'').replace('/=',''),card=P.appendChild(el('div','st-card sapq'));
+  card.appendChild(el('h3',null,'Pending Drafts'));
+  const info=(t)=>{const list=t==='Sales'?sd0:all0.filter(e=>String(e.type||'').toLowerCase()===t.toLowerCase());return{n:list.length,tot:list.reduce((a,d)=>a+(t==='Sales'?(+d.amt||0):d.col+d.tds),0)}};
+  const wrap=el('div','sq-scroll'),tb=el('table','sq-tbl sq-hub'),th=el('thead'),hr=el('tr');
+  ['Type','Drafts','Amount',''].forEach((x,j)=>hr.appendChild(el('th',j===1||j===2?'num':null,x)));th.appendChild(hr);tb.appendChild(th);
+  const tbd=el('tbody');tb.appendChild(tbd);
+  const row=(t,cls)=>{const i=info(t),r=el('tr','hb-'+cls+(i.n?'':' hb-0'));r.appendChild(el('td','hb-t',t));r.appendChild(el('td','num',String(i.n)));r.appendChild(el('td','num',q(i.tot)));r.appendChild(el('td','hb-go','\u203A'));r.onclick=()=>{buildDrafts(t);window.scrollTo(0,0)};tbd.appendChild(r);return i};
+  const g1=el('tr','hb-gh'),g1c=el('td',null,'Collection');g1c.colSpan=4;g1.appendChild(g1c);tbd.appendChild(g1);
+  const a1=row('Cash','g'),a2=row('Cheque','b'),a3=row('BEFTN','v');
+  const ct=el('tr','hb-tot');ct.appendChild(el('td',null,'Collection total'));ct.appendChild(el('td','num',String(a1.n+a2.n+a3.n)));ct.appendChild(el('td','num',q(a1.tot+a2.tot+a3.tot)));ct.appendChild(el('td'));tbd.appendChild(ct);
+  const g2=el('tr','hb-gh'),g2c=el('td',null,'Sales');g2c.colSpan=4;g2.appendChild(g2c);tbd.appendChild(g2);
+  row('Sales','a');
+  wrap.appendChild(tb);card.appendChild(wrap);
+  card.appendChild(el('p','hint',all0.length||sd0.length?'Tap a row to review, correct and post its drafts.':'No drafts. Quick Collection, Quick Sales and Review Upload entries wait here until you post them.'));
+}
 window.RDL.openDrafts=()=>{if(window.RDL_ROLE==='admin')return;buildDrafts();document.querySelectorAll('.pg').forEach(x=>x.classList.remove('on'));document.querySelectorAll('.nav button').forEach(x=>x.classList.remove('on'));$('#drf').classList.add('on');const nb=$('.nav button[data-p="more"]');if(nb)nb.classList.add('on');window.scrollTo(0,0)};
 function review(w,P,L,ttl,bk){const dates=[...sel[w]].sort(),secs=[],t0=today(),m=R.master,EPS=0.005;
   const byDue=(a,b)=>(a.post||'')<(b.post||'')?-1:(a.post||'')>(b.post||'')?1:(a.due||'')<(b.due||'')?-1:(a.due||'')>(b.due||'')?1:String(a.bill)<String(b.bill)?-1:1;  /* oldest Posting date first, same as the date shown in the list */
@@ -10783,148 +10846,5 @@ html body #home .tw2.two .pch-t b,html body #home .tw2.two .qa .card.cya h4{font
 html body #home .tw2.two .pch-t small,html body #home .tw2.two .qa .card.cya p{min-height:46px!important;padding:7px 9px!important}
 }
 </style>
-<style id="sapSkin">/* SAP Fiori style skin: Quick Collection, Review Collection Draft, Pending Drafts, Pending Collections (soft colours, no logic changes) */
-html body .sap .st-top{background:linear-gradient(#e8f1fd,#d3e4f7);border-bottom:2px solid #2f7fd0;border-radius:10px 10px 0 0;padding:10px 12px;margin:0 0 10px}
-html body .sap .st-top h2{font-size:17px;font-weight:700;color:#1d3b5c}
-html body .sap .st-top button{border-radius:6px;border:1px solid #bcd3ee;background:#fff;color:#2f7fd0}
-html body .sap .st-card{background:#fff;border:1px solid #dde5ee;border-radius:10px;box-shadow:0 1px 2px #0000000d;padding:12px}
-html body .sap .st-card h3,html body .sap .st-card h3.rv-ttl,html body .sap .hubf>h3{font-size:15px!important;font-weight:700;color:#24303c;text-align:left!important}
-html body .sap .st-card .hint,html body .sap .cl-head div{color:#66727f}
-html body .sap .st-btn{background:#2f7fd0;border-radius:6px;padding:10px;font-size:14px;font-weight:600;box-shadow:none}
-html body .sap .st-btn.od-clear{background:#fff;color:#2f7fd0;border:1px solid #2f7fd0}
-html body .sap .st-btn.danger{background:#fde8e8!important;color:#b3261e;border:1px solid #b3261e}
-html body .sap .list-search{border:1px solid #c5cfda;border-radius:6px;background:#fff;box-shadow:none}
-html body .sap .cl-f small{color:#66727f;font-weight:600}
-html body .sap .cg{border:1px solid #dde5ee;border-radius:10px;box-shadow:0 1px 2px #0000000d;padding:0;overflow:hidden}
-html body .sap .cg>.cg-h{background:#e3eefc;border:0;border-radius:0;margin:0;padding:10px 12px;flex-direction:row;justify-content:flex-start;text-align:left;box-shadow:none}
-html body .sap .cg>.cg-h b{color:#1d3b5c!important;text-align:left;width:auto;font-size:15px;flex:1}
-html body .sap .cg>.cg-h .cg-n{color:#2f7fd0;align-self:center}
-html body .sap .cg-co{border:0;border-top:1px solid #dde5ee;border-radius:0;box-shadow:none;margin:0;background:#fff}
-html body .sap .cg-co>.cg-ch{background:#efeafb}
-html body .sap .cg-co>.cg-ch b,html body .sap .cg-co .cg-ck{color:#5a3f9c}
-html body .sap .cg-ft{background:#e3f4e8;color:#1f6b3a}
-html body .sap .cl-card,html body .sap .cg-co>.cg-b .cl-card{background:#fff;border:1px solid #e4e9f0;border-radius:8px}
-html body .sap .cl-head b{color:#24303c}
-html body .sap .dr-bulk{background:#eef5fd;border-top:2px solid #2f7fd0}
-html body .sap .dr-bi{color:#24303c}
-html body .sap .dr-ck{accent-color:#2f7fd0}
-html body .sap .dr-c{text-align:left}
-html body .sap .hubf,html body .sap .hub-s{background:#fff;border:1px solid #dde5ee;box-shadow:0 1px 2px #0000000d;border-radius:10px}
-html body .sap .hubf>div[style*="grid"]>.st-btn{background:#fff!important;border:1px solid #dde5ee!important;border-left:4px solid #2f7fd0!important;border-radius:8px!important;box-shadow:none!important;padding:10px 12px!important;font-size:15px!important}
-html body .sap .hubf>div[style*="grid"]>.st-btn>span:first-child{background:#2f7fd0!important;box-shadow:none!important;width:34px!important;height:34px!important}
-html body .sap .hub-c>div[style*="grid"]>.st-btn:nth-child(1){border-left-color:#4cb36b!important}
-html body .sap .hub-c>div[style*="grid"]>.st-btn:nth-child(2){border-left-color:#4a90d9!important}
-html body .sap .hub-c>div[style*="grid"]>.st-btn:nth-child(3){border-left-color:#8a6fdc!important}
-html body .sap .hub-s>div[style*="grid"]>.st-btn{border-left-color:#e0a030!important}
-html body .sap .rv-b{--bg:#e6f0fc;--bd:#c8dcf5;--dv:#9bbbe6;--tx:#1c5aa8}
-html body .sap .rv-a{--bg:#fdf3dc;--bd:#f1dca0;--dv:#e0b44a;--tx:#8a5a00}
-html body .sap .rv-i{--bg:#e3f4e8;--bd:#bfe3c9;--dv:#7cc592;--tx:#1f6b3a}
-html body .sap .rv-v{--bg:#ece6fb;--bd:#d3c8f3;--dv:#a590e0;--tx:#5a3f9c}
-html body .sap .rv-t{--bg:#e0f3f2;--bd:#b5e0dd;--dv:#6fc4bf;--tx:#1d6f6a}
-html body .sap .rv-r{--bg:#fde8ec;--bd:#f5c3cd;--dv:#e58aa0;--tx:#b3261e}
-html body .sap .st-card.wk-box{background:#e8f1fd;border:1px solid #c8dcf5;border-left:4px solid #2f7fd0;box-shadow:none}
-html body .sap .st-card.wk-box.today{background:#e3f4e8;border-color:#bfe3c9;border-left-color:#4cb36b}
-.pc-sel{display:flex;gap:8px;margin:2px 0 8px}
-.pc-cu{border:1px solid #dde5ee;border-radius:10px;margin:10px 0;overflow:hidden;background:#fff;box-shadow:0 1px 2px #0000000d}
-.pc-h{display:flex;align-items:center;gap:8px;padding:10px 10px;background:#e3eefc}
-.pc-h .dr-ck{margin:0}.pc-tg{color:#2f7fd0;font-size:16px;cursor:pointer;padding:0 2px}
-.pc-nm{flex:1;min-width:0}.pc-nm b{display:block;font-size:14.5px;color:#1d3b5c;line-height:1.2}.pc-nm small{font-size:11.5px;color:#66727f}
-.pc-am{text-align:right;white-space:nowrap;color:#1d3b5c;font-size:14px}.pc-am small{display:block;font-size:11px;font-weight:400;color:#66727f}
-.pc-ref{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;background:#fdf3dc;color:#7a5a00;padding:8px 10px;font-size:12px;font-weight:600}
-.pc-ref label{display:flex;align-items:center;gap:5px}.pc-ref input{border:1px solid #c5cfda;border-radius:6px;padding:5px 7px;font:inherit;font-size:13px;background:#fff;color:#24303c;width:128px}
-.pc-w{overflow-x:auto}
-.pc-t{width:100%;border-collapse:collapse;font-size:11.5px;table-layout:fixed}.pc-t th:nth-child(1){width:29%}.pc-t th:nth-child(2){width:11%}.pc-t th:nth-child(3){width:15%}.pc-t th:nth-child(4){width:15%}.pc-t th:nth-child(5){width:17%}.pc-t th:nth-child(6){width:13%}.pc-t td:first-child{white-space:nowrap}
-.pc-t th{background:#e9eff6;color:#66727f;font-weight:600;text-align:left;padding:6px 4px;border-bottom:1px solid #dde5ee;white-space:nowrap}
-.pc-t td{padding:5px 4px;border-bottom:1px solid #e4e9f0;vertical-align:middle;color:#24303c}
-.pc-t .r{text-align:right}.pc-t td small{display:block;color:#66727f;font-size:11px}
-html body .sap .pc-t .dr-ck,html body .sap .pc-h .dr-ck{width:17px!important;height:17px!important;min-width:0!important;margin:0 3px 0 0;flex:none}.pc-ref{gap:4px 8px!important}.pc-ref input{width:104px!important;padding:4px 6px!important}.pc-ft .s{font-size:11px!important}
-.pc-t tr.pc-co td{background:#efeafb;color:#5a3f9c;font-weight:700}.pc-t tr.pc-co span{float:right}
-.pc-t tr.pc-tot td{background:#e3f4e8;color:#1f6b3a;font-weight:700;border-bottom:0}
-.pc-t tr.pc-r td:first-child{border-left:3px solid #4a90d9}.pc-t tr.pc-r.cash td:first-child{border-left-color:#4cb36b}
-.pc-t tr.pc-bad td{background:#fdecec}
-.pc-t input[type=number],.pc-t select{width:100%;min-width:0;border:1px solid #c5cfda;border-radius:5px;padding:4px 2px;font:inherit;font-size:11.5px;background:#fff;color:#24303c}
-.pc-t input[type=number]{text-align:right}.pc-t input,.pc-t select{box-sizing:border-box!important;max-width:100%}.pc-t input[type=number]{-moz-appearance:textfield;appearance:textfield;padding:4px 3px!important}.pc-t input[type=number]::-webkit-inner-spin-button,.pc-t input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}.pc-t th:nth-child(1){width:122px!important}.pc-t th:nth-child(2){width:52px!important}.pc-t th:nth-child(3){width:64px!important}.pc-t th:nth-child(4){width:72px!important}.pc-t th:nth-child(5){width:74px!important}.pc-t th:nth-child(6){width:62px!important}
-.pc-t tr.pc-mr td{padding:2px 6px;border-bottom:1px solid #e4e9f0}
-.pc-ft{position:sticky;bottom:88px;margin-top:8px;z-index:30;background:#fff;border:1px solid #dde5ee;border-top:2px solid #2f7fd0;border-radius:10px;padding:8px 10px;display:flex;gap:8px;align-items:center;box-shadow:0 4px 14px #0003}
-.pc-ft .s{flex:1;min-width:0;font-size:11.5px;color:#66727f}.pc-ft .s b{display:block;font-size:14px;color:#24303c}
-.pc-ft .st-btn{width:auto;margin:0;padding:9px 12px}.pc-sp{height:6px}
-html body .sap .hubf:has(.pc-cu){padding:6px}.pc-t th{padding:6px 2px}.pc-t td{padding:5px 2px}
-
-/* ---- Quick Collection: SAP table look ---- */
-html body #collection.sap .st-top{background:linear-gradient(#e8f1fd,#d3e4f7)!important;border-bottom:2px solid #2f7fd0;border-radius:10px 10px 0 0;padding:10px 12px;margin:0 0 10px;box-shadow:none}
-html body #collection.sap .st-top h2{font-size:17px!important;font-weight:700!important;color:#1d3b5c!important}
-html body #collection.sap .st-card{background:#fff!important;border:1px solid #dde5ee!important;border-radius:10px!important;box-shadow:0 1px 2px #0000000d!important;padding:0!important;overflow:hidden;margin:10px 0}
-html body #collection.sap .st-card>h3{background:#e3eefc!important;color:#1d3b5c!important;font-size:15px!important;font-weight:700!important;text-align:left!important;margin:0!important;padding:10px 12px!important;border-bottom:1px solid #dde5ee}
-html body #collection.sap .st-card.wk-box.today{background:#e3f4e8!important;border-color:#bfe3c9!important;border-left:4px solid #4cb36b!important}
-html body #collection.sap .st-card.wk-box.today>h3{background:transparent!important;border:0;color:#1f6b3a!important;padding:10px 12px!important}
-html body #collection.sap .st-card>div,html body #collection.sap .st-card>.cl-f,html body #collection.sap .st-card>.stt{margin-left:12px;margin-right:12px}
-html body #collection.sap .st-card>div:last-child{margin-bottom:12px}
-html body #collection.sap .cl-f small,html body #collection.sap .cl-f>small{color:#66727f!important;font-size:12px!important;font-weight:600!important}
-html body #collection.sap .list-search{border:1px solid #c5cfda!important;border-radius:6px!important;background:#fff!important;box-shadow:none!important;padding:8px 10px!important;font-size:14px!important}
-html body #collection.sap .rq button{border:1px solid #dde5ee!important;background:#fff!important;color:#24303c!important;border-radius:14px!important;padding:4px 12px!important;font-size:12.5px!important;box-shadow:none!important}
-html body #collection.sap .rq button.on{background:#2f7fd0!important;border-color:#2f7fd0!important;color:#fff!important}
-html body #collection.sap .st-btn{background:#2f7fd0!important;border-radius:6px!important;box-shadow:none!important;font-size:14px!important;padding:10px!important}
-html body #collection.sap .od-company-box{border:1px solid #dde5ee;border-radius:8px;background:#fff;box-shadow:none}
-html body #collection.sap .od-company-box>summary{background:#eef5fd;color:#2f7fd0;font-weight:600;border-radius:8px}
-.qc-hd,.qc-r{display:grid!important;grid-template-columns:24px 1.15fr .75fr .8fr 1.2fr;align-items:center;gap:4px;padding:6px 6px;margin:0!important}
-.qc-hd{background:#e9eff6;color:#66727f;font-size:11.5px;font-weight:600;border-bottom:1px solid #dde5ee}
-.qc-r{border-bottom:1px solid #e4e9f0;font-size:12px;color:#24303c}
-.qc-r:has(input[type=checkbox]:checked){background:#f2f8ff}
-.qc-r .qc-bn b{display:block;font-size:12px}.qc-r .qc-bn small{display:block;font-size:10.5px;color:#66727f}
-.qc-r .qc-bl{text-align:right;color:#1c5aa8;font-weight:600}.qc-r .qc-dt{font-size:11.5px}
-.qc-r .pb-amt{width:100%!important;min-width:0;box-sizing:border-box;padding:4px 3px;border-radius:5px!important;font-size:12px;text-align:right}
-.qc-r input[type=checkbox]{width:17px;height:17px;accent-color:#2f7fd0}
-
-/* ---- Review Collection Draft: flat SAP look ---- */
-html body #collection.sap .ci-head{background:#e3eefc!important;color:#1d3b5c!important;box-shadow:none!important;border:1px solid #c8dcf5;border-radius:10px!important;align-items:flex-start!important;text-align:left!important}
-html body #collection.sap .ci-head strong,html body #collection.sap .ci-head .ci-bp{text-align:left!important;color:#1d3b5c!important}
-html body #collection.sap .ci-head small{color:#66727f!important;opacity:1}
-html body #collection.sap .ci-head .ci-cos{align-items:flex-start!important}
-html body #collection.sap .ci-head .ci-cos span{background:#fff!important;border:1px solid #c8dcf5!important;color:#1c5aa8!important}
-html body #collection.sap .ci-meta-it{background:#fff!important;border:1px solid #dde5ee!important;color:#24303c!important;box-shadow:none!important}
-html body #collection.sap .ci-meta-it *{color:#24303c!important}
-html body #collection.sap .ci-mini{background:#fff!important;border:1px solid #dde5ee!important;border-left:4px solid #4a90d9!important;box-shadow:none!important;border-radius:8px!important}
-html body #collection.sap .ci-mini:nth-child(2){border-left-color:#e0a030!important;background:#fdf6e3!important}
-html body #collection.sap .ci-mini:nth-child(3){border-left-color:#4cb36b!important;background:#e8f6ec!important}
-html body #collection.sap .ci-mini:nth-child(4){border-left-color:#8a6fdc!important;background:#f1edfb!important}
-html body #collection.sap .ci-mini:nth-child(1){background:#e8f1fd!important}
-html body #collection.sap .cm{background:#fff!important;border:1px solid #dde5ee!important;border-left:4px solid #4cb36b!important;box-shadow:none!important;border-radius:8px!important}
-html body #collection.sap .ck-head{background:#efeafb!important;color:#5a3f9c!important}
-html body #collection.sap .ck-row{background:#fff!important;border-color:#e4e9f0!important}
-html body #collection.sap .od-table thead th{background:#e9eff6!important;color:#66727f!important;font-weight:600!important}
-html body #collection.sap .od-table tbody tr{background:#fff!important}
-html body #collection.sap .od-table tbody tr:nth-child(even){background:#f5f8fc!important}
-html body #collection.sap .od-table tbody td{color:#24303c!important}
-html body #collection.sap .od-label{color:#1c5aa8!important}
-html body #collection.sap .st-btn.od-clear{background:#fff!important;color:#2f7fd0!important;border:1px solid #2f7fd0!important}
-html body #collection.sap .od-table tbody td{background:transparent!important}
-.sx-bar{display:flex;gap:8px;margin:6px 0 10px;padding:0 2px}
-.sx-b{flex:none;border:1px solid #2f7fd0;background:#e6f1fd;color:#2f7fd0;border-radius:6px;padding:6px 12px;font-size:12.5px;font-weight:600}
-</style>
-<style id="fix42">/* nothing overlaps on a small screen: wide tables keep a minimum width and slide left-right inside their own box */
-.pc-w{overflow-x:auto;-webkit-overflow-scrolling:touch;max-width:100%}
-.pc-t{min-width:446px!important}
-.pc-t td,.pc-t th{overflow:hidden}
-.pc-t tr.pc-mr td{overflow:visible!important;white-space:normal!important;word-break:break-word;font-size:11.5px;line-height:1.3}
-.pc-t select{appearance:none;-webkit-appearance:none;padding:4px 14px 4px 5px!important;background:#fff linear-gradient(45deg,transparent 50%,#1f4e78 50%) no-repeat right 5px center/5px 5px!important}
-.pc-t td:nth-child(2){padding-left:6px!important}
-.pcm{display:block;position:sticky;left:0;box-sizing:border-box;width:270px;max-width:calc(100vw - 90px);padding:0!important;margin:0!important;white-space:normal;word-break:break-word}
-.pc-t th:first-child,.pc-t tr.pc-r td:first-child{position:sticky;left:0;z-index:2}
-.pc-t th:first-child{background:#e9eff6}.pc-t tr.pc-r td:first-child{background:#fff;box-shadow:2px 0 3px #0000001a}.pc-t tr.pc-bad td:first-child{background:#fdecec}
-.pc-nm b{overflow-wrap:anywhere}.pc-am{max-width:46%}
-.pc-ref label{max-width:100%}
-html body #collection .od-company-box .od-company-options{overflow-x:auto;-webkit-overflow-scrolling:touch}
-.qc-hd,.qc-r{min-width:312px;grid-template-columns:20px minmax(78px,1.2fr) 60px 56px minmax(70px,1fr)!important;gap:3px!important;padding:6px 2px!important}
-.qc-r .qc-dt{font-size:10.5px}
-html body #collection .od-company-box .od-company-options{padding-left:6px;padding-right:6px}
-.qc-r .qc-bn b,.qc-r .qc-bn small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-</style>
-
-<script>(function(){var mk=function(t,c,x){var e=document.createElement(t);if(c)e.className=c;if(x)e.textContent=x;return e};
-window.RDLSelUI={
-btns:function(a,n){var b=mk('div','sx-bar');[['Select all',a],['Deselect all',n]].forEach(function(p){var x=mk('button','sx-b',p[0]);x.type='button';x.onclick=function(e){e.preventDefault();e.stopPropagation();p[1]()};b.appendChild(x)});return b},
-tick:function(root,v,sel){root.querySelectorAll(sel||'input[type=checkbox]').forEach(function(i){if(i.disabled||i.checked===v)return;i.checked=v;i.dispatchEvent(new Event('change'))})},
-bar:function(card){var s=this,f=card.querySelector('.cg');if(!f||card.querySelector('.sx-bar'))return;card.insertBefore(s.btns(function(){s.tick(card,true,'.cg>.cg-h .dr-ck')},function(){s.tick(card,false,'.cg>.cg-h .dr-ck')}),f)}};
-['collection','drf'].forEach(function(i){var e=document.getElementById(i);if(!e)return;var f=function(){if(window.RDL_ROLE==='admin'){if(e.classList.contains('sap'))e.classList.remove('sap');return}if(!e.classList.contains('sap'))e.classList.add('sap')};f();new MutationObserver(f).observe(e,{attributes:true,attributeFilter:['class']})})})();</script>
 </body>
 </html>
