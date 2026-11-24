@@ -1753,7 +1753,7 @@ function showLogin(){
 function setLogin(t,bad){var m=document.getElementById('rgx-lm');if(m){m.textContent=t;m.className='rgx-msg'+(bad?' bad':'')}}
 function setDepotLabel(){if(S&&S.role==='user'&&S.depot){var p=jget('rdl.prefs.v1')||{};if(p.depot!==S.depot){p.depot=S.depot;LS.setItem('rdl.prefs.v1',JSON.stringify(p))}}}
 function wipeUserData(){Object.keys(LS).filter(function(k){return k.indexOf('rdl.')===0&&k!=='rdl.prefs.v1'&&k!=='rdl.cleanstart.v2'}).forEach(function(k){LS.removeItem(k)});
-  ['rdlgate.dataAt','rdlgate.dcrAt','rdlgate.ledAt','rdlgate.asg','rdlgate.bk','rdlgate.bkdirty','rdlgate.perms','rdlgate.chg'].forEach(function(k){LS.removeItem(k)})}
+  ['rdlgate.dataAt','rdlgate.dcrAt','rdlgate.ledAt','rdlgate.asg','rdlgate.bk','rdlgate.bksig','rdlgate.bkdirty','rdlgate.perms','rdlgate.chg'].forEach(function(k){LS.removeItem(k)})}
 /* ---------- keep the admin's own data when a depot user signs in on the same phone ---------- */
 function stashKeys(){return Object.keys(LS).filter(function(k){return k.indexOf('rdl.')===0&&k!=='rdl.prefs.v1'&&k!=='rdl.cleanstart.v2'}).concat(['rdlgate.bk','rdlgate.bkdirty','rdlgate.chg','rdlgate.dataAt','rdlgate.dcrAt'].filter(function(k){return LS.getItem(k)!==null}))}
 function idbOpen(){return new Promise(function(res,rej){try{var q=indexedDB.open('rdl-stash',1);q.onupgradeneeded=function(){q.result.createObjectStore('s')};q.onsuccess=function(){res(q.result)};q.onerror=function(){rej(q.error||new Error('IndexedDB error'))}}catch(e){rej(e)}})}
@@ -1884,17 +1884,26 @@ function bkAlert(msg,force){
     b.style.cssText='position:fixed;left:8px;right:8px;top:max(8px,env(safe-area-inset-top));z-index:100002;background:#c0392b;color:#fff;border-radius:12px;padding:10px 14px;font:700 13.5px system-ui,-apple-system,Segoe UI,Roboto,sans-serif;text-align:center;box-shadow:0 4px 14px rgba(0,0,0,.35);cursor:pointer';
     b.onclick=function(){b.textContent='\u23F3 Saving backup\u2026';bkFails=2;sendBackup().catch(function(){})};document.body.appendChild(b)}
   b.textContent='\u26A0 '+msg}
+/* a backup is only worth sending when the saved data really changed since the last backup that reached the server */
+function sigOf(d){var ks=Object.keys(d).filter(function(k){return k!=='rdl.bkp.v1'}).sort(),a=5381,b=0,n=0;
+  ks.forEach(function(k){var t=k+'\u0001'+d[k]+'\u0002';n+=t.length;for(var i=0;i<t.length;i++){var c=t.charCodeAt(i);a=((a<<5)+a+c)|0;b=(c+(b<<6)+(b<<16)-b)|0}});
+  return n+':'+(a>>>0).toString(36)+(b>>>0).toString(36)}
+function autoBackup(noPrompt){var sg;try{sg=sigOf(collect())}catch(e){return sendBackup(noPrompt)}
+  if(sg===LS.getItem('rdlgate.bksig')){LS.removeItem('rdlgate.bkdirty');return Promise.resolve()}   /* nothing new since the last backup: do not send the same data again */
+  return sendBackup(noPrompt)}
 function sendBackup(noPrompt){
   if(S&&S.role==='user'&&LS.getItem('rdlgate.owner')!=='user')return Promise.reject(new Error('still preparing this device, backup not sent'));   /* never send a half-loaded device as a backup */
   if(S&&S.role==='admin'&&!LS.getItem('rdl.master.v1'))return Promise.reject(new Error('this phone has no data yet, so no backup was sent (your saved backup is safe)'));
-  return api('putBackup',{data:collect(),meta:{dataAt:+LS.getItem('rdlgate.dataAt')||0,device:devId(),ua:devLabel()}},noPrompt).then(function(){
-    LS.setItem('rdlgate.bk',String(Date.now()));LS.removeItem('rdlgate.bkdirty');try{_s.call(LS,'rdl.bkp.v1',JSON.stringify({at:Date.now()}));window.dispatchEvent(new Event('rdl:remind'))}catch(e){}status('ব্যাকআপ সেভ হয়েছে '+hhmm(),'ok');bkAlert(null);bkFails=0;return flushChg(noPrompt)}).catch(function(e){if(!/still preparing|no data yet/.test(String(e&&e.message))){bkFails++;status('Backup failed: '+msgOf(e),'bad');
+  var D0=collect(),sg0='';try{sg0=sigOf(D0)}catch(e){}
+  return api('putBackup',{data:D0,meta:{dataAt:+LS.getItem('rdlgate.dataAt')||0,device:devId(),ua:devLabel()}},noPrompt).then(function(){
+    LS.setItem('rdlgate.bk',String(Date.now()));LS.removeItem('rdlgate.bkdirty');if(sg0)LS.setItem('rdlgate.bksig',sg0);try{_s.call(LS,'rdl.bkp.v1',JSON.stringify({at:Date.now()}));window.dispatchEvent(new Event('rdl:remind'))}catch(e){}status('ব্যাকআপ সেভ হয়েছে '+hhmm(),'ok');bkAlert(null);bkFails=0;return flushChg(noPrompt)}).catch(function(e){if(!/still preparing|no data yet/.test(String(e&&e.message))){bkFails++;status('Backup failed: '+msgOf(e),'bad');
     if(bkFails<3){setTimeout(function(){sendBackup(true).catch(function(){})},8000*bkFails)}   /* a short network hiccup: try again quietly, 8 and 16 seconds later */
     else bkAlert('Backup NOT saved \u2014 your latest work is not safe yet. Tap here to retry.')}throw e})}
 function backupIfDue(){
   var last=+LS.getItem('rdlgate.bk')||0,lastDay=last?new Date(last):null;
   var dueDay=!lastDay||(lastDay.getFullYear()+'-'+('0'+(lastDay.getMonth()+1)).slice(-2)+'-'+('0'+lastDay.getDate()).slice(-2))!==today();
-  if(LS.getItem('rdlgate.bkdirty')==='1'||dueDay)return sendBackup().catch(function(e){status('Backup pending: '+msgOf(e),'warn')});
+  if(dueDay)return sendBackup().catch(function(e){status('Backup pending: '+msgOf(e),'warn')});   /* the first backup of each day always goes (shows the admin the user was here) */
+  if(LS.getItem('rdlgate.bkdirty')==='1')return autoBackup().catch(function(e){status('Backup pending: '+msgOf(e),'warn')});
   status('Backup up to date','ok');return Promise.resolve()}
 var P=Storage.prototype,_s=P.setItem;
 /* ---------- who changed what ----------
@@ -1948,15 +1957,16 @@ function flushChg(noPrompt){
   return api('putChanges',{items:a.slice(0,n)},noPrompt).then(function(){var cur=jget(CHG)||[];jset(CHG,cur.slice(n))}).catch(function(){})}
 P.setItem=function(k,v){
   var ch=(this===LS&&S&&typeof k==='string'&&KIND[k]&&!sysW),old=null;if(ch){try{old=LS.getItem(k)}catch(e){}}
+  var same=false;if(this===LS&&typeof k==='string'&&k.indexOf('rdl.')===0){try{same=(LS.getItem(k)===String(v))}catch(e){}}   /* the same value written again is no change */
   var r=_s.apply(this,arguments);
   if(ch){try{noteChange(k,old,String(v))}catch(e){}}
   if(this===LS&&S&&S.role==='admin'&&!sysW&&(k==='rdl.master.v1'||k==='rdl.croff.v1')){clearTimeout(pubT);pubT=setTimeout(function(){publishDirty()},4000)}   /* Upload / Update / Correction / Credit Line On-Off: published a few seconds after the last change */
-  if(this===LS&&typeof k==='string'&&k.indexOf('rdl.')===0&&k!=='rdl.bkp.v1'&&S){_s.call(LS,'rdlgate.bkdirty','1');clearTimeout(timer);timer=setTimeout(function(){
-    if(Date.now()-lastPrompt<600000&&!hasAuth()){bkAlert('Backup NOT saved \u2014 sign-in expired. Tap here to sign in and save.');return}lastPrompt=Date.now();sendBackup().catch(function(){})},3000)}
+  if(this===LS&&typeof k==='string'&&k.indexOf('rdl.')===0&&k!=='rdl.bkp.v1'&&S&&!same){_s.call(LS,'rdlgate.bkdirty','1');clearTimeout(timer);timer=setTimeout(function(){
+    if(Date.now()-lastPrompt<600000&&!hasAuth()){bkAlert('Backup NOT saved \u2014 sign-in expired. Tap here to sign in and save.');return}lastPrompt=Date.now();autoBackup().catch(function(){})},3000)}
   return r};
-document.addEventListener('visibilitychange',function(){if(document.visibilityState==='hidden'&&S&&LS.getItem('rdlgate.bkdirty')==='1'&&hasAuth())sendBackup(true).catch(function(){})});
+document.addEventListener('visibilitychange',function(){if(document.visibilityState==='hidden'&&S&&LS.getItem('rdlgate.bkdirty')==='1'&&hasAuth())autoBackup(true).catch(function(){})});
 /* instant backup, retried: a failed backup (no internet, expired sign-in) is tried again every 3 minutes, when the net returns and when the app is opened again */
-function retryBackup(){if(S&&LS.getItem('rdlgate.bkdirty')==='1'&&hasAuth())sendBackup(true).catch(function(){})}
+function retryBackup(){if(S&&LS.getItem('rdlgate.bkdirty')==='1'&&hasAuth())autoBackup(true).catch(function(){})}
 setInterval(retryBackup,180000);window.addEventListener('online',function(){setTimeout(retryBackup,2000)});
 document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible')setTimeout(retryBackup,1500)});
 
@@ -2188,6 +2198,8 @@ function bkNew(users,admins){
   var b=document.getElementById('rgx-bkal');if(b){b.onclick=function(){bkAlert(null)};setTimeout(function(){bkAlert(null)},9000)}}
 function bkRender(j){
   if(j&&j.users){bkLast=j;bkNew(j.users,j.admins)}
+  if(j&&j.users){try{var mg0=jget('rdlgate.merged')||{},pn=j.users.filter(function(u){var t=u.last?Date.parse(u.last):0;return t&&t>(+mg0[u.email]||0)}).length,ch0=document.getElementById('rgx-hub'),gb=document.getElementById('rgx-pnd');
+    if(ch0){if(!pn){if(gb)gb.remove()}else{if(!gb){gb=h('i');gb.id='rgx-pnd';gb.style.cssText='font-style:normal;position:absolute;right:calc(50% - 26px);top:2px;min-width:17px;height:17px;padding:0 4px;box-sizing:border-box;border-radius:9px;color:#fff;background:#16a34a;font:700 11px/17px system-ui,sans-serif;text-align:center;border:2px solid #fff;pointer-events:none';ch0.appendChild(gb)}gb.textContent=String(pn)}}}catch(e){}}   /* green number = users with new work not yet taken into the database */
   var el=document.getElementById('bkStat');if(!el||!j||!j.users)return;
   var users=j.users.slice(),merged=jget('rdlgate.merged')||{},now=Date.parse(j.now)||Date.now(),n={red:0,amber:0,green:0};
   users.forEach(function(u){var t=u.last?Date.parse(u.last):0,min=t?Math.max(0,Math.round((now-t)/60000)):0;
@@ -2265,18 +2277,17 @@ function showMergeReport(r,reloadFn){
   var b1=h('button',null,'Close');b1.type='button';b1.style.cssText='flex:1;padding:12px;border-radius:12px;border:0;background:#e8eef5;color:#1f4e78;font-size:15px;font-weight:700';b1.onclick=function(){w.remove()};ft.appendChild(b1);
   if(r.done.length){var b2=h('button',null,'Reload to see');b2.type='button';b2.style.cssText='flex:1;padding:12px;border-radius:12px;border:0;background:#1f4e78;color:#fff;font-size:15px;font-weight:700';b2.onclick=function(){w.remove();(reloadFn||function(){location.reload()})()};ft.appendChild(b2)}
   c.appendChild(ft);w.appendChild(c);document.body.appendChild(w)}
-/* admin: new user backups are merged by themselves (only while the Home page is showing and the menu is closed, so no work in progress is touched) */
+/* admin: new user backups are NOT merged or reloaded by themselves any more. The app only tells the admin (green number on the Data Hub icon + one message);
+   the admin takes the new work into the database with the button in Data Hub ("ইউজারদের কাজ আমার অ্যাপে আনুন") when he wants */
+var pndSig='';
 function autoMerge(){
-  if(!S||S.role!=='admin'||amBusy||!onHomePage()||panelOn||document.visibilityState!=='visible'||!LS.getItem('rdl.master.v1'))return Promise.resolve();
+  if(!S||S.role!=='admin'||amBusy||document.visibilityState!=='visible'||!LS.getItem('rdl.master.v1'))return Promise.resolve();
   amBusy=1;
   return api('backupStatus',{},true).then(function(j){bkRender(j);
-    var mg=jget('rdlgate.merged')||{},tr=jget('rdlgate.mtried')||{};
-    var pend=j.users.some(function(u){var t=u.last?Date.parse(u.last):0;return t&&t>Math.max(+mg[u.email]||0,+tr[u.email]||0)});
-    if(!pend)return;
-    return mergeBackups(null,1).then(function(r){var t2=jget('rdlgate.mtried')||{};r.done.concat(r.late).forEach(function(b){t2[b.email]=+new Date(b.at)||0});jset('rdlgate.mtried',t2);
-      if(!r.done.length)return;
-      var go=function(){toast('New data from users merged');setTimeout(function(){if(onHomePage()&&!panelOn)location.reload()},1500)};
-      return S.root?pushData({quiet:true}).then(function(t){if(t&&/^Published/.test(t))toast('Published to all admins and depots')},pubFail).then(go):go()})
+    var mg=jget('rdlgate.merged')||{},p=j.users.filter(function(u){var t=u.last?Date.parse(u.last):0;return t&&t>(+mg[u.email]||0)});
+    var sg=p.map(function(u){return u.email+'@'+u.last}).join('|');
+    if(p.length&&sg!==pndSig){pndSig=sg;setTimeout(function(){toast('নতুন ডাটা এসেছে: '+p.length+' জন ইউজার। Data Hub থেকে ডাটাবেজে নিন।')},4300)}   /* after other messages, so two never sit on top of each other */
+    if(!p.length)pndSig=''
   }).catch(function(){}).then(function(){amBusy=0})}
 /* any person: work saved from my OTHER device is added to this one when I come back to it */
 function syncOther(){
@@ -2568,7 +2579,7 @@ function buildHub(){
       buildHub();showMergeReport(r);
       if(!r.done.length)return 'কিছু মার্জ হয়নি';
       if(!S.root)return '✓ মার্জ হয়েছে';
-      return pushData({}).then(function(){return '✓ মার্জ হয়েছে এবং সব এডমিন ও ডিপোতে পাঠানো হয়েছে'},function(e){return '✓ মার্জ হয়েছে, কিন্তু পাঠানো যায়নি: '+msgOf(e)})})})},'ইউজাররা যা পোস্ট করেছে তা আপনার অ্যাপে যোগ হয়। সাধারণত নিজে থেকেই হয়। উপরের কার্ডে "এখনো আপনার অ্যাপে আনা হয়নি" দেখালে এটা চাপুন।');
+      return pushData({}).then(function(){return '✓ মার্জ হয়েছে এবং সব এডমিন ও ডিপোতে পাঠানো হয়েছে'},function(e){return '✓ মার্জ হয়েছে, কিন্তু পাঠানো যায়নি: '+msgOf(e)})})})},'ইউজাররা যা পোস্ট করেছে তা আপনার অ্যাপে যোগ হয়। এটা নিজে থেকে হয় না, আপনি চাপলে তবেই হয়। উপরের কার্ডে "এখনো আপনার অ্যাপে আনা হয়নি" দেখালে এটা চাপুন।');
     fold(dpSec,'dp');
   }else{
     card('সর্বশেষ তথ্য নিন','hero','ref',function(b){run(b,'দেখা হচ্ছে…',function(){return pullData(false).then(function(c){if(c){setTimeout(function(){location.reload()},800);return 'নতুন তথ্য এসেছে। রিলোড হচ্ছে…'}return 'আপনার কাছে সর্বশেষ তথ্যই আছে।'})})},'অ্যাডমিন নতুন ডাটাবেস পাঠালে এটা চেপে নিন।');
@@ -2865,7 +2876,7 @@ function start(){
     try{google.accounts.id.prompt()}catch(e){}
     setTimeout(function(){if(!hasAuth())status('Tap ☁ and press the blue button to sign in','warn')},6000)})}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start);else start();
-window.RDLGATE={bkRender:bkRender,mergeBackups:mergeBackups,showMergeReport:showMergeReport,bkSummary:bkSummary,sendBackup:sendBackup,api:api,lockNow:function(){LS.setItem('rdlgate.last','0');lockNow()},changePin:changePin,depotNames:depotNames,build:buildPkgs,mergeVal:mergeVal,session:function(){return S},buildHub:function(){buildHub()},renderPanel:function(on){panelOn=on!==false;renderPanel()}};
+window.RDLGATE={autoBackup:autoBackup,bkRender:bkRender,mergeBackups:mergeBackups,showMergeReport:showMergeReport,bkSummary:bkSummary,sendBackup:sendBackup,api:api,lockNow:function(){LS.setItem('rdlgate.last','0');lockNow()},changePin:changePin,depotNames:depotNames,build:buildPkgs,mergeVal:mergeVal,session:function(){return S},buildHub:function(){buildHub()},renderPanel:function(on){panelOn=on!==false;renderPanel()}};
 })();
 </script>
 
@@ -4062,7 +4073,7 @@ function manualPage(P,ttl,bk){
   const pd=el('input','list-search');pd.type='date';pd.value=t0;pd.max=t0;F('Posting date (cannot be after today)',pd).classList.add('sq-3');
   const holder=form.appendChild(el('div'));
   const st=form.appendChild(el('div','stt'));
-  const bar=form.appendChild(el('div','sq-bar')),pb=el('button','st-btn','Save Collection');pb.type='button';
+  const bar=form.appendChild(el('div','sq-bar')),pb=el('button','st-btn','Save to Review');pb.type='button';
   const bv={};[['Collected','col'],['TDS','tds'],['Total','tot'],['Balance','bal']].forEach(([l,k])=>{const d=el('div','sq-bi');d.appendChild(el('small',null,l));bv[k]=d.appendChild(el('b',null,__m(0).replace('/=','')));bar.appendChild(d)});bar.appendChild(pb);
   function barUpd(){let c=0,t=0,tt=0;blocks.forEach(o=>{if(o.covered)return;c+=o.col();t+=o.tdv();tt+=o.chosen().reduce((x,b)=>x+bal(b),0)});
     const rem=Math.max(0,+(tt-c-t).toFixed(2));const q=x=>__m(x).replace('/=','');bv.col.textContent=q(c);bv.tds.textContent=q(t);bv.tot.textContent=q(c+t);bv.bal.textContent=q(rem);bv.bal.className=tt>0?(rem>0.005?'sq-rem':'sq-ok'):''}
@@ -4261,6 +4272,19 @@ function manualPage(P,ttl,bk){
       QCS.length=0;
       msg.c='✓ Saved '+n+' collection draft'+(n===1?'':'s')+' • '+__m(gc+gt)+'. Review and post it from Posting Center → Drafts.';cards();document.dispatchEvent(new Event('visibilitychange'));render('c');hubReload()};
     window.scrollTo(0,0)}
+  /* Submit to Drafts: saves every saved collection straight to Drafts (same save as the old review page's "Save to Draft"), no review page in between */
+  function submitToDrafts(errEl){const E=QCS;if(!E.length)return;const groups=E.flatMap(e=>e.groups),parts=E.flatMap(e=>e.parts);let gc=0,gt=0;groups.forEach(g=>{gc+=g.col;gt+=g.tds});
+    const L2=ld();L2.dr=L2.dr||[];const len0=L2.dr.length;let n=0;
+    /* same non-blocking warnings the review page showed; they now ride in the confirmation message */
+    const warns=[];
+    groups.forEach(g=>{const rf=g.o.rf.value.trim();if(rf&&L2.dz.some(z=>String(z.cu)===String(g.e.bp)&&z.type===g.o.ty.value&&String(z.ref||'').toLowerCase()===rf.toLowerCase()))warns.push(g.o.ty.value+' no. '+rf+' was already posted for this customer — check for a duplicate.');
+      if(g.o.ty.value!=='Cash'&&!rf)warns.push(R.coName(g.o.co)+': '+g.o.ty.value+' number is empty.')});
+    if(parts.some(x=>x.b.post&&x.e.f<x.b.post))warns.push('Posting date is earlier than the date of one or more selected bills.');
+    for(const x of parts){const o=x.o;L2.dr.push({id:uid0(),cu:x.b.cu,co:x.b.co,nm:x.b.nm||names.get(String(x.b.cu)),ag:uid(x.b),bn:String(x.b.bill),col:x.c,tds:x.t,...(x.xt?{xt:+x.xt.toFixed(2)}:{}),type:o.ty.value,ref:o.rf.value.trim(),...(o.rd.value?{rd:o.rd.value}:{}),pdt:x.e.f,ds:today(),manual:1,...(x.b.due?{bd:x.b.due}:{}),at:Date.now()});n++}
+    try{sv(L2)}catch(e){L2.dr.length=len0;if(errEl){errEl.className='stt bad';errEl.textContent='Could not save on this device'}return}
+    QCS.length=0;
+    const note='✓ Sent '+n+' collection'+(n===1?'':'s')+' • '+__m(gc+gt)+' to Pending Collections. Tick the customers below and press Post Selected.'+(warns.length?' ⚠ '+warns.join(' ⚠ '):'');
+    msg.c=note;cards();document.dispatchEvent(new Event('visibilitychange'));render('c');hubReload('c',{t:note,k:warns.length?'warn':'ok'})}   /* the app reloads as before, then opens the Pending Collections page */
   /* ---------- Save Collection / Saved Collections box ---------- */
   let editId=null;const sbox=form.insertBefore(el('div','st-card sapq'),card),dbox=form.insertBefore(el('div'),card);
   const small='padding:6px 14px;font-size:13px;min-height:0;width:auto;margin:0';
@@ -4283,7 +4307,7 @@ function manualPage(P,ttl,bk){
     const sst=el('div','stt'),F=QF;
     sbox.appendChild(el('div','hint','Saved collections')).style.cssText='font-weight:800;margin:10px 0 4px';
     const rows=[];QCS.forEach(e=>e.groups.forEach(g=>g.ps.forEach(x=>rows.push({e,cu:e.nm,code:String(e.bp),co:String(x.b.co),bill:String(x.b.bill),ty:g.o.ty.value,ref:g.o.rf.value.trim(),date:e.f,col:x.c,tds:tx(x),tot:x.c+tx(x),left:x.left}))));
-    const editE=e=>{if(dirty()){sst.className='stt bad';sst.textContent='The collection on the form below is not saved yet. Press Save Collection first.';return}editId=e.id;restore(e);renderSaved();st.className='stt warn';st.textContent='Editing '+e.nm+' — change it and press Save Collection to update.';card.scrollIntoView({behavior:'smooth'})};
+    const editE=e=>{if(dirty()){sst.className='stt bad';sst.textContent='The collection on the form below is not saved yet. Press Save to Review first.';return}editId=e.id;restore(e);renderSaved();st.className='stt warn';st.textContent='Editing '+e.nm+' — change it and press Save Collection to update.';card.scrollIntoView({behavior:'smooth'})};
     const delE=async e=>{const ok=await RDLUI.ask({title:'Delete saved collection?',msg:e.nm+' ('+e.bp+') will be removed from the saved list.',ok:'Delete',danger:true});if(!ok)return;QCS.splice(QCS.indexOf(e),1);if(editId===e.id){editId=null;resetForm();st.textContent='';st.className='stt'}renderSaved()};
     const NUM=new Set(['col','tds','tot','left']);
     const KEY={cu:r=>r.code,co:r=>r.co,bill:r=>r.bill,ty:r=>r.ty,ref:r=>r.ref||'',date:r=>r.date,col:r=>(+r.col).toFixed(2),tds:r=>r.tds>EPS?r.tds.toFixed(2):'0',tot:r=>(+r.tot).toFixed(2),left:r=>r.left<=EPS?'0':r.left.toFixed(2)};
@@ -4343,8 +4367,8 @@ function manualPage(P,ttl,bk){
       ['col','tds','tot','left'].forEach(k=>ft.appendChild(el('td','num',qn(sum(list,r=>r[k])))));ft.appendChild(el('td'));tf.appendChild(ft)}
     draw();
     sbox.appendChild(sst);
-    const rb=el('button','st-btn','Review Collection');rb.type='button';rb.style.cssText='display:block;width:100%;margin-top:8px';
-    rb.onclick=()=>{if(dirty()){sst.className='stt bad';sst.textContent='The collection on the form below is not saved yet. Press Save Collection first.';return}if(!QCS.length)return;showReview()};sbox.appendChild(rb);
+    const rb=el('button','st-btn','Send to Pending Collections');rb.type='button';rb.style.cssText='display:block;width:100%;margin-top:8px';
+    rb.onclick=()=>{if(dirty()){sst.className='stt bad';sst.textContent='The collection on the form below is not saved yet. Press Save to Review first.';return}if(!QCS.length)return;submitToDrafts(sst)};sbox.appendChild(rb);
     {const L0=ld(),[w1,w2]=wk(today());
       const rvx=(host,items)=>{const g=host.appendChild(el('div','rvx'));items.forEach(([k,v,sb,c,full])=>{const d=el('div',c+(full?' full':''));d.appendChild(el('small',null,k));d.appendChild(el('strong',null,v));if(sb)d.appendChild(el('em',null,sb));g.appendChild(d)})};
       const detBox=(title,rr)=>{const c0=sum(rr,x=>+x.col||0),t1=sum(rr,x=>+x.tds||0),bx=dbox.appendChild(el('details','st-card sapq sq-fold'));bx.appendChild(el('summary',null,title));
@@ -4355,7 +4379,7 @@ function manualPage(P,ttl,bk){
     if(QCS.some(e=>e.id!==editId&&String(e.bp)===String(en.bp))){st.className='stt bad';st.textContent=en.nm+' is already saved. Edit or delete it in Saved Collections first.';return}
     en.snap={cu:cu.value,f:pd.value,cos:[...cos],blocks:[...blocks.values()].map(o=>o.snap())};
     const i=QCS.findIndex(e=>e.id===editId&&String(e.bp)===String(en.bp));if(i>=0){en.id=editId;QCS[i]=en}else QCS.push(en);
-    editId=null;resetForm();renderSaved();st.className='stt ok';st.textContent='✓ '+en.nm+' saved • '+money(sum(en.groups,g=>g.col+g.tds))+'. Choose the next customer, or press Review Collection in Saved Collections.';window.scrollTo(0,0)};
+    editId=null;resetForm();renderSaved();st.className='stt ok';st.textContent='✓ '+en.nm+' saved • '+money(sum(en.groups,g=>g.col+g.tds))+'. Choose the next customer, or press Send to Pending Collections in Saved Collections.';window.scrollTo(0,0)};
   loadCos();renderSaved()}
 function render(w,rev){window.RDLNav&&RDLNav.level(w,rev?1:0,()=>render(w));if(rev!=='manual'&&mState){const n=mState;mState=0;try{history.go(-n)}catch(e){}}
   const K=KIND[w],P=$('#'+K.id);P.className='pg st'+(P.classList.contains('on')?' on':'');P.textContent='';
@@ -4412,6 +4436,69 @@ const incl={},incKey=(d,n,ck)=>d+'|'+norm(n)+'|'+ck,getInc=(d,n,ck)=>incl[incKey
 function coCls(c){const n=parseInt(c);if(n>=1000&&n<=9000&&n%1000===0)return 'co'+(n/1000-1);return 'co'+(String(c).split('').reduce((h,ch)=>(h*31+ch.charCodeAt(0))>>>0,7)%9)}
 const isCash=e=>false,/* Cash now waits in Draft-Collection too, like Cheque / BEFTN */uid0=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 const BKS='<svg class="bk-ar" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 12h-15M10.5 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="4.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+/* ===== Pending Collections / Pending Sales: summary box on top (tick, edit, delete, Post selected) ===== */
+const PCF=new Set(['cash','cheque','beftn']),pcAll=()=>{PCF.clear();['cash','cheque','beftn'].forEach(x=>PCF.add(x))};let PEND_NOTE=null;
+const pcQ=v=>money(v).replace(/^\S+\s*/,'').replace('/=',''),pcT=(bl,t)=>bl.reduce((a,b)=>{const i=b._info();return a+(String(i.t).toLowerCase()===t?i.c:0)},0);
+function pendSummary(sx,GS,o){
+  sx.textContent='';
+  const blksOf=s=>s.cks.reduce((a,x)=>a.concat(x.blks.filter(b=>b.isConnected)),[]);
+  if(!GS.length&&!o.chips&&!PEND_NOTE){sx.remove();return}
+  sx.appendChild(el('h3',null,o.title));
+  const msg=sx.appendChild(el('div','stt'));
+  if(PEND_NOTE){msg.className='stt '+PEND_NOTE.k;msg.textContent=PEND_NOTE.t;PEND_NOTE=null}
+  if(o.chips){const row=sx.appendChild(el('div','rq'));o.chips.forEach(([lab,key])=>{const b=el('button',null,lab),on=PCF.has(key);b.type='button';if(on)b.className='on';b.setAttribute('aria-pressed',on);
+    b.onclick=()=>{if(PCF.has(key)){if(PCF.size<2)return;PCF.delete(key)}else PCF.add(key);o.rebuild()};row.appendChild(b)})}
+  if(!GS.length)return;
+  const bar=sx.appendChild(el('div','pc-bar')),info=el('span','pc-i'),btn=el('button','st-btn','Post Selected');btn.type='button';bar.appendChild(info);bar.appendChild(btn);
+  const wrap=sx.appendChild(el('div','sq-scroll')),tb=el('table','sq-tbl pc-tbl'),th=el('thead'),hr=el('tr'),tbd=el('tbody'),tf=el('tfoot');
+  const allC=mkCk(),h0=el('th');h0.appendChild(allC);hr.appendChild(h0);hr.appendChild(el('th',null,'Customer'));o.cols.forEach(c=>hr.appendChild(el('th','num',c[0])));hr.appendChild(el('th',null,''));
+  th.appendChild(hr);tb.appendChild(th);tb.appendChild(tbd);tb.appendChild(tf);wrap.appendChild(tb);
+  const openSet=new Set();
+  const chosen=()=>GS.reduce((a,s)=>a.concat(s.cks.filter(x=>x.ck.checked).reduce((b,x)=>b.concat(x.blks.filter(z=>z.isConnected)),[])),[]);
+  const updInfo=()=>{const sel=chosen(),tot=sel.reduce((a,b)=>a+(b._amt?b._amt():0),0);
+    info.textContent=sel.length?sel.length+' bill'+(sel.length===1?'':'s')+' • '+money(tot):'Tick customers to post their bills together';btn.disabled=!sel.length;
+    const live=GS.filter(x=>blksOf(x).length),on=live.filter(x=>x.gck.checked).length;allC.checked=!!live.length&&on===live.length;allC.indeterminate=on>0&&on<live.length};
+  const sync=s=>{if(s.rc){s.rc.checked=s.gck.checked;s.rc.indeterminate=s.gck.indeterminate}updInfo()};
+  GS.forEach(s=>{s.gck.addEventListener('change',()=>sync(s));s.cks.forEach(x=>x.ck.addEventListener('change',()=>sync(s)))});
+  allC.onchange=()=>{const v=allC.checked;GS.forEach(s=>{if(!blksOf(s).length)return;s.gck.checked=v;s.gck.indeterminate=false;s.gck.dispatchEvent(new Event('change'))})};
+  const refresh=()=>{if(!sx.isConnected)return;tbd.textContent='';tf.textContent='';const tot=o.cols.map(()=>0);let n=0;
+    GS.forEach(s=>{const bl=blksOf(s);if(!bl.length)return;n++;
+      const tr=el('tr'),c0=el('td'),rc=mkCk();s.rc=rc;rc.checked=s.gck.checked;rc.indeterminate=s.gck.indeterminate;c0.appendChild(rc);tr.appendChild(c0);
+      rc.onchange=()=>{s.gck.checked=rc.checked;s.gck.indeterminate=false;s.gck.dispatchEvent(new Event('change'))};
+      const nm=el('td','pc-n',(openSet.has(s.cu)?'▾ ':'▸ ')+s.nm+' • '+s.cu);nm.onclick=()=>{openSet.has(s.cu)?openSet.delete(s.cu):openSet.add(s.cu);refresh()};tr.appendChild(nm);
+      o.cols.forEach((c,i)=>{const v=c[1](bl);tot[i]+=v;tr.appendChild(el('td','num',c[2]===false?String(v):pcQ(v)))});
+      const ac=el('td','pc-a'),mk=(txt,tt,col,fn)=>{const b=el('button',null,txt);b.type='button';b.title=tt;b.setAttribute('aria-label',tt);b.style.cssText='border:1px solid '+col+';color:'+col+';background:#fff;border-radius:8px;padding:3px 8px;margin-left:4px;font-size:14px;min-height:0;width:auto';b.onclick=fn;ac.appendChild(b)};
+      mk('✎','Edit this customer','#0a4fd0',()=>{s.gx.scrollIntoView({behavior:'smooth',block:'start'});s.gx.classList.add('pc-flash');setTimeout(()=>s.gx.classList.remove('pc-flash'),1600);
+        blksOf(s).forEach(b=>{const d=b.nextElementSibling;if(d&&d.classList.contains('sq-dt')&&d.style.display==='none')b.click()})});   /* opens the bill rows so they can be edited in place */
+      mk('🗑','Delete this customer\'s pending bills','#c0392b',async()=>{const bk=blksOf(s),ids=bk.map(b=>b._id).filter(Boolean),tt=bk.reduce((a,b)=>a+(b._amt?b._amt():0),0);if(!ids.length)return;
+        const txt=s.nm+' • '+ids.length+' bill'+(ids.length===1?'':'s')+' • '+money(tt)+'. The bills stay open.';
+        const ok=window.RDLUI&&RDLUI.ask?await RDLUI.ask({title:'Delete these pending bills?',msg:txt,ok:'Delete'}):confirm('Delete these pending bills? '+txt);if(!ok)return;
+        const L2=ld();window.RDLDDEL&&RDLDDEL(L2,ids);L2[o.key]=(L2[o.key]||[]).filter(e=>!ids.includes(e.id));try{sv(L2)}catch(e){return}cards();document.dispatchEvent(new Event('visibilitychange'));o.rebuild()});
+      tr.appendChild(ac);tbd.appendChild(tr);
+      if(openSet.has(s.cu)){const dr=el('tr','pc-dt'),dc=el('td'),dl=el('div','pc-dl');dc.colSpan=o.cols.length+3;bl.forEach(b=>{const i=b._info?b._info():null;if(i)dl.appendChild(el('div',null,o.line(i)))});dc.appendChild(dl);dr.appendChild(dc);tbd.appendChild(dr)}});
+    const ft=el('tr','pc-tot');ft.appendChild(el('td'));ft.appendChild(el('td',null,'Total • '+n+' customer'+(n===1?'':'s')));o.cols.forEach((c,i)=>ft.appendChild(el('td','num',c[2]===false?String(tot[i]):pcQ(tot[i]))));ft.appendChild(el('td'));tf.appendChild(ft);updInfo()};
+  GS.forEach(s=>{s.gx.addEventListener('input',e=>{if(e.target.type!=='checkbox')refresh()});s.gx.addEventListener('change',e=>{if(e.target.type!=='checkbox')refresh()})});
+  btn.onclick=async()=>{const sel=chosen();if(!sel.length)return;const tot=sel.reduce((a,b)=>a+(b._amt?b._amt():0),0),txt=sel.length+' bill'+(sel.length===1?'':'s')+' • '+money(tot)+'. Post now?';
+    const ok=window.RDLUI&&RDLUI.ask?await RDLUI.ask({title:'Post selected bills?',msg:txt,ok:'Post'}):confirm('Post selected bills? '+txt);if(!ok)return;
+    const used=new Map();let done=0,left=0;sel.forEach(b=>{if(b._post(used)){done++;b._ok=1}else left++});
+    if(done){cards();document.dispatchEvent(new Event('visibilitychange'))}
+    if(!left){o.rebuild();   /* all posted: open the Sales & Collection Register on what was just posted */
+      const rs=sel.map(b=>b._res).filter(Boolean);
+      if(rs.length&&window.RDL&&RDL.openReg){const k=rs.some(r=>r.k==='RV')?'RV':'DZ',a=rs.filter(r=>r.k===k);let q2='';
+        if(a.length===1)q2=a[0].doc;
+        else if(a.every(r=>String(r.cu)===String(a[0].cu)))q2=String(a[0].cu);
+        else{const ds=a.map(r=>r.d).filter(Boolean).sort();R.historyRange=ds.length?{a:ds[0],b:ds[ds.length-1]}:null}
+        window.RDL.openUpload();Promise.resolve().then(()=>RDL.openReg([k],q2,true))}
+      return}
+    sel.forEach(b=>{if(b._ok)b.remove()});
+    GS.forEach(x=>{x.cks.forEach(c=>{if(c.totUp)c.totUp();if(!c.blks.some(b=>b.isConnected)&&c.row.isConnected)c.row.remove()});
+      const cn=x.gx.querySelector('.cg-n');if(cn){const n=x.cks.filter(c=>c.blks.some(b=>b.isConnected)).length;cn.textContent=n+(n===1?' company':' companies')}
+      if(!blksOf(x).length&&x.gx.isConnected)x.gx.remove()});
+    const card0=o.card&&o.card(),hint=card0&&card0.querySelector('.dr-c');
+    if(card0&&hint){const all=[...card0.querySelectorAll('.cl-card,.sq-drt>tbody>tr:not(.sq-dt)')],tt=all.reduce((a,b)=>a+(b._amt?b._amt():0),0),mm=hint.textContent.match(/^(\d+ drafts? • .*?\/=)(\..*)$/);if(mm)hint.textContent=all.length+' draft'+(all.length===1?'':'s')+' • '+money(tt)+mm[2]}
+    msg.className='stt warn';msg.textContent=done+' posted • '+left+' could not be posted and stay pending (see the red message under each one).';refresh();
+    const f1=sel.find(b=>!b._ok&&b.isConnected);if(f1)f1.scrollIntoView({block:'center',behavior:'smooth'})};
+  refresh()}
 /* ===== tick boxes + "Post selected" for the draft pages (company tick, customer tick) ===== */
 function mkCk(){const c=document.createElement('input');c.type='checkbox';c.className='dr-ck';c.setAttribute('aria-label','Select for posting');return c}
 function bulkBar(gx,gck,cks,rebuild){
@@ -4440,12 +4527,15 @@ function bulkBar(gx,gck,cks,rebuild){
     if(card0&&hint){const all=[...card0.querySelectorAll('.cl-card,.sq-drt>tbody>tr:not(.sq-dt)')],tt=all.reduce((a,b)=>a+(b._amt?b._amt():0),0),mm=hint.textContent.match(/^(\d+ drafts? • .*?\/=)(\..*)$/);if(mm)hint.textContent=all.length+' draft'+(all.length===1?'':'s')+' • '+money(tt)+mm[2]}
     msg.className='stt warn';msg.textContent=done+' posted • '+left+' could not be posted and stay in draft (see the red message under each one).';upd()};
   upd();return bar}
-function buildDrafts(kind){const P=$('#drf');P.textContent='';const L=ld(),all0=(L.dr||[]).slice().sort((a,b)=>b.at-a.at),dr=kind?all0.filter(e=>String(e.type||'').toLowerCase()===kind.toLowerCase()):all0,m=R.master,t=ymd(new Date()),T6=(()=>{const x=new Date();x.setDate(x.getDate()+6);return ymd(x)})(),EPS=0.005,dm=v=>v?v.slice(8,10)+'/'+v.slice(5,7)+'/'+v.slice(0,4):'—';
-  const top=el('div','st-top'),bb=el('button');bb.type='button';bb.innerHTML=BKS;bb.setAttribute('aria-label','Back');bb.onclick=kind?()=>buildDrafts():()=>window.RDL.openUpload();top.appendChild(bb);top.appendChild(el('h2',null,kind==='Sales'?'Pending Sales':kind?'Pending Collections ('+kind+')':'Pending Drafts'));P.appendChild(top);
+function buildDrafts(kind){const P=$('#drf');P.textContent='';const L=ld(),all0=(L.dr||[]).slice().sort((a,b)=>b.at-a.at),dr=kind==='Collections'?all0.filter(e=>PCF.has(String(e.type||'').toLowerCase())):kind?all0.filter(e=>String(e.type||'').toLowerCase()===kind.toLowerCase()):all0,m=R.master,t=ymd(new Date()),T6=(()=>{const x=new Date();x.setDate(x.getDate()+6);return ymd(x)})(),EPS=0.005,dm=v=>v?v.slice(8,10)+'/'+v.slice(5,7)+'/'+v.slice(0,4):'—';
+  const top=el('div','st-top'),bb=el('button');bb.type='button';bb.innerHTML=BKS;bb.setAttribute('aria-label','Back');bb.onclick=(kind&&kind!=='Collections'&&kind!=='Sales')?()=>buildDrafts():()=>window.RDL.openUpload();top.appendChild(bb);top.appendChild(el('h2',null,kind==='Sales'?'Pending Sales':kind==='Collections'?'Pending Collections':kind?'Pending Collections ('+kind+')':'Pending'));P.appendChild(top);
   if(!kind){draftHub(P,all0);return}
   if(kind==='Sales'){salesDrafts(P);return}
-  if(!dr.length){P.appendChild(el('p','hint','No '+kind+' drafts. '+kind+' collections from Review Upload wait here until you post them.'));return}
-  const card0=P.appendChild(el('div','st-card hubf hub-c sapq sq-dr'));{const h0=el('h3',null,kind+' Drafts');h0.style.cssText='text-align:center;font-size:18px;font-weight:800';card0.appendChild(h0)}
+  const sx=P.appendChild(el('div','st-card sapq pc-sum')),GS=[],pcOpts={title:'Summary',key:'dr',rebuild:()=>buildDrafts(kind),card:()=>card0,chips:kind==='Collections'?[['Cash','cash'],['Cheque','cheque'],['BEFTN','beftn']]:null,
+    cols:[['Cash',bl=>pcT(bl,'cash')],['Cheque',bl=>pcT(bl,'cheque')],['BEFTN',bl=>pcT(bl,'beftn')],['TDS',bl=>bl.reduce((a,b)=>a+b._info().x,0)],['Total',bl=>bl.reduce((a,b)=>a+b._amt(),0)]],
+    line:i=>i.bn+' • '+(R.coName?R.coName(i.co):String(i.co))+' • '+i.t+' • '+pcQ(i.c)+(i.x>0?' + TDS '+pcQ(i.x):'')};
+  if(!dr.length){pendSummary(sx,[],pcOpts);P.appendChild(el('p','hint',kind==='Collections'?'No pending collections for the selected types. Collections sent from Quick Collection or Review Upload wait here until you post them.':'No pending '+kind+' collections. Collections wait here until you post them.'));return}
+  const card0=P.appendChild(el('div','st-card hubf hub-c sapq sq-dr'));{const h0=el('h3',null,kind==='Collections'?'Pending Collection Bills':kind+' Drafts');h0.style.cssText='text-align:center;font-size:18px;font-weight:800';card0.appendChild(h0)}
   card0.appendChild(el('p','hint dr-c',dr.length+' draft'+(dr.length===1?'':'s')+' • '+money(dr.reduce((a,d)=>a+d.col+d.tds,0))+'. Posting date: any day up to today (not before the bill date).'));
   /* same layout as Review Upload Entries: customer banner -> one coloured card per company -> one block per draft */
   const names=new Map(),groups=new Map();
@@ -4499,16 +4589,21 @@ function buildDrafts(kind){const P=$('#drf');P.textContent='';const L=ld(),all0=
           const L2=ld();if(!L2.dr)return;const x=upd(L2,v);window.RDLDDEL&&RDLDDEL(L2,[d.id]);L2.dr=L2.dr.filter(e=>e.id!==d.id);const n=nextNo(L2,'DZ');blk._res={k:'DZ',cu:x.cu,doc:'DZ-'+String(n).padStart(6,'0'),d:pd.value};
           L2.dz.push({bill:'DZ-'+String(n).padStart(6,'0'),doc:'DZ',pt:Date.now(),ag:x.ag,cu:x.cu,co:x.co,nm:x.nm,col:x.col,tds:x.tds,...(x.xt?{xt:x.xt}:{}),type:x.type,ref:x.ref,...(x.rd?{rd:x.rd}:{}),date:pd.value,...(x.dcr?{dcr:x.dcr}:{}),...(x.bd?{bd:x.bd}:{}),...(x.manual?{manual:1}:{})});
           try{sv(L2)}catch(e){return bad('Could not save on this device')}if(used)used.set(d.ag,((used.get(d.ag))||0)+v.c+v.tx);return true};
-        blk._post=doPost;blk._amt=()=>(+col.value||0)+(+tds.value||0);mkB('Post','st-btn').onclick=()=>{if(doPost()){cards();document.dispatchEvent(new Event('visibilitychange'));buildDrafts(kind)}};
+        blk._post=doPost;blk._amt=()=>(+col.value||0)+(+tds.value||0);blk._id=d.id;blk._info=()=>({bn:d.bn,co:c.co,t:ty.value,c:+col.value||0,x:+tds.value||0});mkB('Post','st-btn').onclick=()=>{if(doPost()){cards();document.dispatchEvent(new Event('visibilitychange'));buildDrafts(kind)}};
         mkB('Delete','st-btn od-clear').onclick=async()=>{const ok=window.RDLUI&&RDLUI.ask?await RDLUI.ask({title:'Delete this draft?',msg:(d.nm||d.cu)+' \u2022 '+money(d.col+d.tds)+'. The bill stays open.',ok:'Delete'}):confirm('Delete this draft?');if(!ok)return;const L2=ld();window.RDLDDEL&&RDLDDEL(L2,[d.id]);L2.dr=(L2.dr||[]).filter(e=>e.id!==d.id);try{sv(L2)}catch(e){return}buildDrafts(kind)};
         bd.appendChild(act);bd.appendChild(stt)});
       row.appendChild(ft);gx.appendChild(row);cks.push({ck:cck,blks,row,totUp})});
-    gx.appendChild(bulkBar(gx,gck,cks,()=>buildDrafts(kind)));card0.appendChild(gx)})}
+    bulkBar(gx,gck,cks,()=>buildDrafts(kind));   /* its tick logic is kept; the Post button now lives in the summary box on top */
+    GS.push({cu:g.cu,nm:g.nm,gx,gck,cks});card0.appendChild(gx)});
+  pendSummary(sx,GS,pcOpts)}
 /* ===== SALES DRAFTS: Quick Sales bills wait here; the RV number is given only when you press Post ===== */
 function salesDrafts(P){
   const L=ld(),sd=(L.sd||[]).slice().sort((a,b)=>b.at-a.at),t=ymd(new Date()),dm=v=>v?v.slice(8,10)+'/'+v.slice(5,7)+'/'+v.slice(0,4):'\u2014';
-  const card0=P.appendChild(el('div','st-card hubf hub-s')),h0=el('h3',null,'Sales Drafts');h0.style.cssText='text-align:center;font-size:18px;font-weight:800';card0.appendChild(h0);
-  if(!sd.length){card0.appendChild(el('p','hint','No sales drafts. Bills typed in with Quick Sales wait here until you post them.'));return}
+  const sx=P.appendChild(el('div','st-card sapq pc-sum')),GS=[],pcOpts={title:'Summary',key:'sd',rebuild:()=>buildDrafts('Sales'),card:()=>card0,
+    cols:[['Bills',bl=>bl.length,false],['Amount',bl=>bl.reduce((a,b)=>a+b._amt(),0)]],
+    line:i=>(i.bn||'New RV')+' • '+coLab(i.co)+' • '+pcQ(i.a)};
+  const card0=P.appendChild(el('div','st-card hubf hub-s')),h0=el('h3',null,'Pending Sales Bills');h0.style.cssText='text-align:center;font-size:18px;font-weight:800';card0.appendChild(h0);
+  if(!sd.length){pendSummary(sx,[],pcOpts);card0.appendChild(el('p','hint','No pending sales. Bills typed in with Quick Sales wait here until you post them.'));return}
   card0.appendChild(el('p','hint dr-c',sd.length+' draft'+(sd.length===1?'':'s')+' \u2022 '+money(sd.reduce((a,d)=>a+(+d.amt||0),0))+'. Check each bill, then Post. A manual bill gets its RV number when you post; a bill from the SAP file keeps its SAP number.'));
   const groups=new Map();
   sd.forEach(d=>{const k=String(d.cu);let g=groups.get(k);if(!g){g={cu:d.cu,nm:d.nm||('Customer '+d.cu),cos:new Map()};groups.set(k,g)}const ck=String(d.co);let c=g.cos.get(ck);if(!c){c={co:d.co,list:[]};g.cos.set(ck,c)}c.list.push(d)});
@@ -4540,29 +4635,33 @@ function salesDrafts(P){
           else{const n=nextNo(L2,'RV');blk._res={k:'RV',cu:x.cu,doc:'RV-'+String(n).padStart(6,'0'),d:x.post};   /* used by Post selected to open the register on this bill */
           L2.rv.push({bill:'RV-'+String(n).padStart(6,'0'),doc:'RV',pt:Date.now(),co:x.co,cu:x.cu,nm:x.nm,amt:x.amt,post:x.post,due:addD(x.post,x.days),days:x.days,manual:1})}
           try{sv(L2)}catch(e){return bad('Could not save on this device')}return true};
-        blk._post=()=>doPost();blk._amt=()=>+am.value||0;pb.onclick=()=>{if(doPost()){cards();document.dispatchEvent(new Event('visibilitychange'));buildDrafts('Sales')}};
+        blk._post=()=>doPost();blk._amt=()=>+am.value||0;blk._id=d.id;blk._info=()=>({bn:d.doc||'',co:c.co,a:+am.value||0});pb.onclick=()=>{if(doPost()){cards();document.dispatchEvent(new Event('visibilitychange'));buildDrafts('Sales')}};
         mkB('Delete','st-btn od-clear').onclick=async()=>{const ok=window.RDLUI&&RDLUI.ask?await RDLUI.ask({title:'Delete this draft?',msg:(d.nm||d.cu)+' \u2022 '+money(d.amt)+'.',ok:'Delete'}):confirm('Delete this draft?');if(!ok)return;const L2=ld();window.RDLDDEL&&RDLDDEL(L2,[d.id]);L2.sd=(L2.sd||[]).filter(e=>e.id!==d.id);try{sv(L2)}catch(e){return}buildDrafts('Sales')};
         bd.appendChild(act);bd.appendChild(stt)});
       row.appendChild(ft);gx.appendChild(row);cks.push({ck:cck,blks,row,totUp})});
-    gx.appendChild(bulkBar(gx,gck,cks,()=>buildDrafts('Sales')))})}
+    bulkBar(gx,gck,cks,()=>buildDrafts('Sales'));   /* tick logic kept; the Post button now lives in the summary box on top */
+    GS.push({cu:g.cu,nm:g.nm,gx,gck,cks})});
+  pendSummary(sx,GS,pcOpts)}
 function draftHub(P,all0){
   /* SAP-style: one small table instead of big buttons. Tap a row to open that list. */
   const sd0=(ld().sd||[]),q=v=>money(v).replace(/^\S+\s*/,'').replace('/=',''),card=P.appendChild(el('div','st-card sapq'));
-  card.appendChild(el('h3',null,'Pending Drafts'));
+  card.appendChild(el('h3',null,'Pending Collections & Sales'));
   const info=(t)=>{const list=t==='Sales'?sd0:all0.filter(e=>String(e.type||'').toLowerCase()===t.toLowerCase());return{n:list.length,tot:list.reduce((a,d)=>a+(t==='Sales'?(+d.amt||0):d.col+d.tds),0)}};
   const wrap=el('div','sq-scroll'),tb=el('table','sq-tbl sq-hub'),th=el('thead'),hr=el('tr');
   ['Type','Drafts','Amount',''].forEach((x,j)=>hr.appendChild(el('th',j===1||j===2?'num':null,x)));th.appendChild(hr);tb.appendChild(th);
   const tbd=el('tbody');tb.appendChild(tbd);
-  const row=(t,cls)=>{const i=info(t),r=el('tr','hb-'+cls+(i.n?'':' hb-0'));r.appendChild(el('td','hb-t',t));r.appendChild(el('td','num',String(i.n)));r.appendChild(el('td','num',q(i.tot)));r.appendChild(el('td','hb-go','\u203A'));r.onclick=()=>{buildDrafts(t);window.scrollTo(0,0)};tbd.appendChild(r);return i};
+  const row=(t,cls)=>{const i=info(t),r=el('tr','hb-'+cls+(i.n?'':' hb-0'));r.appendChild(el('td','hb-t',t));r.appendChild(el('td','num',String(i.n)));r.appendChild(el('td','num',q(i.tot)));r.appendChild(el('td','hb-go','\u203A'));r.onclick=()=>{if(t==='Sales')buildDrafts('Sales');else{PCF.clear();PCF.add(t.toLowerCase());buildDrafts('Collections')}window.scrollTo(0,0)};tbd.appendChild(r);return i};
   const g1=el('tr','hb-gh'),g1c=el('td',null,'Collection');g1c.colSpan=4;g1.appendChild(g1c);tbd.appendChild(g1);
   const a1=row('Cash','g'),a2=row('Cheque','b'),a3=row('BEFTN','v');
-  const ct=el('tr','hb-tot');ct.appendChild(el('td',null,'Collection total'));ct.appendChild(el('td','num',String(a1.n+a2.n+a3.n)));ct.appendChild(el('td','num',q(a1.tot+a2.tot+a3.tot)));ct.appendChild(el('td'));tbd.appendChild(ct);
+  const ct=el('tr','hb-tot');ct.style.cursor='pointer';ct.onclick=()=>{pcAll();buildDrafts('Collections');window.scrollTo(0,0)};ct.appendChild(el('td',null,'Collection total'));ct.appendChild(el('td','num',String(a1.n+a2.n+a3.n)));ct.appendChild(el('td','num',q(a1.tot+a2.tot+a3.tot)));ct.appendChild(el('td'));tbd.appendChild(ct);
   const g2=el('tr','hb-gh'),g2c=el('td',null,'Sales');g2c.colSpan=4;g2.appendChild(g2c);tbd.appendChild(g2);
   row('Sales','a');
   wrap.appendChild(tb);card.appendChild(wrap);
   card.appendChild(el('p','hint',all0.length||sd0.length?'Tap a row to review, correct and post its drafts.':'No drafts. Quick Collection, Quick Sales and Review Upload entries wait here until you post them.'));
 }
-window.RDL.openDrafts=()=>{if(window.RDL_ROLE==='admin')return;buildDrafts();document.querySelectorAll('.pg').forEach(x=>x.classList.remove('on'));document.querySelectorAll('.nav button').forEach(x=>x.classList.remove('on'));$('#drf').classList.add('on');const nb=$('.nav button[data-p="more"]');if(nb)nb.classList.add('on');window.scrollTo(0,0)};
+window.RDL.openDrafts=(kind)=>{if(window.RDL_ROLE==='admin')return;buildDrafts(typeof kind==='string'?kind:undefined);document.querySelectorAll('.pg').forEach(x=>x.classList.remove('on'));document.querySelectorAll('.nav button').forEach(x=>x.classList.remove('on'));$('#drf').classList.add('on');const nb=$('.nav button[data-p="more"]');if(nb)nb.classList.add('on');window.scrollTo(0,0)};
+window.RDL.openPendingCollections=()=>{pcAll();window.RDL.openDrafts('Collections')};
+window.RDL.openPendingSales=()=>window.RDL.openDrafts('Sales');
 function review(w,P,L,ttl,bk){const dates=[...sel[w]].sort(),secs=[],t0=today(),m=R.master,EPS=0.005;
   const byDue=(a,b)=>(a.post||'')<(b.post||'')?-1:(a.post||'')>(b.post||'')?1:(a.due||'')<(b.due||'')?-1:(a.due||'')>(b.due||'')?1:String(a.bill)<String(b.bill)?-1:1;  /* oldest Posting date first, same as the date shown in the list */
   const openBills=(bp,co,lim)=>m.out.filter(b=>b.cu==bp&&b.co==co&&bal(b)>0&&(!lim||!b.post||b.post<=lim)).sort(byDue);
@@ -4799,8 +4898,11 @@ window.RDL.openTab=(w,t,q)=>{if(window.RDL_ROLE==='admin'&&t!=='search')return; 
 /* after the reload that follows a Daily Collection & Order upload: open Sales & Collection Posting */
 {let go=0;try{go=sessionStorage.getItem('rdl.openPosting');if(go)sessionStorage.removeItem('rdl.openPosting')}catch(e){}if(go){const run=()=>{try{window.RDL.openTab('s','post')}catch(e){}};if(document.readyState==='complete')setTimeout(run,300);else window.addEventListener('load',()=>setTimeout(run,300))}}
 /* after saving a manual Sales / Collection draft: reload the app and come back to Posting Center */
-const hubReload=()=>{try{sessionStorage.setItem('rdl.openHub','1')}catch(e){}setTimeout(()=>location.reload(),350)};
-{let h=0;try{h=sessionStorage.getItem('rdl.openHub');if(h)sessionStorage.removeItem('rdl.openHub')}catch(e){}if(h){const run=()=>{try{window.RDL.openUpload()}catch(e){}};if(document.readyState==='complete')setTimeout(run,300);else window.addEventListener('load',()=>setTimeout(run,300))}}
+const hubReload=(go,note)=>{try{sessionStorage.setItem('rdl.openHub','1');if(go){sessionStorage.setItem('rdl.openPend',go);if(note)sessionStorage.setItem('rdl.openPendNote',JSON.stringify(note))}}catch(e){}setTimeout(()=>location.reload(),350)};   /* go: 'c' / 's' = land on Pending Collections / Pending Sales after the reload instead of the Posting Center */
+{let h=0;try{h=sessionStorage.getItem('rdl.openHub');if(h)sessionStorage.removeItem('rdl.openHub')}catch(e){}if(h){const run=()=>{try{let pd=null,nt=null;try{pd=sessionStorage.getItem('rdl.openPend');nt=sessionStorage.getItem('rdl.openPendNote');sessionStorage.removeItem('rdl.openPend');sessionStorage.removeItem('rdl.openPendNote')}catch(e){}
+      if(pd==='c'&&window.RDL.openPendingCollections){try{PEND_NOTE=nt?JSON.parse(nt):null}catch(e){}window.RDL.openPendingCollections()}
+      else if(pd==='s'&&window.RDL.openPendingSales){try{PEND_NOTE=nt?JSON.parse(nt):null}catch(e){}window.RDL.openPendingSales()}
+      else window.RDL.openUpload()}catch(e){}};if(document.readyState==='complete')setTimeout(run,300);else window.addEventListener('load',()=>setTimeout(run,300))}}
 /* Sales & Collection Upload page (More menu): only the posting boxes */
 function buildUpload(){
   if(mState){const n=mState;mState=0;try{history.go(-n)}catch(e){}}
@@ -4813,7 +4915,8 @@ function buildUpload(){
   [['Smart Post','Post the Daily Collection & Order file','n','i-doc',()=>window.RDL.openTab('s','post'),1],
    ['Quick Collection','Type a collection in by hand','b','i-wal',()=>openManual('c')],
    ['Quick Sales','Type a sales bill in by hand','g','i-sales',()=>openManual('s')],
-   ['Drafts ('+(dr.length+sdN)+')',dr.length+sdN?dr.length+' collection'+(dr.length===1?'':'s')+' \u2022 '+sdN+' sales waiting to be posted':'Collections and sales waiting to be posted','a','i-stmt',()=>window.RDL.openDrafts(),1],
+   ['Pending Collections ('+dr.length+')',dr.length?money(drT)+' waiting to be posted':'Nothing waiting to be posted','a','i-stmt',()=>window.RDL.openPendingCollections()],
+   ['Pending Sales ('+sdN+')',sdN?sdN+' sale'+(sdN===1?'':'s')+' waiting to be posted':'Nothing waiting to be posted','a','i-stmt',()=>window.RDL.openPendingSales()],
    ['Daily CO & DCR Entry','Collection & Order (manual or SAP) and DCR \u2014 entry and upload only','v','i-upl',()=>{if(window.RDL.openDailyEntry)window.RDL.openDailyEntry()},1],
    ['Daily CO & DCR Report','Collection & Order and DCR tables, reports and Excel','g','i-doc',()=>{if(window.RDL.openDailyReport)window.RDL.openDailyReport()},1]].forEach(([t,sub,k,ic,fn,wide])=>{
     const K=C[k],b=el('button','up-b'+(wide?' wide':''));b.type='button';
@@ -4836,7 +4939,7 @@ function manualSales(P,ttl,bk){
   const coRow=el('div','rq');F('Code (tick every company to post a sale for)',coRow);   /* swipeable tap-to-select chips, several can be on */
   const pd=el('input','list-search');pd.type='date';pd.value=salesDay();pd.max=t0;F('Posting date (cannot be after today)',pd);
   const holder=form.appendChild(el('div'));   /* one box per ticked company */
-  const st=form.appendChild(el('div','stt')),pb=form.appendChild(el('button','st-btn','Review Sales'));pb.type='button';
+  const st=form.appendChild(el('div','stt')),pb=form.appendChild(el('button','st-btn','Send to Pending Sales'));pb.type='button';
   let bp=null;const cos=new Set(),blocks=new Map();
   const findBp=()=>{const v=cu.value.trim();if(!v)return null;const k=v.split(' — ')[0].trim();if(names.has(k))return k;const q=v.toLowerCase();for(const [c,n] of names)if(String(n).toLowerCase()===q)return c;return null};
   function makeBlock(c){const box=el('div','st-card');box.appendChild(el('h3',null,coLab(c)));
@@ -4867,6 +4970,13 @@ function manualSales(P,ttl,bk){
       if(!(days>0))return err(coLab(c)+': enter the Days Limit');
       E.push({co:c,amt,days,due:addD(f,days)})}
     st.textContent='';st.className='stt';
+    {/* Send to Pending Sales: one pending sales bill per company, saved straight away (same record the old review page saved); no review page in between */
+      const L2=ld();L2.sd=L2.sd||[];const len0=L2.sd.length,tot0=sum(E,x=>x.amt),pl=E.length===1?'':'s',warns=[];
+      E.forEach(e=>{if(L2.rv.some(z=>String(z.cu)===String(bp)&&String(z.co)===e.co&&z.post===f&&+z.amt===e.amt))warns.push(coLab(e.co)+': a sales bill with the same customer, company, date and amount was already posted — check for a duplicate.')});
+      E.forEach(e=>L2.sd.push({id:uid0(),co:e.co,cu:bp,nm:names.get(String(bp)),amt:e.amt,post:f,days:e.days,ds:today(),at:Date.now()}));
+      try{sv(L2)}catch(x){L2.sd.length=len0;return err('Could not save on this device')}
+      const note='✓ Sent '+E.length+' sales bill'+pl+' • '+money(tot0)+' • '+names.get(String(bp))+' ('+E.map(e=>coLab(e.co)).join(', ')+') to Pending Sales. Tick the customers below and press Post Selected.'+(warns.length?' ⚠ '+warns.join(' ⚠ '):'');
+      msg.s=note;cards();document.dispatchEvent(new Event('visibilitychange'));render('s');hubReload('s',{t:note,k:warns.length?'warn':'ok'});return}   /* the app reloads as before, then opens the Pending Sales page */
     const nm=names.get(String(bp))||('Customer '+bp),L0=ld(),tot=sum(E,x=>x.amt),plural=E.length===1?'':'s';
     form.style.display='none';pv.style.display='';pv.textContent='';ttl.textContent='Review Sales Draft';
     const cd0=P.querySelector('.st-card');if(cd0&&!pv.contains(cd0))cd0.style.display='none';  /* the form's top box is replaced by the boxes below */
@@ -10965,6 +11075,18 @@ html body #home .tw2.two .pch-t small,html body #home .tw2.two .qa .card.cya p{m
 <style id="sqDockOffsetCss">/* Quick Collection: lower the sticky Save Collection dock. Mobile has the bottom nav so a small gap is kept; desktop has no bottom nav so it sits near the bottom edge. */
 html body .sq-dock,html body .sq-bar{bottom:80px!important}
 @media (min-width:1000px){html body .sq-dock,html body .sq-bar{bottom:10px!important}}
+</style>
+<style id="pcSumCss">/* Pending Collections / Pending Sales: summary box */
+.pc-sum .pc-bar{display:flex;align-items:center;gap:10px;margin:6px 0 8px;flex-wrap:wrap}
+.pc-sum .pc-i{flex:1 1 150px;font-size:13px;font-weight:700;color:#12306b}
+.pc-sum .pc-bar .st-btn{width:auto;flex:none;margin:0;padding:10px 18px;font-size:14px}
+.pc-sum .pc-tbl th,.pc-sum .pc-tbl td{white-space:nowrap}
+.pc-sum .pc-tbl td.pc-n{white-space:normal;min-width:130px;font-weight:700;cursor:pointer}
+.pc-sum .pc-tbl td.pc-a{white-space:nowrap}
+.pc-sum .pc-dt td{white-space:normal;background:#f6f9ff;font-size:12px}
+.pc-sum .pc-dl div{padding:3px 0;border-bottom:1px dashed #d4e1f5}
+.pc-sum .pc-tot td{font-weight:800;background:#eaf2ff}
+.cg.pc-flash{box-shadow:0 0 0 3px #1a73e8}
 </style>
 </body>
 </html>
