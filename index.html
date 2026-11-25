@@ -4078,7 +4078,7 @@ function manualPage(P,ttl,bk){
   const pd=el('input','list-search');pd.type='date';pd.value=t0;pd.max=t0;F('Posting date (cannot be after today)',pd).classList.add('sq-3');
   const holder=form.appendChild(el('div'));
   const st=form.appendChild(el('div','stt'));
-  const bar=form.appendChild(el('div','sq-bar')),pb=el('button','st-btn','Save to Review');pb.type='button';
+  const bar=form.appendChild(el('div','sq-bar')),pb=el('button','st-btn sq-save-btn');pb.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 12.5l5 5L19.5 7"/></svg><span>Save to Review</span>';pb.type='button';
   const bv={};[['Collected','col'],['TDS','tds'],['Total','tot'],['Balance','bal']].forEach(([l,k])=>{const d=el('div','sq-bi');d.appendChild(el('small',null,l));bv[k]=d.appendChild(el('b',null,__m(0).replace('/=','')));bar.appendChild(d)});bar.appendChild(pb);
   function barUpd(){let c=0,t=0,tt=0;blocks.forEach(o=>{if(o.covered)return;c+=o.col();t+=o.tdv();tt+=o.chosen().reduce((x,b)=>x+bal(b),0)});
     const rem=Math.max(0,+(tt-c-t).toFixed(2));const q=x=>__m(x).replace('/=','');bv.col.textContent=q(c);bv.tds.textContent=q(t);bv.tot.textContent=q(c+t);bv.bal.textContent=q(rem);bv.bal.className=tt>0?(rem>0.005?'sq-rem':'sq-ok'):''}
@@ -4372,7 +4372,7 @@ function manualPage(P,ttl,bk){
       ['col','tds','tot','left'].forEach(k=>ft.appendChild(el('td','num',qn(sum(list,r=>r[k])))));ft.appendChild(el('td'));tf.appendChild(ft)}
     draw();
     sbox.appendChild(sst);
-    const rb=el('button','st-btn','Send to Pending Collections');rb.type='button';rb.style.cssText='display:block;width:100%;margin-top:8px';
+    const rb=el('button','st-btn sq-send-btn');rb.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4z"/></svg><span>Send to Pending Collections</span>';rb.type='button';rb.style.cssText='display:block;width:100%;margin-top:8px';
     rb.onclick=()=>{if(dirty()){sst.className='stt bad';sst.textContent='The collection on the form below is not saved yet. Press Save to Review first.';return}if(!QCS.length)return;submitToDrafts(sst)};sbox.appendChild(rb);
     {const L0=ld(),[w1,w2]=wk(today());
       const rvx=(host,items)=>{const g=host.appendChild(el('div','rvx'));items.forEach(([k,v,sb,c,full])=>{const d=el('div',c+(full?' full':''));d.appendChild(el('small',null,k));d.appendChild(el('strong',null,v));if(sb)d.appendChild(el('em',null,sb));g.appendChild(d)})};
@@ -4615,26 +4615,37 @@ function salesDrafts(P){
   const sx=P.appendChild(el('div','st-card sapq pc-sum')),GS=[],pcOpts={title:'Summary',key:'sd',rebuild:()=>buildDrafts('Sales'),card:()=>card0,
     cols:[['Bills',bl=>bl.length,false],['Amount',bl=>bl.reduce((a,b)=>a+b._amt(),0)]],
     line:i=>(i.bn||'New RV')+' • '+coLab(i.co)+' • '+pcQ(i.a)};
-  const card0=P.appendChild(el('div','st-card hubf hub-s')),h0=el('h3',null,'Pending Sales Bills');h0.style.cssText='text-align:center;font-size:18px;font-weight:800';card0.appendChild(h0);
+  const card0=P.appendChild(el('div','st-card hubf hub-c sapq sq-dr')),h0=el('h3',null,'Pending Sales Bills');h0.style.cssText='text-align:center;font-size:18px;font-weight:800';card0.appendChild(h0);
   if(!sd.length){pendSummary(sx,[],pcOpts);card0.appendChild(el('p','hint','No pending sales. Bills typed in with Quick Sales wait here until you post them.'));return}
   card0.appendChild(el('p','hint dr-c',sd.length+' pending bill'+(sd.length===1?'':'s')+' \u2022 '+money(sd.reduce((a,d)=>a+(+d.amt||0),0))+'. Check each bill, then Post. A manual bill gets its RV number when you post; a bill from the SAP file keeps its SAP number.'));
   const groups=new Map();
   sd.forEach(d=>{const k=String(d.cu);let g=groups.get(k);if(!g){g={cu:d.cu,nm:d.nm||('Customer '+d.cu),cos:new Map()};groups.set(k,g)}const ck=String(d.co);let c=g.cos.get(ck);if(!c){c={co:d.co,list:[]};g.cos.set(ck,c)}c.list.push(d)});
-  groups.forEach(g=>{const gx=card0.appendChild(el('div','cg ro cu-sale')),gh=el('div','cg-h'),cks=[],gck=mkCk();gh.appendChild(gck);gh.appendChild(el('b',null,g.nm+' \u2022 '+g.cu));gh.appendChild(el('span','cg-n',g.cos.size+(g.cos.size===1?' company':' companies')));gh.appendChild(doneBtn(gx,cks));gx.appendChild(gh);
+  let gi=0;groups.forEach(g=>{const gx=card0.appendChild(el('div','cg ro cu'+(gi++%8))),gh=el('div','cg-h'),cks=[],gck=mkCk();gh.appendChild(gck);gh.appendChild(el('b',null,g.nm+' \u2022 '+g.cu));gh.appendChild(el('span','cg-n',g.cos.size+(g.cos.size===1?' company':' companies')));gh.appendChild(doneBtn(gx,cks));gx.appendChild(gh);
     [...g.cos.values()].sort((x,y)=>R.coCmp?R.coCmp(x.co,y.co):0).forEach(c=>{
-      const row=el('div','cg-co co-sale'),rh=el('div','cg-h cg-ch'),body=el('div','cg-b'),cck=mkCk(),blks=[];rh.appendChild(cck);rh.appendChild(el('b',null,coLab(c.co)));row.appendChild(rh);row.appendChild(body);
+      const row=el('div','cg-co '+coCls(c.co)),rh=el('div','cg-h cg-ch'),body=el('div','cg-b'),cck=mkCk(),blks=[];rh.appendChild(cck);rh.appendChild(el('b',null,coLab(c.co)));row.appendChild(rh);row.appendChild(body);
       const ft=el('div','cg-ft'),ftV=el('span',null,'');ft.appendChild(el('span',null,'Pending total'));ft.appendChild(ftV);
       const totUp=()=>{const L3=ld(),mine=(L3.sd||[]).filter(e=>String(e.cu)===String(g.cu)&&String(e.co)===String(c.co));ftV.textContent=money(mine.reduce((x,e)=>x+(+e.amt||0),0))};totUp();
+      const tb=el('table','sq-tbl sq-drt'),thd=el('thead'),hr0=el('tr'),wrap0=el('div','sq-scroll');
+      ['Bill No','Amount','Post Date','Days'].forEach((x,j)=>hr0.appendChild(el('th',j===0?'sq-r1':(j===1||j===3?'num':null),x)));thd.appendChild(hr0);tb.appendChild(thd);
+      const tbd=el('tbody');tb.appendChild(tbd);wrap0.appendChild(tb);body.appendChild(wrap0);
       c.list.forEach(d=>{
-        const blk=el('div','cl-card'),age=Math.floor((Date.now()-d.at)/864e5),head=el('div','cl-head');body.appendChild(blk);blks.push(blk);
-        head.appendChild(el('b',null,d.doc?'Sales bill (RV) \u2022 SAP '+d.doc:'Sales bill (RV)'));head.appendChild(el('div',null,(d.sap?'From the SAP file':'Manual entry')+' \u2022 '+(age?age+' day'+(age===1?'':'s')+' pending':'saved today')));blk.appendChild(head);
-        const bd=el('div','cl-body');blk.appendChild(bd);
-        const F=(lab,node)=>{const x=el('div','cl-f');x.appendChild(el('small',null,lab));x.appendChild(node);bd.appendChild(x);return node},I=(type,val)=>{const i=el('input','list-search');i.type=type;i.value=val;return i};
-        const am=F('Sales amount',I('number',d.amt)),pd=F('Posting date (cannot be after today)',I('date',d.post)),dl=F('Days Limit',I('number',d.days));
+        const blk=el('tr'),dt=el('tr','sq-dt'),age=Math.floor((Date.now()-d.at)/864e5);
+        tbd.appendChild(blk);tbd.appendChild(dt);blks.push(blk);
+        const dtd=el('td');dtd.colSpan=4;dt.appendChild(dtd);dt.style.display='none';const bd=el('div','sq-dbody');dtd.appendChild(bd);
+        const rm0=blk.remove.bind(blk);blk.remove=()=>{dt.remove();rm0()};   /* the detail row goes with its bill row */
+        const cell=(node,cls)=>{const td=el('td',cls);if(node)td.appendChild(node);blk.appendChild(td);return td},I=(type,val)=>{const i=el('input','list-search');i.type=type;i.value=val;return i};
+        /* row: Bill No | Amount | Post Date | Days Limit (same layout as Pending Collections) */
+        const c1=el('td','sq-r1'),tg=el('span','sq-tg','\u25B8'),dot=el('span','sq-dot','\u25CF');c1.appendChild(tg);c1.appendChild(dot);c1.appendChild(document.createTextNode(' '+(d.doc||'New RV')));blk.appendChild(c1);
+        const am=I('number',d.amt),pd=I('date',d.post),dl=I('number',d.days);cell(am,'num');cell(pd);cell(dl,'num');
         am.step='any';am.min='0';pd.max=t;dl.min='1';dl.step='1';if(d.sap){am.readOnly=pd.readOnly=dl.readOnly=true}else if(window.RDLCalc)RDLCalc.attach(am,{label:'Sales amount'});
         roTw(am,v=>pcQ(+v||0),am.parentNode);roTw(pd,dm,pd.parentNode);roTw(dl,v=>v,dl.parentNode);
+        bd.appendChild(el('div','sq-meta','Sales bill (RV) \u2022 '+(d.sap?'From the SAP file':'Manual entry')+' \u2022 '+(age?age+' day'+(age===1?'':'s')+' pending':'saved today')));
         const info=el('div','hint');bd.appendChild(info);const up=()=>{info.textContent=pd.value&&+dl.value>0?'Payment date: '+dm(addD(pd.value,parseInt(dl.value))):''};pd.addEventListener('input',up);dl.addEventListener('input',up);up();
-        const stt=el('div','stt'),act=el('div','od-actions'),mkB=(tx,cls)=>{const b=el('button',cls,tx);b.type='button';act.appendChild(b);return b},bad=x=>{stt.className='stt bad';stt.textContent=x;return null};
+        const opn=on=>{dt.style.display=on?'':'none';tg.textContent=on?'\u25BE':'\u25B8';if(on)bd.style.width=Math.max(220,wrap0.clientWidth-16)+'px'};
+        blk.addEventListener('click',e=>{if(e.target.closest('input,select,button')||gx.classList.contains('ro'))return;opn(dt.style.display==='none')});
+        const live=()=>{const a=+am.value,dys=parseInt(dl.value),f=pd.value;let cls='ok',txt='Ready to post';if(!(a>0)){cls='warn';txt='Enter a sales amount greater than zero'}else if(!f){cls='warn';txt='Choose a posting date'}else if(f>t){cls='bad';txt='Posting date cannot be after today'}else if(!(dys>0)){cls='warn';txt='Enter the Days Limit'}dot.className='sq-dot '+cls;dot.title=txt;blk.classList.toggle('sq-bad',cls==='bad')};
+        am.addEventListener('input',live);pd.addEventListener('input',live);dl.addEventListener('input',live);live();
+        const stt=el('div','stt'),act=el('div','od-actions'),mkB=(tx,cls)=>{const b=el('button',cls,tx);b.type='button';act.appendChild(b);return b},bad=x=>{stt.className='stt bad';stt.textContent=x;opn(true);return null};
         let dupOk=false;
         const read=()=>{const a=+am.value,dys=parseInt(dl.value),f=pd.value;if(!(a>0))return bad('Enter a sales amount greater than zero');if(!f)return bad('Choose a posting date');if(f>t)return bad('Posting date cannot be after today');if(!(dys>0))return bad('Enter the Days Limit');return{a,dys,f}};
         const upd=(L2,v)=>{const x=(L2.sd||[]).find(e=>e.id===d.id);if(!x)return null;x.amt=v.a;x.post=v.f;x.days=v.dys;return x};
@@ -11095,6 +11106,15 @@ html body #home .tw2.two .pch,html body #home .tw2.two .qa .card.cya{padding:17p
 html body #home .tw2.two .pch-t b,html body #home .tw2.two .qa .card.cya h4{font-size:clamp(14.5px,4.1vw,16.5px)!important}
 html body #home .tw2.two .pch-t small,html body #home .tw2.two .qa .card.cya p{min-height:46px!important;padding:7px 9px!important}
 }
+</style>
+<style id="sqBtnDistinctCss">/* Quick Collection: Save to Review (blue, bold tick) vs Send to Pending Collections (green, final submit) */
+html body .st-btn.sq-save-btn,html body .st-btn.sq-send-btn{display:flex;align-items:center;justify-content:center;gap:8px}
+html body .st-btn.sq-save-btn svg,html body .st-btn.sq-send-btn svg{width:18px;height:18px;flex:none;fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round}
+html body .st-btn.sq-save-btn svg{width:20px;height:20px;stroke-width:3.8}
+html body .st-btn.sq-send-btn svg{stroke-width:2.4}
+html body .st-btn.sq-save-btn{background:linear-gradient(100deg,#0a49b5,#0a86d0)}
+html body .st-btn.sq-send-btn{display:flex!important;background:linear-gradient(135deg,#0f9d58,#0b7a43);box-shadow:0 3px 0 #08592f}
+html body .st-btn.sq-send-btn:active{transform:translateY(2px);box-shadow:0 1px 0 #08592f}
 </style>
 <style id="sqDockOffsetCss">/* Quick Collection: lower the sticky Save Collection dock. Mobile has the bottom nav so a small gap is kept; desktop has no bottom nav so it sits near the bottom edge. */
 html body .sq-dock,html body .sq-bar{bottom:80px!important}
