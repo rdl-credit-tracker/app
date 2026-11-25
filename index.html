@@ -1875,6 +1875,9 @@ function pullData(force,safe){
 
 /* ---------- backup (user and admin) ---------- */
 function collect(){var o={};for(var i=0;i<LS.length;i++){var k=LS.key(i);if(k.indexOf('rdl.')===0)o[k]=LS.getItem(k)}return o}
+/* a phone that has not loaded its data yet (just signed in, or another account was used in the same browser) holds only settings: such a thing is never a backup */
+var BK_IGN={'rdl.prefs.v1':1,'rdl.cleanstart.v2':1,'rdl.bkp.v1':1,'rdl.notif.v1':1,'rdl.schedn.v1':1,'rdl.wa.v1':1,'rdl.upskip.v1':1};
+function bkHasData(d){return Object.keys(d).some(function(k){return !BK_IGN[k]&&String(d[k]||'').length>20})}
 var bkFails=0;
 function bkAlert(msg,force){
   if(S&&S.role==='admin'&&!force&&msg)return;   /* admin: the red bar appears only when a user's NEW backup arrives (see bkNew) */
@@ -1895,7 +1898,9 @@ function sendBackup(noPrompt){
   if(S&&S.role==='user'&&LS.getItem('rdlgate.owner')!=='user')return Promise.reject(new Error('still preparing this device, backup not sent'));   /* never send a half-loaded device as a backup */
   if(S&&S.role==='admin'&&!LS.getItem('rdl.master.v1'))return Promise.reject(new Error('this phone has no data yet, so no backup was sent (your saved backup is safe)'));
   var D0=collect(),sg0='';try{sg0=sigOf(D0)}catch(e){}
-  return api('putBackup',{data:D0,meta:{dataAt:+LS.getItem('rdlgate.dataAt')||0,device:devId(),ua:devLabel()}},noPrompt).then(function(){
+  if(!bkHasData(D0))return Promise.reject(new Error('this phone has no data yet, so no backup was sent (your saved backup is safe)'));
+  return api('putBackup',{data:D0,meta:{dataAt:+LS.getItem('rdlgate.dataAt')||0,device:devId(),ua:devLabel()}},noPrompt).then(function(r){
+    if(r&&r.skipped){status('Backup skipped: no data on this phone yet','warn');return}   /* the server refused an empty backup: nothing was saved or replaced */
     LS.setItem('rdlgate.bk',String(Date.now()));LS.removeItem('rdlgate.bkdirty');if(sg0)LS.setItem('rdlgate.bksig',sg0);try{_s.call(LS,'rdl.bkp.v1',JSON.stringify({at:Date.now()}));window.dispatchEvent(new Event('rdl:remind'))}catch(e){}status('ব্যাকআপ সেভ হয়েছে '+hhmm(),'ok');bkAlert(null);bkFails=0;return flushChg(noPrompt)}).catch(function(e){if(!/still preparing|no data yet/.test(String(e&&e.message))){bkFails++;status('Backup failed: '+msgOf(e),'bad');
     if(bkFails<3){setTimeout(function(){sendBackup(true).catch(function(){})},8000*bkFails)}   /* a short network hiccup: try again quietly, 8 and 16 seconds later */
     else bkAlert('Backup NOT saved \u2014 your latest work is not safe yet. Tap here to retry.')}throw e})}
