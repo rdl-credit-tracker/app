@@ -3983,7 +3983,7 @@ function cards(){const c=document.getElementById('regCard');if(!c)return;const w
   c.querySelectorAll('.rc-p b').forEach(e=>{e.style.fontSize='';let f=parseFloat(getComputedStyle(e).fontSize);while(e.scrollWidth>e.clientWidth&&f>9){f-=.5;e.style.fontSize=f+'px'}})}
 /* Collection & Order rows -> customers/companies. Names must match the database exactly (case and extra spaces ignored); anything else is NOT posted, stays pending and is shown with a warning */
 const norm=x=>String(x||'').toLowerCase().replace(/\s+/g,' ').trim();
-function lines(date,kind){const m=R.master,d=R.dcr;if(!m||!d)return[];const nm=new Map(),cm=new Map(),L=ld(),ps=kind==='o'?'ps':'pc';
+function lines(date,kind){const m=R.master,d=R.dcr;if(!m||!d)return[];if(kind==='c'&&window.RDL_ROLE==='user')return[];   /* collections are typed in the Collection & Order form (report only) and are never posted from Smart Post */const nm=new Map(),cm=new Map(),L=ld(),ps=kind==='o'?'ps':'pc';
   m.cr.forEach(r=>{nm.set(norm(r.nm),r.bp);cm.set(String(r.cn).toLowerCase(),r.co)});
   m.out.forEach(b=>{const k=norm(b.nm);if(k&&!nm.has(k))nm.set(k,b.cu)});
   const oth=new Set();if(window.RDLDEPOT&&RDLDEPOT.sel()){try{const fm=JSON.parse(localStorage.getItem('rdl.master.v1')||'null')||{},sk=RDLDEPOT.key(RDLDEPOT.sel());(fm.cr||[]).concat(fm.out||[]).forEach(r=>{if(r.dp&&RDLDEPOT.key(r.dp)!==sk)oth.add(norm(r.nm))})}catch(e){}}
@@ -8373,7 +8373,7 @@ function drawCO(){const B=CP.body;B.textContent='';
   const di=el('input','list-search');di.type='date';di.value=CX.date;di.max=today();di.onchange=()=>{if(!di.value)return;if(CX.commit)try{CX.commit()}catch(e){}CX.date=di.value;COT.from=COT.to=CX.date;CX.rows=null;CX.dirty=false;CX.open=false;drawCO()};di.classList.add('co-dt');
   const E=coList(CX.date);
   /* ---- Business Wise Order & Collection: ONE input table. A row = one customer; every business has its own column, Order on top, Collection below ---- */
-  if(CX.rowsDate!==CX.date||!CX.rows){CX.rows=E.map(e=>({id:e.id,cu:e.cu,nm:e.nm,o:Object.assign({},e.o||{}),c:Object.assign({},e.c||{}),rm:e.rm||'',saved:true,hid:true,posted:coPosted(CX.date,e)}));CX.rowsDate=CX.date;CX.dirty=false}
+  if(CX.rowsDate!==CX.date||!CX.rows){CX.rows=E.map(e=>({id:e.id,cu:e.cu,nm:e.nm,o:Object.assign({},e.o||{}),c:Object.assign({},e.c||{}),rm:e.rm||'',saved:true,hid:true,cl:e.cl?1:0,posted:coPosted(CX.date,e)}));CX.rowsDate=CX.date;CX.dirty=false}
   const rows=CX.rows,CL=custs();
   const blank=()=>({id:'',cu:'',nm:'',o:{},c:{},rm:'',txt:'',saved:false}),isBlank=r=>!r.cu&&!r.txt&&!Object.keys(r.o).length&&!Object.keys(r.c).length&&!(r.rm||'').trim();
   if(!rows.length||!isBlank(rows[rows.length-1]))rows.push(blank());
@@ -8395,6 +8395,7 @@ function drawCO(){const B=CP.body;B.textContent='';
     const tr=el('tr',(r.saved?'co-sv':'')+(r.hid?' co-hid':'')),t0=el('td','co-c0'),ci=el('input','co-cu'),cn=el('div','co-cn',r.cu?r.nm:''),sg=el('div','od-suggestions co-sg');
     r._tr=tr;ci.type='text';ci.placeholder='Code or name';ci.autocomplete='off';ci.value=r.cu||r.txt||'';t0.appendChild(ci);t0.appendChild(cn);t0.appendChild(sg);tr.appendChild(t0);
     if(r.posted){tr.classList.add('co-pst');ci.disabled=true;t0.appendChild(el('div','co-pb','Posted \u2022 locked'))}
+    else if(r.cl){tr.classList.add('co-pst','co-cl');ci.disabled=true;t0.appendChild(el('div','co-pb cl','Collection \u2022 locked'))}
     const pick=c=>{const ex=rows.find(x=>x!==r&&x.cu===c.code);if(ex){r.cu='';r.nm='';r.txt='';ci.value='';cn.textContent='';sg.textContent='';setMsg(ex.posted?'✗ '+c.name+' is already posted for this date. Posted entries are locked — use Quick Sales / Quick Collection for any new amount.':'✗ '+c.name+' is already in the table for this day','bad');return false}
       r.cu=c.code;r.nm=c.name;r.txt='';ci.value=c.code;cn.textContent=c.name+(c.dp?' • '+c.dp:'');ci.classList.remove('bad');sg.textContent='';setMsg('');CX.dirty=true;grow();return true};
     const resolve=()=>{const v=ci.value.trim();if(!v){r.cu='';r.nm='';r.txt='';cn.textContent='';ci.classList.remove('bad');return true}
@@ -8409,12 +8410,13 @@ function drawCO(){const B=CP.body;B.textContent='';
       const mk=(kind,cls,ph)=>{ph=k+'-'+ph;const i=el('input','co-n '+cls);i.type='text';i.inputMode='decimal';i.autocomplete='off';i.placeholder=ph;const v=r[kind][k];i.value=v?String(v):'';
         i.addEventListener('input',()=>{let t=i.value.replace(/[^0-9.]/g,'');const p=t.indexOf('.');if(p>=0)t=t.slice(0,p+1)+t.slice(p+1).replace(/\./g,'');if(t!==i.value)i.value=t;const n=parseFloat(t);if(n>0)r[kind][k]=n;else delete r[kind][k];CX.dirty=true;grow()});
         i.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();nextFrom(i)}});return i};
-      const io=mk('o','o','Order'),ic=mk('c','c','Collection');if(r.posted)io.disabled=ic.disabled=true;td.appendChild(io);td.appendChild(ic);tr.appendChild(td)});
-    const tr0=el('td'),rm=el('input','co-n co-rm');rm.type='text';rm.placeholder='Remarks';rm.value=r.rm||'';if(r.posted)rm.disabled=true;rm.addEventListener('input',()=>{r.rm=rm.value;CX.dirty=true;grow()});rm.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();nextFrom(rm)}});tr0.appendChild(rm);tr.appendChild(tr0);
+      const io=mk('o','o','Order'),ic=mk('c','c','Collection');if(r.posted)io.disabled=ic.disabled=true;else if(r.cl)ic.disabled=true;td.appendChild(io);td.appendChild(ic);tr.appendChild(td)});
+    const tr0=el('td'),rm=el('input','co-n co-rm');rm.type='text';rm.placeholder='Remarks';rm.value=r.rm||'';if(r.posted||r.cl)rm.disabled=true;rm.addEventListener('input',()=>{r.rm=rm.value;CX.dirty=true;grow()});rm.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();nextFrom(rm)}});tr0.appendChild(rm);tr.appendChild(tr0);
     const tx=el('td'),x=el('button','co-x','×');x.type='button';x.setAttribute('aria-label','Delete row');
     x.onclick=()=>{if(r.posted){if(!confirm('This entry is already posted. Delete it from this table?\n\nThe Sales / Collection already posted in the app stays as it is (remove it from Database Correction if needed).'))return;const X=coGet();X[CX.date]=coList(CX.date).filter(z=>z.id!==r.id);coSet(X);CX.rows=rows.filter(z=>z!==r);drawCO();return}if(r.saved){if(!confirm('Delete this saved entry?'))return;const X=coGet();X[CX.date]=coList(CX.date).filter(z=>z.id!==r.id);coSet(X);CX.rows=rows.filter(z=>z!==r);drawCO();return}
       const i=rows.indexOf(r);if(i>=0)rows.splice(i,1);tr.remove();if(!rows.length||!isBlank(rows[rows.length-1])){const nb=blank();rows.push(nb);tb.appendChild(mkRow(nb))}CX.dirty=true};
     if(r.posted){x.textContent='\u2713';x.className='co-x co-ok';x.title='Posted and locked';x.setAttribute('aria-label','Posted and locked');x.onclick=()=>alert('Posted and locked \u2014 only the Admin can change or delete it.')}
+    else if(r.cl){x.textContent='\u2713';x.className='co-x co-ok co-okc';x.title='Collection locked';x.setAttribute('aria-label','Collection locked');x.onclick=()=>alert('Collection is locked \u2014 only the Admin can change or delete it.')}
     tx.appendChild(x);tr.appendChild(tx);return tr}
   rows.forEach(r=>tb.appendChild(mkRow(r)));
   tcard.appendChild(msg);
@@ -8427,7 +8429,7 @@ function drawCO(){const B=CP.body;B.textContent='';
     const date=CX.date;if(!date||date>today())return false;
     const old=coList(date),out=[];
     rows.forEach((r,i)=>{if(i<upto&&okRow(r)){r.id=r.id||(Date.now()+'-'+Math.random().toString(36).slice(2,7));r.saved=true;if(r._tr)r._tr.classList.add('co-sv');
-        out.push({id:r.id,cu:r.cu,nm:r.nm,o:Object.assign({},r.o),c:Object.assign({},r.c),rm:(r.rm||'').trim()})}
+        out.push({id:r.id,cu:r.cu,nm:r.nm,o:Object.assign({},r.o),c:Object.assign({},r.c),rm:(r.rm||'').trim(),...(r.cl?{cl:1}:{})})}
       else if(r.id){const o=old.find(z=>z.id===r.id);if(o)out.push(o)}});
     CX.dirty=rows.slice(upto).some(r=>!isBlank(r));
     if(JSON.stringify(out)===JSON.stringify(old))return false;
@@ -8449,7 +8451,7 @@ function drawCO(){const B=CP.body;B.textContent='';
   const st=el('div','stt'),say=(t,k)=>{st.className='stt'+(k?' '+k:'');st.textContent=t};
   fi.onchange=async()=>{const f=fi.files[0];fi.value='';if(!f)return;try{CX.buf=await f.arrayBuffer();CX.name=f.name;await coFileSet({name:f.name,buf:CX.buf,at:Date.now()});CX.saved={name:f.name,buf:CX.buf};CX.buf=null;pf.textContent=lab();pf.style.display='none';say('✓ File saved in the app. Saving it on Drive…');coSrvPut(f.name,CX.saved.buf).then(()=>{coFileSet({name:f.name,buf:CX.saved.buf,at:Date.now(),srv:1}).catch(()=>{});say('✓ File saved in the app and on Drive. It stays the same file on every phone and computer.','ok')},()=>say('✓ File saved in the app. Could not save it on Drive now (no internet?). It will be saved on Drive the next time you make the Excel.','warn'))}catch(x){say('✗ Could not read this file','bad')}};
   const run=async mode=>{commit();const E=coList(CX.date);if(!coDates().length)return say('Add at least one entry first','bad');
-    if(mode==='app'){if(!E.length)return say('Add at least one entry for this day','bad');try{coSave(CX.date,E);say('✓ Saved in the app. Open Smart Post, pick '+dd(CX.date)+' and press Save to Pending. Then review and post from Pending Collections.','ok')}catch(x){say('✗ Could not save on this device','bad')}return}
+    if(mode==='app'){if(!E.length)return say('Add at least one entry for this day','bad');try{coSave(CX.date,E);say('✓ Saved in the app. For the Sales, open Smart Post. Collections are not posted from Smart Post.','ok')}catch(x){say('✗ Could not save on this device','bad')}return}
     say('Making the file…');
     try{if(!window.RDL_SELFX)throw new Error('The Excel maker is not ready, reload the app and try again');
       /* the user's own Excel in the team format: every date of this month up to the chosen date (nothing after it); name, SAP ID and designation come from the Profile */
@@ -8467,7 +8469,13 @@ function drawCO(){const B=CP.body;B.textContent='';
   const row=el('div','co-acts');
   const IC={dl:'<path d="M12 3v11m0 0l-4-4m4 4l4-4M5 19h14"/>',sh:'<path d="M4 6h16v12H4zM4 7l8 6 8-6"/>',sv:'<path d="M5 4h11l3 3v13H5zM8 4v5h7M8 20v-6h8v6"/>',op:'<path d="M5 12h14m0 0l-5-5m5 5l-5 5"/>'};
   const mb=(t,k,cls)=>{const b=el('button','st-btn co-b '+cls);b.type='button';b.innerHTML='<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+IC[k]+'</svg><span>'+t+'</span>';return b};
-  const dl=mb('Download Excel','dl','co-p'),sh=mb('Share to Outlook','sh','co-p'),sp=mb('Save to app only','sv','co-s'),op=mb('Open Smart Post','op','co-s');dl.onclick=()=>run('dl');sh.onclick=()=>run('share');sp.onclick=()=>run('app');op.onclick=()=>{if(R.openTab)R.openTab('s','post')};
+  const dl=mb('Download Excel','dl','co-p'),sh=mb('Share to Outlook','sh','co-p'),sp=mb('Save to app only','sv','co-s'),op=mb('Open Smart Post','op','co-s');dl.onclick=()=>run('dl');sh.onclick=()=>run('share');sp.onclick=()=>run('app');op.onclick=async()=>{try{commit()}catch(e){}
+    const day=CX.date,hasC=e=>COL7.some(k=>(+(e.c||{})[k]||0)>0),N=(coGet()[day]||[]).filter(e=>!e.cl&&hasC(e)).length;
+    if(N){const ok=await RDLUI.ask({title:'Lock the collections of '+dd(day)+'?',msg:N+' customer'+(N===1?'':'s')+' with a collection will be locked. You will not be able to change or delete them after this \u2014 only the Admin can.\n\nCollections are not posted from Smart Post. Post them in Quick Collection / your software.',ok:'Lock & open Smart Post',cancel:'Not now'});
+      if(!ok)return;
+      try{const X=coGet();X[day]=(X[day]||[]).map(e=>hasC(e)?Object.assign({},e,{cl:1}):e);coSet(X)}catch(x){say('\u2717 Could not lock on this device','bad');return}
+      CX.rows=null;CX.rowsDate=null}
+    if(R.openTab)R.openTab('s','post')};
   [sp,op].forEach(b=>row.appendChild(b));
   c.appendChild(row);c.appendChild(st);B.appendChild(c)}
 R.openCOE=()=>{if(window.RDL_ROLE==='admin')return;CX.open=false;CX.rows=null;CX.date=R.salesDay?R.salesDay():today();COT.from=COT.to=CX.date;COT.biz='';drawCO();show('coep')};   /* the file made today is for the sales day (yesterday; Thursday on Saturday), same as Today Sales and the uploaded file */
@@ -8475,7 +8483,7 @@ function openD(){if(window.RDL_ROLE==='admin')return;dcrPC=0;DS.open=false;DV.da
 /* ===== Posting Center: "Daily CO & DCR Entry" (entry / upload only, with today's status) and "Daily CO & DCR Report" (tables, reports, Excel). User accounts only. ===== */
 const DE=mkPage('dcen','Daily CO & DCR Entry',()=>{if(R.openUpload)R.openUpload()}),DRP=mkPage('dcre','Daily CO & DCR Report',()=>{if(R.openUpload)R.openUpload()});
 const RP={date:'',tab:'co'};
-(function(){const s=document.createElement('style');s.textContent='.co-tbl tr.co-hid{display:none}.co-pb{background:#dcf5e7!important;color:#0b7a4b!important}.co-x.co-ok{background:#16a34a!important;color:#fff!important;border-radius:50%!important;font-size:10px!important;width:16px!important;height:16px!important;min-width:0!important;padding:0!important;display:inline-flex!important;align-items:center;justify-content:center;line-height:1!important;cursor:default}.co-tbl.co-show tr.co-hid{display:table-row}.co-tg{display:block;width:100%;box-sizing:border-box;margin:0;padding:10px 12px;border:0;border-bottom:1px solid #c9d9f1;background:#eaf2ff;color:#0a3fa8;font:inherit;font-size:13px;font-weight:800;text-align:left;cursor:pointer}.up-st{display:block;margin-top:5px;font-size:12px;font-weight:800;color:#0b7a4b}.up-st.no{color:#8a6d00}.rp-tt{font-size:13px;font-weight:700;margin:2px 0 6px}';document.head.appendChild(s)})();
+(function(){const s=document.createElement('style');s.textContent='.co-tbl tr.co-hid{display:none}.co-pb{background:#dcf5e7!important;color:#0b7a4b!important}.co-pb.cl{background:#dbe8ff!important;color:#1d4ed8!important}.co-tbl tr.co-cl td.co-c0{box-shadow:inset 3px 0 0 #2563eb}.co-x.co-okc{background:#2563eb!important}.co-x.co-ok{background:#16a34a!important;color:#fff!important;border-radius:50%!important;font-size:10px!important;width:16px!important;height:16px!important;min-width:0!important;padding:0!important;display:inline-flex!important;align-items:center;justify-content:center;line-height:1!important;cursor:default}.co-tbl.co-show tr.co-hid{display:table-row}.co-tg{display:block;width:100%;box-sizing:border-box;margin:0;padding:10px 12px;border:0;border-bottom:1px solid #c9d9f1;background:#eaf2ff;color:#0a3fa8;font:inherit;font-size:13px;font-weight:800;text-align:left;cursor:pointer}.up-st{display:block;margin-top:5px;font-size:12px;font-weight:800;color:#0b7a4b}.up-st.no{color:#8a6d00}.rp-tt{font-size:13px;font-weight:700;margin:2px 0 6px}';document.head.appendChild(s)})();
 /* what has been entered / uploaded today (the sales day the entry pages open on counts as today's work) */
 function entryStatus(){
   const t=today(),sd=R.salesDay?R.salesDay():t,days=[t,sd].filter((d,i,a)=>a.indexOf(d)===i),X=coGet();let man=0,sap=0,sb=0;
