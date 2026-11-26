@@ -2007,7 +2007,7 @@ function buildPkgs(){
   names.forEach(function(k){by[k].led={at:lat,rv:[],dz:[]}});
   ['rv','dz'].forEach(function(t){(LL[t]||[]).forEach(function(x){var k=cmap[String(x.cu)];if(k&&by[k])by[k].led[t].push(x)})});
   names.forEach(function(k){var b=by[k];
-    b.dcr=(d&&d.rows)?{rows:d.rows.filter(function(x){return b._n[String(x.n||'').toLowerCase()]}),lastSheet:d.lastSheet,lastDate:d.lastDate,fileName:d.fileName,at:d.at}:null;delete b._n});
+    b.dcr=(d&&d.rows)?{rows:dedupDcr(d.rows.filter(function(x){return b._n[String(x.n||'').toLowerCase()]})),lastSheet:d.lastSheet,lastDate:d.lastDate,fileName:d.fileName,at:d.at}:null;delete b._n});
   return{by:by,un:un,names:names}}
 /* ---------- publish: automatic, only the depots that changed, never over another admin's newer work ----------
    rdlgate.ver  = version of every depot this phone last received or published (the server refuses a publish that is not based on the latest)
@@ -2074,7 +2074,7 @@ function mergeUserDcr(email,ud){
   else{rows.forEach(function(r){have[key(r)]=1});ud.rows.forEach(function(r){if(!have[key(r)]){have[key(r)]=1;rows.push(r);added++}})}   /* an older upload only fills what is missing */
   dm[email]=uat;jset('rdlgate.dcrm',dm);
   if(!added)return;
-  var last=rows.reduce(function(m,r){return r.d>m?r.d:m},'');
+  rows=dedupDcr(rows);var last=rows.reduce(function(m,r){return r.d>m?r.d:m},'');
   LS.setItem('rdl.dcr.v1',JSON.stringify({rows:rows,lastSheet:newer?(ud.lastSheet||(a&&a.lastSheet)):(a&&a.lastSheet)||ud.lastSheet,lastDate:last,fileName:newer?(ud.fileName||(a&&a.fileName)):(a&&a.fileName)||ud.fileName,at:newer?uat:Date.now()}))}
 /* only the NEWEST backup of each person is merged (an older file of the same person must never replace newer posts) */
 function newestPerEmail(list){var best={};(list||[]).forEach(function(b){var k=String(b.email||'').toLowerCase(),t=+new Date(b.at)||0;if(!best[k]||t>(+new Date(best[k].at)||0))best[k]=b});return Object.keys(best).map(function(k){return best[k]})}
@@ -2117,6 +2117,7 @@ function loadPerms(){
 
 /* ---------- admin: missed-backup alerts (server writes them at ~11:30 pm; shown in the notification bell) ---------- */
 function pullAlerts(){
+  if(S&&S.role!=='admin'){try{if(LS.getItem('rdlgate.alerts')){LS.removeItem('rdlgate.alerts');window.dispatchEvent(new Event('rdl:alerts'))}}catch(e){}}   /* a user must never see the admin's leftover alerts on a shared phone */
   if(!S||S.role!=='admin')return Promise.resolve();
   return api('listAlerts',{},true).then(function(j){
     var old={};try{(JSON.parse(LS.getItem('rdlgate.alerts'))||[]).forEach(function(a){old[a.id]=1})}catch(e){}
@@ -2327,7 +2328,7 @@ function applyAdminEdit(ed){
   function up(a,m,e){for(var i=0;i<a.length;i++)if(m(a[i])){a[i]=e;return}a.push(e)}
   if(ed.kind==='co'){var X=jget('rdl.coe.v1')||{},hit=function(e){return e&&String(e.id||(JSON.stringify(e.o||{})+JSON.stringify(e.c||{})+(e.nm||'')))===key};
     Object.keys(X).forEach(function(d){if(!Array.isArray(X[d])||(ent&&d===nd))return;X[d]=X[d].filter(function(e){return !hit(e)})});
-    if(ent){if(unl)delete ent.cl;ent.id=key;X[nd]=X[nd]||[];up(X[nd],hit,ent)}jset('rdl.coe.v1',X)}
+    if(ent){if(unl){delete ent.cl;ent.rc=1}ent.id=key;X[nd]=X[nd]||[];up(X[nd],hit,ent)}jset('rdl.coe.v1',X)}   /* rc = the admin reopened the collection: the order may stay posted, the collection can be typed again */
   else if(ed.kind==='dcr'){var V=jget('rdl.visit.v1')||{};V.visits=V.visits||[];var hv=function(e){return e&&String(e.id||[e.date,e.cu,e.tin,e.tout].join('~'))===key};
     if(ent){if(unl){delete ent.posted;delete ent.postedAt}ent.id=key;ent.date=nd;up(V.visits,hv,ent)}else V.visits=V.visits.filter(function(e){return !hv(e)});jset('rdl.visit.v1',V)}
   else if(unl&&(ed.kind==='rv'||ed.kind==='dz')){var L=jget('rdl.ledger.v1')||{};L.rv=L.rv||[];L.dz=L.dz||[];L.sd=L.sd||[];L.dr=L.dr||[];L.del=L.del||{};
@@ -2351,10 +2352,13 @@ function pullAdminEdits(){
       lines.push('• '+(lab[ed.kind]||ed.kind)+' '+(ed.kind==='rv'||ed.kind==='dz'?ed.key:ed.newDate)+(nm?' • '+nm:'')+(ed.op==='delete'?' — ডিলিট করা হয়েছে':(/"unl":1/.test(ed.json||'')?' — আনলক করা হয়েছে, ঠিক করে আবার পোস্ট করুন':' — সংশোধন করা হয়েছে'))+' ('+ed.by+')')})}finally{sysW=0}
     LS.setItem('rdlgate.bkdirty','1');
     LS.setItem('rdlgate.admnote',lines.slice(-12).join('\n'));
-    try{var nl=enList();list.forEach(function(ed){var nm='';try{var e=JSON.parse(ed.json);nm=e.nm||e.cu||''}catch(x){}nl.unshift({id:'u'+ed.id,at:ed.at||Date.now(),by:ed.by,kind:ed.kind,op:ed.op,date:(ed.kind==='rv'||ed.kind==='dz')?ed.key:ed.newDate,brief:nm,mine:1})});LS.setItem('rdlgate.enotes',JSON.stringify(nl.slice(0,60)))}catch(x){}
+    try{var ug=list.filter(function(ed){return ed.op!=='delete'&&/"unl":1/.test(ed.json||'')}).pop();if(ug)LS.setItem('rdlgate.admgo',JSON.stringify({kind:ug.kind,date:ug.newDate||ug.date}));else LS.removeItem('rdlgate.admgo')}catch(x){}
+    try{var nl=enList();list.forEach(function(ed){var nm='';try{var e=JSON.parse(ed.json);nm=e.nm||e.cu||''}catch(x){}nl.unshift({id:'u'+ed.id,at:ed.at||Date.now(),by:ed.by,kind:ed.kind,op:ed.op,date:(ed.kind==='rv'||ed.kind==='dz')?ed.key:ed.newDate,brief:nm,mine:1,unl:/"unl":1/.test(ed.json||'')?1:0})});LS.setItem('rdlgate.enotes',JSON.stringify(nl.slice(0,60)))}catch(x){}
     return api('ackAdminEdits',{ids:ids},true).then(function(){return autoBackup(true)}).catch(function(){}).then(function(){goReload();throw new Error('__reload')})
   }).then(function(){aeBusy=0},function(e){aeBusy=0;if(e&&e.message==='__reload')throw e})}
-function showAdminNote(){var t=LS.getItem('rdlgate.admnote');if(!t||!window.RDLUI)return;LS.removeItem('rdlgate.admnote');RDLUI.alert('এডমিন আপনার এন্ট্রি ঠিক করেছেন',t)}
+function showAdminNote(){var t=LS.getItem('rdlgate.admnote');if(!t||!window.RDLUI)return;LS.removeItem('rdlgate.admnote');var go=null;try{go=JSON.parse(LS.getItem('rdlgate.admgo')||'null')}catch(e){}LS.removeItem('rdlgate.admgo');
+  if(go&&RDLUI.ask){RDLUI.ask({title:'এডমিন আপনার এন্ট্রি ঠিক করেছেন',msg:t,ok:'আনলক পেজ খুলুন',cancel:'পরে'}).then(function(ok){if(ok&&window.RDL&&RDL.openUnlock)RDL.openUnlock(go.kind,go.date)})}
+  else RDLUI.alert('এডমিন আপনার এন্ট্রি ঠিক করেছেন',t)}
 setTimeout(showAdminNote,2500);
 function checkAdminEdits(){if(onHomePage()&&!panelOn&&document.visibilityState==='visible'&&hasAuth())pullAdminEdits().catch(function(){})}
 setInterval(checkAdminEdits,120000);
@@ -2977,6 +2981,8 @@ window.RDLGATE={autoBackup:autoBackup,bkRender:bkRender,mergeBackups:mergeBackup
     <!-- 🔒 LOCKED DESIGN: SEARCH BAR — do not change -->
     <div class="search"><input placeholder="Customer, ID, Company"><button type="button" aria-label="Search"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><defs><linearGradient id="srG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#cfe4ff"/></linearGradient></defs><circle cx="10.2" cy="10.2" r="6.2" fill="#ffffff22" stroke="url(#srG)" stroke-width="2.6"/><path d="M15 15l5.6 5.6" stroke="url(#srG)" stroke-width="3.2" stroke-linecap="round"/><path d="M7.4 8.4a3.6 3.6 0 0 1 3-2" fill="none" stroke="#fff" stroke-opacity=".85" stroke-width="1.3" stroke-linecap="round"/></svg></button></div>
 
+    <!-- DASHBOARD DARK GLASS STAGE (layout only; header + search above are unchanged) -->
+    <div class="gl-stage">
     <!-- 🔒 LOCKED DESIGN: TOTAL OUTSTANDING — do not change -->
     <div class="total">
       <div class="ic"><div class="doc"><u></u><u></u><u></u></div><div class="tk">৳</div></div>
@@ -3004,6 +3010,7 @@ window.RDLGATE={autoBackup:autoBackup,bkRender:bkRender,mergeBackups:mergeBackup
       <div class="card blu"><div class="em"><svg><use href="#i-recp"/></svg></div><h4>Customer Outstanding</h4><p>Check customer outstanding balance</p><div class="go"><svg class="ar" viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 12h15M13.5 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div></div>
     </div>
     </div>
+    </div><!-- /gl-stage -->
 
   </div>
 
@@ -3364,6 +3371,10 @@ function parseCredit(R){
   out.skipped=skipped;out.unknown=unknown;out.hasDp=c.dp>=0;out.nodp=out.filter(r=>!r.dp).length;
   return out.length?out:null;
 }
+/* exact copies of the same Daily Collection & Order row (same date, name, order, collection, remark) are one row; this stops the file from growing with copies */
+function dedupDcr(rows){if(!Array.isArray(rows))return rows;var seen={},out=[],S=function(o){var k=Object.keys(o||{}).sort();return k.map(function(x){return x+':'+o[x]}).join(',')};
+  rows.forEach(function(r){if(!r)return;var k=[r.d,String(r.n||'').toLowerCase(),S(r.o),S(r.c),r.rm||''].join('~');if(seen[k])return;seen[k]=1;out.push(r)});return out}
+window.dedupDcr=dedupDcr;
 function parseDcrSheet(R){
   const h=findHeader(R,['Customer Name','Date'],10);if(!h)return null;
   const a5=R[h.i],a6=R[h.i+1]||[],isS=v=>typeof v==='string';
@@ -3387,7 +3398,7 @@ async function parseDcr(buf){
     if(r){all.push(...r);last={name:sh.name,rows:r}}}
   if(!last||!all.length)return null;
   const lastDate=last.rows.reduce((m,r)=>r.d>m?r.d:m,'');
-  return{rows:last.rows,lastSheet:last.name,lastDate};
+  return{rows:dedupDcr(last.rows),lastSheet:last.name,lastDate};
 }
 
 /* ---- Depot Name: capital/small letters and extra spaces do not matter; the first spelling seen (existing database first) is kept ---- */
@@ -3597,7 +3608,7 @@ window.RDL.applyRemote=function(p){
     }
     if(p.dcr&&p.dcr.rows){
       try{const Lx=JSON.parse(localStorage.getItem('rdl.ledger.v1'));if(Lx&&Lx.px){delete Lx.px;localStorage.setItem('rdl.ledger.v1',JSON.stringify(Lx))}}catch(e){}
-      store.set('d',p.dcr);
+      store.set('d',Object.assign({},p.dcr,{rows:dedupDcr(p.dcr.rows)}));
     }
     return true;
   }catch(e){return false}
@@ -3726,7 +3737,7 @@ function items(){
     .sort((x,y)=>x.due<y.due?-1:x.due>y.due?1:(x.nm||'').localeCompare(y.nm||''));
 }
 /* missed-backup alerts (admin only; filled by the sign-in code) */
-const bkAl=()=>{try{return JSON.parse(localStorage.getItem('rdlgate.alerts'))||[]}catch(e){return[]}},bkId=a=>'bk|'+a.id;
+const bkAl=()=>{if(window.RDL_ROLE!=='admin')return[];try{var seen={};return(JSON.parse(localStorage.getItem('rdlgate.alerts'))||[]).filter(function(a){var k=(a.email||a.name||'')+'|'+(a.day||'');if(seen[k])return false;seen[k]=1;return true})}catch(e){return[]}}   /* backup-missing alerts are for admins only; the same user+day is shown once */,bkId=a=>'bk|'+a.id;
 const enAl=()=>{try{const x=JSON.parse(localStorage.getItem('rdlgate.enotes'))||[],cut=Date.now()-7*864e5;return x.filter(a=>(+a.at||0)>=cut)}catch(e){return[]}},enId=a=>'en|'+a.id;
 const KL={co:'Collection & Order',dcr:'DCR',rv:'Sales',dz:'Collection'};
 window.addEventListener('rdl:alerts',()=>{try{build()}catch(e){}});
@@ -3746,7 +3757,7 @@ function render(S){
     body.appendChild(el('b',null,a.mine?'এডমিন আপনার এন্ট্রি '+(del?'ডিলিট করেছেন':'সংশোধন করেছেন'):(a.by||'Admin')+' '+(del?'এন্ট্রি ডিলিট করেছেন':'এন্ট্রি সংশোধন করেছেন')));
     body.appendChild(el('span',null,(KL[a.kind]||a.kind)+(a.date?' • '+a.date:'')+((a.userName||a.brief)?' • '+(a.mine?a.brief:(a.userName||'')+(a.brief?' / '+a.brief:'')):'')+(a.mine&&a.by?' ('+a.by+')':'')));
     body.appendChild(el('span','chip '+(del?'r':'a'),del?'Deleted':'Corrected'));
-    c.appendChild(body);c.onclick=()=>{S.read[enId(a)]=1;sv(S);render(S)};L.appendChild(c)});
+    c.appendChild(body);if(a.mine&&a.unl&&a.op!=='delete')body.appendChild(el('span','chip a','Tap to open'));c.onclick=()=>{S.read[enId(a)]=1;sv(S);render(S);if(a.mine&&a.unl&&a.op!=='delete'&&window.RDL&&RDL.openUnlock)RDL.openUnlock(a.kind,a.date)};L.appendChild(c)});
   al.forEach(a=>{const r=!!S.read[bkId(a)],c=el('div','nit'+(r?'':' unread')),body=el('div','nb');
     c.appendChild(el('div','nd'));
     {const d=el('span',null,a.depot||'');d.style.cssText='font-weight:800;font-size:12px;color:#0f766e';if(a.depot)body.appendChild(d)}
@@ -8403,7 +8414,7 @@ const coSrvGet=()=>window.RDLGATE&&RDLGATE.api?RDLGATE.api('coGetBase',null,true
 function coSave(date,E){const d=jget('rdl.dcr.v1',null)||{rows:[]},cl=o=>{const r={};COL7.forEach(k=>{const v=+(o||{})[k];if(v)r[k]=v});return r},nk=s=>String(s||'').toLowerCase();
   const rows=(d.rows||[]).filter(r=>!(r.d===date&&E.some(e=>nk(e.nm)===nk(r.n))));
   E.forEach(e=>rows.push({d:date,n:e.nm,o:cl(e.o),c:cl(e.c),...(e.rm?{rm:e.rm}:{})}));
-  jset('rdl.dcr.v1',{...d,rows,lastDate:rows.reduce((m,r)=>r.d>m?r.d:m,''),at:Date.now()})}
+  jset('rdl.dcr.v1',{...d,rows:dedupDcr(rows),lastDate:rows.reduce((m,r)=>r.d>m?r.d:m,''),at:Date.now()})}
 /* ---- Step 3: the user's own entry tables. All dates in one table, filtered by date (and business), with an Excel of the filtered table. Each user sees only the data stored on this phone (their own). ---- */
 async function xlsxTable(sheet,head,rows){
   const zip=new JSZip(),cl=i=>String.fromCharCode(65+i);
@@ -8451,7 +8462,7 @@ function drawCO(){const B=CP.body;B.textContent='';
   const di=el('input','list-search');di.type='date';di.value=CX.date;di.max=today();di.onchange=()=>{if(!di.value)return;if(CX.commit)try{CX.commit()}catch(e){}CX.date=di.value;COT.from=COT.to=CX.date;CX.rows=null;CX.dirty=false;CX.open=false;drawCO()};di.classList.add('co-dt');
   const E=coList(CX.date);
   /* ---- Business Wise Order & Collection: ONE input table. A row = one customer; every business has its own column, Order on top, Collection below ---- */
-  if(CX.rowsDate!==CX.date||!CX.rows){CX.rows=E.map(e=>({id:e.id,cu:e.cu,nm:e.nm,o:Object.assign({},e.o||{}),c:Object.assign({},e.c||{}),rm:e.rm||'',saved:true,hid:true,cl:e.cl?1:0,snt:e.snt||{},ost:coOs(e),posted:coPosted(CX.date,e)}));CX.rowsDate=CX.date;CX.dirty=false}
+  if(CX.rowsDate!==CX.date||!CX.rows){CX.rows=E.map(e=>({id:e.id,cu:e.cu,nm:e.nm,o:Object.assign({},e.o||{}),c:Object.assign({},e.c||{}),rm:e.rm||'',saved:true,hid:true,cl:e.cl?1:0,rc:e.rc?1:0,snt:e.snt||{},ost:coOs(e),posted:coPosted(CX.date,e)}));CX.rowsDate=CX.date;CX.dirty=false}
   const rows=CX.rows,CL=custs();
   const blank=()=>({id:'',cu:'',nm:'',o:{},c:{},rm:'',txt:'',saved:false}),isBlank=r=>!r.cu&&!r.txt&&!Object.keys(r.o).length&&!Object.keys(r.c).length&&!(r.rm||'').trim();
   if(!rows.length||!isBlank(rows[rows.length-1]))rows.push(blank());
@@ -8472,7 +8483,7 @@ function drawCO(){const B=CP.body;B.textContent='';
   function mkRow(r){
     const tr=el('tr',(r.saved?'co-sv':'')+(r.hid?' co-hid':'')),t0=el('td','co-c0'),ci=el('input','co-cu'),cn=el('div','co-cn',r.cu?r.nm:''),sg=el('div','od-suggestions co-sg');
     r._tr=tr;ci.type='text';ci.placeholder='Code or name';ci.autocomplete='off';ci.value=r.cu||r.txt||'';t0.appendChild(ci);t0.appendChild(cn);t0.appendChild(sg);tr.appendChild(t0);
-    if(r.posted){tr.classList.add('co-pst');ci.disabled=true;t0.appendChild(el('div','co-pb','Posted \u2022 locked'))}
+    if(r.posted){tr.classList.add('co-pst');ci.disabled=true;t0.appendChild(el('div','co-pb'+(r.rc?' cl':''),r.rc?'Order posted \u2022 collection open':'Posted \u2022 locked'))}
     else if(r.cl){tr.classList.add('co-pst','co-cl');ci.disabled=true;t0.appendChild(el('div','co-pb cl','Collection \u2022 locked'))}
     {const ov=Object.values(r.ost||{});if(!r.posted&&ov.length){ci.disabled=true;const f=ov.every(v=>v==='f');t0.appendChild(el('div','co-pb'+(f?'':' cl'),f?'Sales posted \u2022 locked':'Sales in Pending'))}}
     const pick=c=>{const ex=rows.find(x=>x!==r&&x.cu===c.code);if(ex){r.cu='';r.nm='';r.txt='';ci.value='';cn.textContent='';sg.textContent='';setMsg(ex.posted?'✗ '+c.name+' is already posted for this date. Posted entries are locked — use Quick Sales / Quick Collection for any new amount.':'✗ '+c.name+' is already in the table for this day','bad');return false}
@@ -8489,7 +8500,7 @@ function drawCO(){const B=CP.body;B.textContent='';
       const mk=(kind,cls,ph)=>{ph=k+'-'+ph;const i=el('input','co-n '+cls);i.type='text';i.inputMode='decimal';i.autocomplete='off';i.placeholder=ph;const v=r[kind][k];i.value=v?String(v):'';
         i.addEventListener('input',()=>{let t=i.value.replace(/[^0-9.]/g,'');const p=t.indexOf('.');if(p>=0)t=t.slice(0,p+1)+t.slice(p+1).replace(/\./g,'');if(t!==i.value)i.value=t;const n=parseFloat(t);if(n>0)r[kind][k]=n;else delete r[kind][k];CX.dirty=true;grow()});
         i.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();nextFrom(i)}});return i};
-      const io=mk('o','o','Order'),ic=mk('c','c','Collection');if(r.posted)io.disabled=ic.disabled=true;else if(r.cl)ic.disabled=true;if(r.ost&&r.ost[k])io.disabled=true;td.appendChild(io);td.appendChild(ic);tr.appendChild(td)});
+      const io=mk('o','o','Order'),ic=mk('c','c','Collection');if(r.posted){io.disabled=true;ic.disabled=!r.rc}else if(r.cl)ic.disabled=true;if(r.ost&&r.ost[k])io.disabled=true;td.appendChild(io);td.appendChild(ic);tr.appendChild(td)});
     const tr0=el('td'),rm=el('input','co-n co-rm');rm.type='text';rm.placeholder='Remarks';rm.value=r.rm||'';if(r.posted||r.cl)rm.disabled=true;rm.addEventListener('input',()=>{r.rm=rm.value;CX.dirty=true;grow()});rm.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();nextFrom(rm)}});tr0.appendChild(rm);tr.appendChild(tr0);
     const tx=el('td'),x=el('button','co-x','×');x.type='button';x.setAttribute('aria-label','Delete row');
     x.onclick=()=>{const ovs=Object.values(r.ost||{});if(ovs.includes('p')){alert('The sales of this entry are waiting in Pending Sales. Delete them from Pending Sales first.');return}if(r.posted||ovs.includes('f')){if(!confirm('This entry is already posted. Delete it from this table?\n\nThe Sales / Collection already posted in the app stays as it is (remove it from Database Correction if needed).'))return;const X=coGet();X[CX.date]=coList(CX.date).filter(z=>z.id!==r.id);coSet(X);CX.rows=rows.filter(z=>z!==r);drawCO();return}if(r.saved){if(!confirm('Delete this saved entry?'))return;const X=coGet();X[CX.date]=coList(CX.date).filter(z=>z.id!==r.id);coSet(X);CX.rows=rows.filter(z=>z!==r);drawCO();return}
@@ -8508,7 +8519,7 @@ function drawCO(){const B=CP.body;B.textContent='';
     const date=CX.date;if(!date||date>today())return false;
     const old=coList(date),out=[];
     rows.forEach((r,i)=>{if(i<upto&&okRow(r)){r.id=r.id||(Date.now()+'-'+Math.random().toString(36).slice(2,7));r.saved=true;if(r._tr)r._tr.classList.add('co-sv');
-        out.push({id:r.id,cu:r.cu,nm:r.nm,o:Object.assign({},r.o),c:Object.assign({},r.c),rm:(r.rm||'').trim(),...(r.cl?{cl:1}:{}),...(r.snt&&Object.keys(r.snt).length?{snt:r.snt}:{})})}
+        out.push({id:r.id,cu:r.cu,nm:r.nm,o:Object.assign({},r.o),c:Object.assign({},r.c),rm:(r.rm||'').trim(),...(r.cl?{cl:1}:{}),...(r.rc?{rc:1}:{}),...(r.snt&&Object.keys(r.snt).length?{snt:r.snt}:{})})}
       else if(r.id){const o=old.find(z=>z.id===r.id);if(o)out.push(o)}});
     CX.dirty=rows.slice(upto).some(r=>!isBlank(r));
     if(JSON.stringify(out)===JSON.stringify(old))return false;
@@ -8568,17 +8579,17 @@ function drawCO(){const B=CP.body;B.textContent='';
     const q=mk(),L2=ldX(),n0=L2.sd.length;
     if(q.bad.length){say('\u2717 Could not match: '+q.bad.slice(0,3).join(', '),'bad');return}
     q.plan.forEach(p=>{const id=idX();L2.sd.push({id,co:p.co,cu:p.e.cu,nm:p.e.nm,amt:p.amt,post:day,days:p.days,ds:today(),at:Date.now(),coe:p.e.id+'|'+p.k});p.e.snt=Object.assign({},p.e.snt,{[p.k]:id})});
-    (q.X[day]||[]).forEach(e=>{if(hasC(e))e.cl=1});
+    (q.X[day]||[]).forEach(e=>{if(hasC(e)){e.cl=1;delete e.rc}});
     try{svX(L2)}catch(x){say('\u2717 Could not save on this device','bad');return}
     try{coSet(q.X)}catch(x){try{L2.sd.length=n0;svX(L2)}catch(y){}say('\u2717 Could not save on this device','bad');return}
-    (CX.rows||[]).forEach(r=>{const e=r.id&&(q.X[day]||[]).find(z=>z.id===r.id);if(e){r.snt=e.snt;r.cl=e.cl?1:0}});
+    (CX.rows||[]).forEach(r=>{const e=r.id&&(q.X[day]||[]).find(z=>z.id===r.id);if(e){r.snt=e.snt;r.cl=e.cl?1:0;r.rc=e.rc?1:0}});
     CX.rows=null;CX.rowsDate=null;
     try{document.dispatchEvent(new Event('visibilitychange'))}catch(e){}
     if(R.openPendingSales)R.openPendingSales();else if(R.openDrafts)R.openDrafts()};
   [sp,op].forEach(b=>row.appendChild(b));
   c.appendChild(row);c.appendChild(st);B.appendChild(c)}
-R.openCOE=()=>{if(window.RDL_ROLE==='admin')return;CX.open=false;CX.rows=null;CX.date=R.salesDay?R.salesDay():today();COT.from=COT.to=CX.date;COT.biz='';drawCO();show('coep')};   /* the file made today is for the sales day (yesterday; Thursday on Saturday), same as Today Sales and the uploaded file */
-function openD(){if(window.RDL_ROLE==='admin')return;dcrPC=0;DS.open=false;DV.date=R.salesDay?R.salesDay():today();DCT.from=DCT.to=DV.date;drawD();show('dcrp')}
+R.openCOE=d=>{if(window.RDL_ROLE==='admin')return;CX.open=false;CX.rows=null;CX.date=(typeof d==='string'&&/^\d{4}-\d\d-\d\d$/.test(d)?d:R.salesDay?R.salesDay():today());COT.from=COT.to=CX.date;COT.biz='';drawCO();show('coep')};   /* the file made today is for the sales day (yesterday; Thursday on Saturday), same as Today Sales and the uploaded file */
+function openD(d){if(window.RDL_ROLE==='admin')return;dcrPC=0;DS.open=false;DV.date=(typeof d==='string'&&/^\d{4}-\d\d-\d\d$/.test(d)?d:R.salesDay?R.salesDay():today());DCT.from=DCT.to=DV.date;drawD();show('dcrp')}
 /* ===== Posting Center: "Daily CO & DCR Entry" (entry / upload only, with today's status) and "Daily CO & DCR Report" (tables, reports, Excel). User accounts only. ===== */
 const DE=mkPage('dcen','Daily CO & DCR Entry',()=>{if(R.openUpload)R.openUpload()}),DRP=mkPage('dcre','Daily CO & DCR Report',()=>{if(R.openUpload)R.openUpload()});
 const RP={date:'',tab:'co'};
@@ -8702,6 +8713,8 @@ if(mp){mp.textContent='';mp.className='pg st';const l=el('div','set-list');
   const mtop=mp.appendChild(el('div','st-top')),mbk=el('button');mbk.type='button';mbk.innerHTML=BK;mbk.setAttribute('aria-label','Back');mbk.onclick=()=>{const g=document.querySelectorAll('.hdr > .ib')[1];if(g)g.click()};mtop.appendChild(mbk);mtop.appendChild(el('h2',null,'Daily Work Tools'));mp.appendChild(l);refreshMore()}
 ['visibilitychange'].forEach(ev=>document.addEventListener(ev,()=>setTimeout(refreshMore,50)));
 document.addEventListener('click',()=>setTimeout(()=>{if(mp&&mp.classList.contains('on'))refreshMore()},80),true);
+/* the admin's unlock notice / pop-up opens the page to fix: Collection & Order or DCR of that date, Pending Sales, Pending Collections */
+R.openUnlock=(kind,date)=>{try{if(kind==='co')R.openCOE(date);else if(kind==='dcr')R.openVisits(date);else if(kind==='rv')R.openPendingSales();else if(kind==='dz')R.openPendingCollections()}catch(e){}};
 R.openSchedule=openS;R.openVisits=openD;R.openVisitsPC=()=>{openD();dcrPC=1};
 
 /* ---------- reminders: a schedule shows in the bell list (and the red badge) from 2 hours before its time, and stays until it is marked Done ---------- */
@@ -11331,6 +11344,170 @@ html body .sq-dock,html body .sq-bar{bottom:80px!important}
 .cg.ro .sq-drt>tbody>tr:not(.sq-dt) td.num .ro-t{display:block;text-align:right}
 .cg.ro .pc-done{display:none}
 .cg .pc-done{margin-left:auto;border:0;border-radius:8px;padding:4px 14px;font-size:12.5px;font-weight:800;color:#fff;background:linear-gradient(135deg,#0b8a4f,#16a34a);cursor:pointer;min-height:0;width:auto}
+</style>
+<style id="rdl-glass-home">
+/* ===================================================================
+   DASHBOARD · DARK GLASS STAGE
+   Header + search bar are untouched. Only the sections below them are
+   re-laid-out. Pure CSS + one wrapper div; every id, data-k, class and
+   all JavaScript logic is unchanged.
+   =================================================================== */
+html body #home .gl-stage{
+  --g-tx:#f2f6ff;--g-mu:#9fb2d8;--g-line:rgba(255,255,255,.16);
+  --g-red:#ff8497;--g-amb:#ffc66b;--g-em:#44e3a4;--g-ind:#a3adff;--g-cy:#4fd6e6;
+  position:relative;isolation:isolate;flex:1 1 auto;display:flex;flex-direction:column;gap:10px;
+  margin:2px 0 0;padding:12px;border-radius:26px;color:var(--g-tx);overflow:hidden;
+  background:
+    radial-gradient(120% 60% at 0% 0%,rgba(18,184,196,.34),transparent 58%),
+    radial-gradient(90% 55% at 100% 30%,rgba(107,63,212,.38),transparent 62%),
+    radial-gradient(100% 50% at 0% 100%,rgba(31,111,208,.34),transparent 62%),
+    linear-gradient(180deg,#0b1736,#070d1e);
+  border:1px solid rgba(255,255,255,.12);
+  box-shadow:0 18px 34px -16px rgba(5,12,40,.75),inset 0 1px 0 rgba(255,255,255,.16)}
+html body #home .gl-stage>*{flex:none!important;margin:0!important}
+
+/* ---------- shared glass surface ---------- */
+html body #home .gl-stage :is(.grid .card,.regcard,.pch,.qa .card){
+  position:relative;overflow:hidden;color:var(--g-tx)!important;
+  background:linear-gradient(155deg,rgba(255,255,255,.13),rgba(255,255,255,.04))!important;
+  border:1px solid var(--g-line)!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.2),0 12px 22px -16px rgba(0,0,0,.8)!important;
+  -webkit-backdrop-filter:blur(14px) saturate(150%);backdrop-filter:blur(14px) saturate(150%);
+  transform:none;transition:transform .12s ease}
+html body #home .gl-stage :is(.grid .card,.regcard,.pch,.qa .card):active{transform:scale(.985)}
+html body #home .gl-stage :is(.grid .card,.pch,.qa .card)::after{display:none!important}
+
+/* ---------- 1 · HERO: Outstanding Register ---------- */
+html body #home .gl-stage .total{
+  display:flex;align-items:center;gap:12px;height:auto!important;min-height:0!important;
+  padding:14px 14px 14px 12px!important;border-radius:22px!important;color:var(--g-tx)!important;
+  border:1px solid transparent!important;
+  background:linear-gradient(155deg,rgba(24,38,86,.94),rgba(12,20,48,.94)) padding-box,
+             linear-gradient(120deg,#4fd6e6,#6f80ff 52%,#b684ff) border-box!important;
+  box-shadow:0 16px 28px -18px rgba(111,128,255,.9),inset 0 1px 0 rgba(255,255,255,.18)!important}
+html body #home .gl-stage .total::before{
+  content:"";position:absolute;inset:0!important;left:0;right:0;top:0;height:auto!important;border-radius:inherit!important;
+  background:radial-gradient(75% 130% at 100% 0%,rgba(168,132,255,.38),transparent 62%),
+             radial-gradient(60% 90% at 0% 100%,rgba(79,214,230,.2),transparent 65%)!important;pointer-events:none}
+html body #home .gl-stage .total .tx{flex:1;min-width:0;border-left:0!important;padding-left:0!important;overflow:hidden}
+html body #home .gl-stage .total .tx small,html body #home .gl-stage .total small{
+  display:block;font-size:14px!important;font-weight:700;letter-spacing:.2px;line-height:1.2;color:var(--g-mu)!important}
+html body #home .gl-stage .total .tx .depot{
+  display:inline-flex;align-items:center;gap:6px;margin:5px 0 4px;padding:2px 10px 2px 8px;border-radius:99px;
+  font-size:11.5px;font-weight:700;letter-spacing:.2px;color:#9aeaf4!important;
+  background:rgba(79,214,230,.13);border:1px solid rgba(79,214,230,.32);max-width:100%}
+html body #home .gl-stage .total .tx .depot::before{content:"";flex:none;width:6px;height:6px;border-radius:50%;background:var(--g-em);box-shadow:0 0 8px var(--g-em)}
+html body #home .gl-stage .total b{
+  display:block;font-size:clamp(22px,7.4vw,30px)!important;font-weight:800;letter-spacing:.2px;line-height:1.1;white-space:nowrap;
+  color:#fff!important;font-variant-numeric:tabular-nums;text-shadow:0 0 22px rgba(140,150,255,.6)}
+html body #home .gl-stage .total .go{
+  flex:none;width:38px!important;height:38px!important;border-radius:50%!important;color:#fff!important;
+  background:rgba(255,255,255,.1)!important;border:1px solid rgba(255,255,255,.3)!important;box-shadow:none!important}
+html body #home .gl-stage .total .go::before,html body #home .gl-stage .total .go::after{display:none!important}
+html body #home .gl-stage .total .go svg{width:18px;height:18px}
+
+/* ---------- 2 · Overdue / Upcoming: two tinted tiles ---------- */
+html body #home .gl-stage .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+html body #home .gl-stage .grid .card{display:flex;flex-direction:column;padding:11px 11px 10px!important;border-radius:20px!important}
+html body #home .gl-stage .grid .card::before{
+  content:"";position:absolute;inset:0!important;left:0;right:0;top:0;height:auto!important;border-radius:inherit!important;pointer-events:none;z-index:0}
+html body #home .gl-stage .grid .card.red{border-color:rgba(255,132,151,.4)!important}
+html body #home .gl-stage .grid .card.red::before{background:radial-gradient(95% 85% at 0% 0%,rgba(255,92,120,.34),transparent 66%)!important}
+html body #home .gl-stage .grid .card.amb{border-color:rgba(255,198,107,.4)!important}
+html body #home .gl-stage .grid .card.amb::before{background:radial-gradient(95% 85% at 0% 0%,rgba(255,172,50,.32),transparent 66%)!important}
+html body #home .gl-stage .grid .card>*{position:relative;z-index:1}
+html body #home .gl-stage .grid .top{display:flex;align-items:center;gap:8px}
+html body #home .gl-stage .grid .em{width:34px!important;height:34px!important;border-radius:50%!important;flex:none}
+html body #home .gl-stage .grid .card h3{margin:0!important;flex:1;min-width:0;font-size:13px!important;font-weight:700;line-height:1.15;white-space:normal!important;color:#fff!important;letter-spacing:0}
+html body #home .gl-stage .grid .go{width:24px!important;height:24px!important;flex:none;border-radius:50%!important;
+  background:rgba(255,255,255,.12)!important;border:1px solid rgba(255,255,255,.28)!important;box-shadow:none!important;color:#fff!important}
+html body #home .gl-stage .grid .go::before,html body #home .gl-stage .grid .go::after{display:none!important}
+html body #home .gl-stage .grid .go svg{width:13px;height:13px}
+html body #home .gl-stage .grid .amt{
+  margin:10px 0 5px!important;font-size:clamp(14px,4.5vw,18px)!important;font-weight:800;letter-spacing:0;white-space:nowrap;
+  overflow:hidden;font-variant-numeric:tabular-nums}
+html body #home .gl-stage .grid .card.red .amt{color:var(--g-red)!important;text-shadow:0 0 16px rgba(255,100,125,.45)}
+html body #home .gl-stage .grid .card.amb .amt{color:var(--g-amb)!important;text-shadow:0 0 16px rgba(255,180,60,.4)}
+html body #home .gl-stage .grid .cnt{display:flex;align-items:center;gap:6px;margin:0!important;font-size:12px!important;line-height:1.45;color:var(--g-mu)!important;opacity:1}
+html body #home .gl-stage .grid .cnt .mi{width:13px;height:13px;flex:none}
+html body #home .gl-stage .grid .card.red .cnt .mi{fill:var(--g-red)!important;color:var(--g-red)}
+html body #home .gl-stage .grid .card.amb .cnt .mi{fill:var(--g-amb)!important;color:var(--g-amb)}
+html body #home .gl-stage .grid .pill{
+  display:flex;align-items:flex-start;gap:6px;margin:9px 0 0!important;padding:7px 0 0!important;min-height:0!important;border-radius:0!important;
+  background:none!important;border:0!important;border-top:1px dashed rgba(255,255,255,.18)!important;box-shadow:none!important;
+  font-size:10.5px!important;line-height:1.25;color:var(--g-mu)!important}
+html body #home .gl-stage .grid .pill .mi{width:12px;height:12px;flex:none;margin-top:1px;fill:var(--g-mu)!important;color:var(--g-mu)}
+html body #home .gl-stage .grid .pill br{display:none}
+
+/* ---------- 3 · Sales & Collection Register: one panel, two columns ---------- */
+html body #home .gl-stage .regcard{display:block;padding:0!important;border-radius:22px!important}
+html body #home .gl-stage .regcard .rc-h{
+  display:flex;align-items:center;gap:10px;min-height:0!important;padding:10px 12px!important;border-radius:0!important;
+  background:transparent!important;border:0!important;border-bottom:1px solid rgba(255,255,255,.12)!important;box-shadow:none!important}
+html body #home .gl-stage .regcard .rc-h::before,html body #home .gl-stage .regcard .rc-h::after{display:none!important}
+html body #home .gl-stage .regcard .rc-i{width:32px!important;height:32px!important;flex:none}
+html body #home .gl-stage .regcard .rc-t{flex:1;min-width:0}
+html body #home .gl-stage .regcard .rc-t h3{margin:0!important;text-align:left!important;font-size:15px!important;font-weight:800;line-height:1.2!important;white-space:normal!important;color:#fff!important}
+html body #home .gl-stage .regcard .rc-go{width:26px!important;height:26px!important;flex:none;border-radius:50%!important;display:grid;place-items:center;
+  background:rgba(255,255,255,.12)!important;border:1px solid rgba(255,255,255,.28)!important;box-shadow:none!important;color:#fff!important}
+html body #home .gl-stage .regcard .rc-go svg{width:13px;height:13px}
+html body #home .gl-stage .regcard .rc-b{display:grid;grid-template-columns:1fr 1fr;gap:0!important;padding:0!important;background:none!important;flex:none}
+html body #home .gl-stage .regcard .rc-p{
+  position:relative;display:flex;flex-direction:column;align-items:flex-start;text-align:left;gap:0;
+  margin:0!important;padding:10px 12px 11px!important;border:0!important;border-radius:0!important;box-shadow:none!important;
+  background:transparent!important;color:var(--g-tx)!important;cursor:pointer;min-width:0;overflow:hidden}
+html body #home .gl-stage .regcard .rc-p.c{border-left:1px solid rgba(255,255,255,.12)!important}
+html body #home .gl-stage .regcard .rc-p.s{background:radial-gradient(100% 90% at 0% 100%,rgba(68,227,164,.22),transparent 68%)!important}
+html body #home .gl-stage .regcard .rc-p.c{background:radial-gradient(100% 90% at 100% 100%,rgba(130,140,255,.28),transparent 68%)!important}
+html body #home .gl-stage .regcard .rc-p small{display:flex;align-items:center;gap:6px;font-size:12.5px!important;font-weight:800;letter-spacing:.2px}
+html body #home .gl-stage .regcard .rc-p small::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor;box-shadow:0 0 9px currentColor}
+html body #home .gl-stage .regcard .rc-p.s small{color:var(--g-em)!important}
+html body #home .gl-stage .regcard .rc-p.c small{color:var(--g-ind)!important}
+html body #home .gl-stage .regcard .rc-p b{margin:6px 0 5px!important;font-size:clamp(14px,4.4vw,17.5px)!important;font-weight:800;letter-spacing:0;white-space:nowrap;color:#fff!important;font-variant-numeric:tabular-nums}
+html body #home .gl-stage .regcard .rc-p i{display:flex;flex-direction:column;gap:1px;font-style:normal;font-size:12px;line-height:1.45;color:var(--g-mu)!important;border:0!important;background:none!important}
+html body #home .gl-stage .regcard .rc-p i span{display:flex;align-items:center;gap:6px}
+html body #home .gl-stage .regcard .rc-p .mi{width:13px;height:13px;flex:none}
+html body #home .gl-stage .regcard .rc-p.s .mi{fill:var(--g-em)!important;color:var(--g-em)}
+html body #home .gl-stage .regcard .rc-p.c .mi{fill:var(--g-ind)!important;color:var(--g-ind)}
+html body #home .gl-stage .regcard .rc-p .rc-ar{position:absolute!important;top:10px;right:10px;left:auto;bottom:auto;width:22px!important;height:22px!important;margin:0!important;border-radius:50%!important;
+  display:grid;place-items:center;background:rgba(255,255,255,.1)!important;border:1px solid rgba(255,255,255,.26)!important;box-shadow:none!important;color:#fff!important}
+html body #home .gl-stage .regcard .rc-p .rc-ar svg{width:11px;height:11px}
+
+/* ---------- 4 · Posting Center + Customer Statement ---------- */
+html body #home .gl-stage .tw2{display:grid;grid-template-columns:1fr;gap:10px;margin:0!important}
+html body #home .gl-stage .tw2.two{grid-template-columns:1fr 1fr}
+html body #home .gl-stage .tw2 .qa .card{border-radius:20px!important}
+html body #home .gl-stage .tw2 .pch{border-radius:20px!important}
+html body #home .gl-stage .tw2 .qa .card.cya{border-color:rgba(79,214,230,.42)!important}
+html body #home .gl-stage .tw2 .pch{border-color:rgba(190,240,90,.42)!important}
+html body #home .gl-stage .tw2 .qa .card.cya::before,html body #home .gl-stage .tw2 .pch::before{
+  content:"";position:absolute;inset:0!important;left:0;right:0;top:0;height:auto!important;border-radius:inherit!important;pointer-events:none;z-index:0}
+html body #home .gl-stage .tw2 .qa .card.cya::before{background:radial-gradient(90% 120% at 0% 0%,rgba(79,214,230,.3),transparent 66%)!important}
+html body #home .gl-stage .tw2 .pch::before{background:radial-gradient(90% 120% at 0% 0%,rgba(163,230,53,.28),transparent 66%)!important}
+html body #home .gl-stage .tw2 :is(.pch,.card.cya)>*{position:relative;z-index:1}
+html body #home .gl-stage .tw2 :is(.pch-t b,.card.cya h4){color:#fff!important;text-shadow:none!important;font-weight:800}
+html body #home .gl-stage .tw2 :is(.pch-t small,.card.cya p){color:var(--g-mu)!important;background:none!important;box-shadow:none!important}
+html body #home .gl-stage .tw2 :is(.pch-t small,.card.cya p) :is(.pi,svg){fill:var(--g-mu)!important;color:var(--g-mu)!important}
+html body #home .gl-stage .tw2 :is(.pch-g,.card.cya .go){background:rgba(255,255,255,.12)!important;border:1px solid rgba(255,255,255,.28)!important;color:#fff!important;box-shadow:none!important}
+html body #home .gl-stage .tw2 :is(.pch-g,.card.cya .go) svg,html body #home .gl-stage .tw2 :is(.pch-g,.card.cya .go) svg path{stroke:#fff!important}
+/* two-tile mode (user role): compact tiles */
+html body #home .gl-stage .tw2.two :is(.pch,.qa .card.cya){padding:11px 10px 10px!important;min-height:0!important;row-gap:8px!important}
+html body #home .gl-stage .tw2.two :is(.pch-t b,.card.cya h4){font-size:14px!important}
+html body #home .gl-stage .tw2.two :is(.pch-t small,.card.cya p){padding:6px 0 0!important;font-size:10.5px!important;border-top:1px dashed rgba(255,255,255,.18)!important;border-radius:0!important}
+/* single-bar mode (admin): slim full-width row */
+html body #home .gl-stage .tw2:not(.two) .qa .card.cya{display:flex;align-items:center;gap:12px;padding:11px 12px!important;height:auto!important;min-height:0!important}
+html body #home .gl-stage .tw2:not(.two) .qa .card.cya .em{width:40px!important;height:40px!important;flex:none}
+html body #home .gl-stage .tw2:not(.two) .qa .card.cya h4{margin:0!important;font-size:16px!important;line-height:1.2}
+html body #home .gl-stage .tw2:not(.two) .qa .card.cya p{margin:2px 0 0!important;padding:0!important;border:0!important;font-size:11px!important}
+html body #home .gl-stage .tw2:not(.two) .qa .card.cya .go{position:static!important;margin:0 0 0 auto!important;width:28px!important;height:28px!important;border-radius:50%!important}
+html body #home .gl-stage .tw2:not(.two) .pch{padding:11px 12px!important}
+/* Customer Outstanding card (only if it is ever shown) gets the same glass bar */
+html body #home .gl-stage .qa .card.blu{border-color:rgba(130,150,255,.42)!important}
+html body #home .gl-stage .qa .card.blu::before{content:"";position:absolute;inset:0!important;left:0;right:0;top:0;height:auto!important;border-radius:inherit!important;pointer-events:none;background:radial-gradient(90% 120% at 0% 0%,rgba(110,130,255,.3),transparent 66%)!important}
+html body #home .gl-stage .qa .card.blu :is(h4){color:#fff!important}
+html body #home .gl-stage .qa .card.blu p{color:var(--g-mu)!important}
+html body #home .gl-stage .qa .card.blu>*{position:relative;z-index:1}
+@media (prefers-reduced-motion:reduce){html body #home .gl-stage *{transition:none!important}}
 </style>
 </body>
 </html>
