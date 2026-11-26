@@ -347,7 +347,7 @@ button.cu-chip.od{cursor:pointer}
 .set-item .chev{font-size:26px;color:#0a5fd6;font-weight:800;line-height:1}
 .sbody .st-card{margin-bottom:12px}
 .fp.opt{padding:11px 12px}
-.rdl-ov{position:fixed;inset:0;background:#0a1f4a99;z-index:3000;display:flex;align-items:center;justify-content:center;padding:20px}
+.rdl-ov{position:fixed;inset:0;background:#0a1f4a99;z-index:9500;display:flex;align-items:center;justify-content:center;padding:20px}
 .rdl-box{background:#fff;border-radius:18px;padding:16px;max-width:380px;width:100%;box-shadow:0 12px 40px #00000055;max-height:90vh;overflow:auto}
 .rdl-box h3{font-size:17px;color:#12306b;margin-bottom:8px}.rdl-msg{font-size:13.5px;color:#3a4d73;line-height:1.45;margin-bottom:10px}
 .rdl-btns{display:flex;gap:10px;margin-top:14px}.rdl-btns .st-btn{margin-top:0;flex:1}
@@ -2123,6 +2123,17 @@ function pullAlerts(){
     var list=j.alerts||[],fresh=list.filter(function(a){return !old[a.id]});
     LS.setItem('rdlgate.alerts',JSON.stringify(list));window.dispatchEvent(new Event('rdl:alerts'));
     if(fresh.length)toast('Backup missing: '+fresh.length+' user'+(fresh.length===1?'':'s')+' — see the notification bell')
+  }).catch(function(){}).then(function(){return pullEditNotices()})}
+/* ---------- notification bell: corrections ("X corrected / deleted Y's entry"). Admin: made by OTHER admins (from the server). User: made to MY entries. ---------- */
+function enList(){try{return JSON.parse(LS.getItem('rdlgate.enotes'))||[]}catch(e){return[]}}
+function enSave(list){LS.setItem('rdlgate.enotes',JSON.stringify(list.slice(0,60)));window.dispatchEvent(new Event('rdl:alerts'))}
+function pullEditNotices(){
+  if(!S||S.role!=='admin'||!hasAuth())return Promise.resolve();
+  return api('listEditNotices',{},true).then(function(j){
+    var old={},first=!LS.getItem('rdlgate.enotes');enList().forEach(function(a){old[a.id]=1});
+    var list=(j&&j.notices)||[],fresh=list.filter(function(a){return !old[a.id]});
+    enSave(list);
+    if(fresh.length&&!first)toast('✎ '+fresh[0].by+(fresh.length>1?' ও আরও '+(fresh.length-1)+'টি':'')+' — এন্ট্রি সংশোধন করেছেন, 🔔 দেখুন')
   }).catch(function(){})}
 /* ---------- admin: Backup status card on the home page ---------- */
 var bkOpen=null,bkLast=null;
@@ -2303,10 +2314,52 @@ function adminPull(){
   if(!S||S.role!=='admin'||apBusy||!onHomePage()||panelOn||document.visibilityState!=='visible'||!LS.getItem('rdl.master.v1'))return Promise.resolve();
   apBusy=1;return pullData(false,true).then(function(c){if(c){toast('New data from another admin — reloading…');setTimeout(function(){location.reload()},900)}else return publishDirty()}).catch(function(){}).then(function(){apBusy=0})}
 var apBusy=0;
-setInterval(function(){pullBkStatus().then(autoMerge).then(adminPull)},300000);
-document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible')setTimeout(function(){syncOther().then(autoMerge).then(adminPull)},2500)});
+setInterval(function(){pullBkStatus().then(autoMerge).then(adminPull).then(pullEditNotices)},300000);
+document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible')setTimeout(function(){syncOther().then(autoMerge).then(adminPull).then(pullEditNotices)},2500)});
 try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist()}catch(e){}   /* asks the browser not to clear this app's saved data by itself */
 document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible')setTimeout(pullBkStatus,1200)});
+/* ---------- admin corrections to MY entries: apply on this phone, confirm to the server, reload ---------- */
+var aeBusy=0;
+function applyAdminEdit(ed){
+  var ent=null,key=String(ed.key),date=String(ed.date||''),nd=String(ed.newDate||date);
+  if(ed.op==='edit'){ent=JSON.parse(ed.json)}
+  var unl=!!(ent&&ent.unl);if(unl)delete ent.unl;   /* unl = the admin only unlocked this entry: the user fixes it and posts again */
+  function up(a,m,e){for(var i=0;i<a.length;i++)if(m(a[i])){a[i]=e;return}a.push(e)}
+  if(ed.kind==='co'){var X=jget('rdl.coe.v1')||{},hit=function(e){return e&&String(e.id||(JSON.stringify(e.o||{})+JSON.stringify(e.c||{})+(e.nm||'')))===key};
+    Object.keys(X).forEach(function(d){if(!Array.isArray(X[d])||(ent&&d===nd))return;X[d]=X[d].filter(function(e){return !hit(e)})});
+    if(ent){if(unl)delete ent.cl;ent.id=key;X[nd]=X[nd]||[];up(X[nd],hit,ent)}jset('rdl.coe.v1',X)}
+  else if(ed.kind==='dcr'){var V=jget('rdl.visit.v1')||{};V.visits=V.visits||[];var hv=function(e){return e&&String(e.id||[e.date,e.cu,e.tin,e.tout].join('~'))===key};
+    if(ent){if(unl){delete ent.posted;delete ent.postedAt}ent.id=key;ent.date=nd;up(V.visits,hv,ent)}else V.visits=V.visits.filter(function(e){return !hv(e)});jset('rdl.visit.v1',V)}
+  else if(unl&&(ed.kind==='rv'||ed.kind==='dz')){var L=jget('rdl.ledger.v1')||{};L.rv=L.rv||[];L.dz=L.dz||[];L.sd=L.sd||[];L.dr=L.dr||[];L.del=L.del||{};
+    var nid=function(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6)},t0=new Date(),p2=function(n){return('0'+n).slice(-2)},tdy=t0.getFullYear()+'-'+p2(t0.getMonth()+1)+'-'+p2(t0.getDate());
+    if(ed.kind==='rv'){if(!ent.sap){var sx={id:nid(),co:ent.co,cu:ent.cu,nm:ent.nm,amt:ent.amt,post:ent.post,days:ent.days,ds:tdy,at:Date.now()};if(ent.coe)sx.coe=ent.coe;L.sd.push(sx);L.rv=L.rv.filter(function(x){return !(x&&String(x.bill)===key)});L.del[key]=Date.now()}}   /* the posted sales bill goes back to Pending Sales; posting again gives it a new RV number */
+    else{var dx={id:nid(),cu:ent.cu,co:ent.co,nm:ent.nm,ag:ent.ag,bn:String(ent.ag||'').split('|')[0],col:ent.col,tds:ent.tds,type:ent.type,ref:ent.ref,dcr:ent.dcr,at:Date.now()};if(ent.xt)dx.xt=ent.xt;if(ent.rd)dx.rd=ent.rd;if(ent.bd)dx.bd=ent.bd;L.dr.push(dx);L.dz=L.dz.filter(function(x){return !(x&&String(x.bill)===key)});L.del[key]=Date.now()}   /* the posted collection (with its TDS) goes back to Pending Collections */
+    jset('rdl.ledger.v1',L)}
+  else if(ed.kind==='rv'||ed.kind==='dz'){var L=jget('rdl.ledger.v1')||{};L.rv=L.rv||[];L.dz=L.dz||[];var a=L[ed.kind],i=-1;
+    a.forEach(function(x,n){if(i<0&&x&&!x._adm&&String(x.bill)===key)i=n});
+    if(ent){ent.bill=key;if(i>=0){if(a[i].pt&&!ent.pt)ent.pt=a[i].pt;a[i]=ent}else a.push(ent);L[ed.kind]=a.filter(function(x){return !(x&&x._adm&&String(x.bill)===key)});if(L.del)delete L.del[key]}
+    else{L[ed.kind]=a.filter(function(x){return !(x&&String(x.bill)===key)});L.del=L.del||{};L.del[key]=Date.now()}
+    jset('rdl.ledger.v1',L)}}
+function pullAdminEdits(){
+  if(!S||S.role!=='user'||aeBusy||LS.getItem('rdlgate.owner')!=='user')return Promise.resolve();
+  aeBusy=1;
+  return api('myAdminEdits',null,true).then(function(j){
+    var list=(j&&j.edits)||[];if(!list.length)return;
+    var ids=[],lines=[],lab={co:'Collection & Order',dcr:'DCR',rv:'Sales',dz:'Collection'};
+    sysW=1;try{list.forEach(function(ed){applyAdminEdit(ed);ids.push(ed.id);
+      var nm='';try{var e=JSON.parse(ed.json);nm=e.nm||e.cu||''}catch(x){}
+      lines.push('• '+(lab[ed.kind]||ed.kind)+' '+(ed.kind==='rv'||ed.kind==='dz'?ed.key:ed.newDate)+(nm?' • '+nm:'')+(ed.op==='delete'?' — ডিলিট করা হয়েছে':(/"unl":1/.test(ed.json||'')?' — আনলক করা হয়েছে, ঠিক করে আবার পোস্ট করুন':' — সংশোধন করা হয়েছে'))+' ('+ed.by+')')})}finally{sysW=0}
+    LS.setItem('rdlgate.bkdirty','1');
+    LS.setItem('rdlgate.admnote',lines.slice(-12).join('\n'));
+    try{var nl=enList();list.forEach(function(ed){var nm='';try{var e=JSON.parse(ed.json);nm=e.nm||e.cu||''}catch(x){}nl.unshift({id:'u'+ed.id,at:ed.at||Date.now(),by:ed.by,kind:ed.kind,op:ed.op,date:(ed.kind==='rv'||ed.kind==='dz')?ed.key:ed.newDate,brief:nm,mine:1})});LS.setItem('rdlgate.enotes',JSON.stringify(nl.slice(0,60)))}catch(x){}
+    return api('ackAdminEdits',{ids:ids},true).then(function(){return autoBackup(true)}).catch(function(){}).then(function(){goReload();throw new Error('__reload')})
+  }).then(function(){aeBusy=0},function(e){aeBusy=0;if(e&&e.message==='__reload')throw e})}
+function showAdminNote(){var t=LS.getItem('rdlgate.admnote');if(!t||!window.RDLUI)return;LS.removeItem('rdlgate.admnote');RDLUI.alert('এডমিন আপনার এন্ট্রি ঠিক করেছেন',t)}
+setTimeout(showAdminNote,2500);
+function checkAdminEdits(){if(onHomePage()&&!panelOn&&document.visibilityState==='visible'&&hasAuth())pullAdminEdits().catch(function(){})}
+setInterval(checkAdminEdits,120000);
+document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible')setTimeout(checkAdminEdits,3000)});
+
 /* ---------- after sign-in (every app start) ---------- */
 function afterLogin(){
   afterAt=Date.now();chipSync();status('Checking…');
@@ -2320,7 +2373,7 @@ function afterLogin(){
     if(S.role==='user')LS.setItem('rdlgate.owner','user');
     if(S.role==='user')return mergeOwn(false,true).then(function(){return pullData(false)}).then(function(changed){if(changed){toast('New data received — reloading…');setTimeout(function(){goReload()},900);throw new Error('__reload')}});
     if(S.role==='admin')return mergeOwn(false,true).then(function(){return pullData(false,true)}).then(function(changed){if(changed){toast('New data from another admin — reloading…');setTimeout(function(){goReload()},900);throw new Error('__reload')}}).then(function(){return publishDirty()})
-  }).then(loadPerms).then(function(){return backupIfDue()}).then(function(){return pullAlerts()}).then(function(){return pullBkStatus()}).then(function(){return autoMerge()}).catch(function(e){
+  }).then(loadPerms).then(pullAdminEdits).then(function(){return backupIfDue()}).then(function(){return pullAlerts()}).then(function(){return pullBkStatus()}).then(function(){return autoMerge()}).catch(function(e){
     if(e.message==='__reload')return;
     if(/ACCESS_DENIED/.test(e.message)&&/is not allowed/.test(e.message))return forcedOut(msgOf(e));   /* ONLY when the admin really removed this person; a Google check that merely failed or expired never signs anyone out or wipes data */
     status('Offline or not synced: '+msgOf(e),'warn')})}
@@ -3674,18 +3727,26 @@ function items(){
 }
 /* missed-backup alerts (admin only; filled by the sign-in code) */
 const bkAl=()=>{try{return JSON.parse(localStorage.getItem('rdlgate.alerts'))||[]}catch(e){return[]}},bkId=a=>'bk|'+a.id;
+const enAl=()=>{try{const x=JSON.parse(localStorage.getItem('rdlgate.enotes'))||[],cut=Date.now()-7*864e5;return x.filter(a=>(+a.at||0)>=cut)}catch(e){return[]}},enId=a=>'en|'+a.id;
+const KL={co:'Collection & Order',dcr:'DCR',rv:'Sales',dz:'Collection'};
 window.addEventListener('rdl:alerts',()=>{try{build()}catch(e){}});
 function build(){
-  const S=ld(),live=new Set(items().map(uid).concat(bkAl().map(bkId)));
+  const S=ld(),live=new Set(items().map(uid).concat(bkAl().map(bkId)).concat(enAl().map(enId)));
   Object.keys(S.read).forEach(k=>{if(!live.has(k))delete S.read[k]});   /* forget bills that left the today/tomorrow window */
   sv(S);render(S);
 }
 function render(S){
-  const rows=items(),al=bkAl(),unread=rows.filter(b=>!S.read[uid(b)]).length+al.filter(a=>!S.read[bkId(a)]).length,m=window.RDL&&window.RDL.master;
+  const rows=items(),al=bkAl(),en=enAl(),unread=rows.filter(b=>!S.read[uid(b)]).length+al.filter(a=>!S.read[bkId(a)]).length+en.filter(a=>!S.read[enId(a)]).length,m=window.RDL&&window.RDL.master;
   const bd=document.querySelector('.hdr .badge');
   if(bd){bd.textContent=unread>99?'99+':unread;bd.style.display=unread?'':'none'}
   const L=$('#nList');L.textContent='';
-  if(!rows.length&&!al.length){L.appendChild(el('div','nempty',(()=>{try{if((JSON.parse(localStorage.getItem('rdl.prefs.v1'))||{}).notif===false)return'Notifications are turned off in Settings.'}catch(e){}return m?'No bills are due today or tomorrow.':'Upload the database from Settings to get notifications.'})()));return}
+  if(!rows.length&&!al.length&&!en.length){L.appendChild(el('div','nempty',(()=>{try{if((JSON.parse(localStorage.getItem('rdl.prefs.v1'))||{}).notif===false)return'Notifications are turned off in Settings.'}catch(e){}return m?'No bills are due today or tomorrow.':'Upload the database from Settings to get notifications.'})()));return}
+  en.forEach(a=>{const r=!!S.read[enId(a)],c=el('div','nit'+(r?'':' unread')),body=el('div','nb'),del=a.op==='delete';
+    c.appendChild(el('div','nd'));
+    body.appendChild(el('b',null,a.mine?'এডমিন আপনার এন্ট্রি '+(del?'ডিলিট করেছেন':'সংশোধন করেছেন'):(a.by||'Admin')+' '+(del?'এন্ট্রি ডিলিট করেছেন':'এন্ট্রি সংশোধন করেছেন')));
+    body.appendChild(el('span',null,(KL[a.kind]||a.kind)+(a.date?' • '+a.date:'')+((a.userName||a.brief)?' • '+(a.mine?a.brief:(a.userName||'')+(a.brief?' / '+a.brief:'')):'')+(a.mine&&a.by?' ('+a.by+')':'')));
+    body.appendChild(el('span','chip '+(del?'r':'a'),del?'Deleted':'Corrected'));
+    c.appendChild(body);c.onclick=()=>{S.read[enId(a)]=1;sv(S);render(S)};L.appendChild(c)});
   al.forEach(a=>{const r=!!S.read[bkId(a)],c=el('div','nit'+(r?'':' unread')),body=el('div','nb');
     c.appendChild(el('div','nd'));
     {const d=el('span',null,a.depot||'');d.style.cssText='font-weight:800;font-size:12px;color:#0f766e';if(a.depot)body.appendChild(d)}
@@ -4658,7 +4719,7 @@ function salesDrafts(P){
           window.RDLDDEL&&RDLDDEL(L2,[d.id]);L2.sd=L2.sd.filter(e=>e.id!==d.id);
           if(d.sap&&d.doc){blk._res={k:'RV',cu:x.cu,doc:String(d.doc),d:x.post};L2.rv.push({bill:String(d.doc),doc:'RV',pt:Date.now(),co:x.co,cu:x.cu,nm:x.nm,amt:x.amt,post:x.post,due:d.due||addD(x.post,x.days),days:x.days,sap:1})}
           else{const n=nextNo(L2,'RV');blk._res={k:'RV',cu:x.cu,doc:'RV-'+String(n).padStart(6,'0'),d:x.post};   /* used by Post selected to open the register on this bill */
-          L2.rv.push({bill:'RV-'+String(n).padStart(6,'0'),doc:'RV',pt:Date.now(),co:x.co,cu:x.cu,nm:x.nm,amt:x.amt,post:x.post,due:addD(x.post,x.days),days:x.days,manual:1})}
+          L2.rv.push({bill:'RV-'+String(n).padStart(6,'0'),doc:'RV',pt:Date.now(),co:x.co,cu:x.cu,nm:x.nm,amt:x.amt,post:x.post,due:addD(x.post,x.days),days:x.days,manual:1,...(d.coe?{coe:d.coe}:{})})}
           try{sv(L2)}catch(e){return bad('Could not save on this device')}return true};
         blk._post=()=>doPost();blk._amt=()=>+am.value||0;blk._id=d.id;blk._info=()=>({bn:d.doc||'',co:c.co,a:+am.value||0});pb.onclick=()=>{if(doPost()){cards();document.dispatchEvent(new Event('visibilitychange'));buildDrafts('Sales')}};
         mkB('Delete','st-btn od-clear').onclick=async()=>{const ok=window.RDLUI&&RDLUI.ask?await RDLUI.ask({title:'Delete this pending bill?',msg:(d.nm||d.cu)+' \u2022 '+money(d.amt)+'.',ok:'Delete'}):confirm('Delete this pending bill?');if(!ok)return;const L2=ld();window.RDLDDEL&&RDLDDEL(L2,[d.id]);L2.sd=(L2.sd||[]).filter(e=>e.id!==d.id);try{sv(L2)}catch(e){return}buildDrafts('Sales')};
@@ -4918,10 +4979,10 @@ window.RDL.openReg=openReg;
 document.querySelectorAll('.nav button').forEach(b=>{if(b.dataset.p==='scr')b.addEventListener('click',()=>{msg.a='';openReg(['RV','DZ'])})});
 {const rc=document.getElementById('regCard');if(rc){const go=k=>openReg(k==='RV'?['RV']:k==='DZ'?['DZ']:['RV','DZ']);
   rc.querySelectorAll('[data-k]').forEach(e=>{e.addEventListener('click',ev=>{ev.stopPropagation();go(e.dataset.k)});e.addEventListener('keydown',ev=>{if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();go(e.dataset.k)}})})}}
-window.RDL.openTab=(w,t,q)=>{if(window.RDL_ROLE==='admin'&&t!=='search')return;   /* admins do not post */
+window.RDL.openTab=(w,t,q)=>{if(window.RDL_ROLE==='admin'&&t!=='search')return;if(t==='post'){if(window.RDL.openUpload)window.RDL.openUpload();return}   /* Smart Post is removed: the Collection & Order form sends sales to Pending Sales */   /* admins do not post */
   if(t==='search'&&w!=='a')return openReg(w==='s'?['RV']:['DZ'],q);tab[w]=t;msg[w]='';R.historyPre=q?{w,q}:null;render(w);const id={s:'sales',c:'collection',a:'scr'}[w];goPage(id,id==='scr'?'scr':id)};
 /* after the reload that follows a Daily Collection & Order upload: open Sales & Collection Posting */
-{let go=0;try{go=sessionStorage.getItem('rdl.openPosting');if(go)sessionStorage.removeItem('rdl.openPosting')}catch(e){}if(go){const run=()=>{try{window.RDL.openTab('s','post')}catch(e){}};if(document.readyState==='complete')setTimeout(run,300);else window.addEventListener('load',()=>setTimeout(run,300))}}
+{let go=0;try{go=sessionStorage.getItem('rdl.openPosting');if(go)sessionStorage.removeItem('rdl.openPosting')}catch(e){}if(go){const run=()=>{try{window.RDL.openUpload()}catch(e){}};if(document.readyState==='complete')setTimeout(run,300);else window.addEventListener('load',()=>setTimeout(run,300))}}
 /* after saving a manual Sales / Collection draft: reload the app and come back to Posting Center */
 const hubReload=(go,note)=>{try{sessionStorage.setItem('rdl.openHub','1');if(go){sessionStorage.setItem('rdl.openPend',go);if(note)sessionStorage.setItem('rdl.openPendNote',JSON.stringify(note))}}catch(e){}setTimeout(()=>location.reload(),350)};   /* go: 'c' / 's' = land on Pending Collections / Pending Sales after the reload instead of the Posting Center */
 {let h=0;try{h=sessionStorage.getItem('rdl.openHub');if(h)sessionStorage.removeItem('rdl.openHub')}catch(e){}if(h){const run=()=>{try{let pd=null,nt=null;try{pd=sessionStorage.getItem('rdl.openPend');nt=sessionStorage.getItem('rdl.openPendNote');sessionStorage.removeItem('rdl.openPend');sessionStorage.removeItem('rdl.openPendNote')}catch(e){}
@@ -4937,8 +4998,7 @@ function buildUpload(){
   const dr=(ld().dr||[]),sdN=(ld().sd||[]).length,drT=dr.reduce((a,d)=>a+(+d.col||0)+(+d.tds||0),0);
   const C={v:['#f8f4ff','#e3d8fb','#d0c0f3','#9a88f5','#6a52d9','#33248a','#6a52d966'],b:['#fff','#dbeafe','#a9c9f5','#4f9bff','#1650d8','#0f3ca3','#1650d855'],g:['#fff','#d8f7ea','#a5e6cb','#34d399','#0b9a62','#065f46','#0b9a6255'],a:['#fffdf5','#ffeac4','#f3d794','#f8c24d','#d98200','#6b4200','#d9820055'],n:['#f4f9ff','#dcebff','#b9d3f5','#4f9bff','#0a49b5','#0a2f78','#0a49b566']};
   const g=P.appendChild(el('div','up-grid'));
-  [['Smart Post','Post the Daily Collection & Order file','n','i-doc',()=>window.RDL.openTab('s','post'),1],
-   ['Quick Collection','Type a collection in by hand','b','i-wal',()=>openManual('c')],
+  [['Quick Collection','Type a collection in by hand','b','i-wal',()=>openManual('c')],
    ['Quick Sales','Type a sales bill in by hand','g','i-sales',()=>openManual('s')],
    ['Pending Collections ('+dr.length+')',dr.length?money(drT)+' waiting to be posted':'Nothing waiting to be posted','a','i-stmt',()=>window.RDL.openPendingCollections()],
    ['Pending Sales ('+sdN+')',sdN?sdN+' sale'+(sdN===1?'':'s')+' waiting to be posted':'Nothing waiting to be posted','a','i-stmt',()=>window.RDL.openPendingSales()],
@@ -5737,6 +5797,7 @@ const locked=z=>z.orphan||z.nx;
 
 /* ---- edit / delete a DZ collection ---- */
 async function editDZ(z0){
+  if(window.RDL_ROLE==='admin'&&z0._u){await RDLUI.alert('Entry Tables ব্যবহার করুন','ইউজারের এন্ট্রি এডিট বা ডিলিট করতে: More → Entry Tables → Sales / Collection।');return false}
   if(locked(z0)){await RDLUI.alert('Cannot edit','This collection was settled by a database update and is locked.');return}
   const ch=tdsUsed(z0);if(ch){await RDLUI.alert('Cannot edit','The TDS of this collection is in challan '+ch+'. Remove it from the challan in TDS Ledger first.');return}
   const T=tdy();let v={date:z0.date,ty:z0.type||'Cash',rf:z0.ref||'',rd:z0.rd||'',col:String(z0.col),tds:String(z0.tds||0)};
@@ -5764,6 +5825,7 @@ async function editDZ(z0){
 /* ---- edit / delete a sales bill (RV) ---- */
 const applied=(L,r)=>L.dz.filter(z=>z.ag===uid(r));
 async function editRV(r0){
+  if(window.RDL_ROLE==='admin'&&r0._u){await RDLUI.alert('Entry Tables ব্যবহার করুন','ইউজারের এন্ট্রি এডিট বা ডিলিট করতে: More → Entry Tables → Sales / Collection।');return false}
   if(locked(r0)){await RDLUI.alert('Cannot edit','This bill was settled by a database update and is locked.');return}
   const L=ledger(),ap=applied(L,r0),used=ap.reduce((a,z)=>a+(+z.col||0)+(+z.tds||0),0),T=tdy();let v={date:r0.post,amt:String(r0.amt),days:String(r0.days||'')};
   for(;;){
@@ -5778,6 +5840,7 @@ async function editRV(r0){
     const r=commit('Edit '+r0.bill,(r0.nm||r0.cu)+' • '+money(r0.amt)+' → '+money(a),L2=>{const x=L2.rv.find(e=>e.bill===r0.bill);if(!x)return false;x.post=v.date;x.amt=a;x.days=d;x.due=addDay(v.date,d);x.edited=new Date().toISOString()});
     if(r!==true)await RDLUI.alert('Could not save','Nothing was changed.');return r===true}}
 async function deleteMany(items){
+  if(window.RDL_ROLE==='admin'&&items.some(i=>i.o&&i.o._u)){await RDLUI.alert('Entry Tables ব্যবহার করুন','ইউজারের এন্ট্রি এডিট বা ডিলিট করতে: More → Entry Tables → Sales / Collection।');return false}
   const L=ledger(),dzM=new Map(),drM=new Map(),rvM=new Map(),frees=[],skip=[];
   const grpAdd=(dcr,cu)=>{L.dz.filter(z=>z.dcr===dcr&&String(z.cu)===String(cu)&&!z.manual&&!locked(z)).forEach(z=>dzM.set(z.bill,z));(L.dr||[]).filter(d=>d.dcr===dcr&&String(d.cu)===String(cu)).forEach(d=>drM.set(d.id,d))};
   for(const it of items){const o=it.o;
@@ -8239,6 +8302,10 @@ const CX={name:'',buf:null,date:today()},coGet=()=>jget('rdl.coe.v1',{}),coSet=x
 /* final posting: an entry is final once any of its Sales / Collection lines is posted in the ledger (same key as Smart Post). Drafts and Smart Post saves are not final. */
 const coNorm=x=>String(x||'').toLowerCase().replace(/\s+/g,' ').trim(),
 coPosted=(d,e)=>{try{const L=JSON.parse(localStorage.getItem('rdl.ledger.v1')||'null'),pl=(L&&L.pl)||{},n=coNorm(e.nm);return COL7.some(k=>(+(e.o||{})[k]>0&&pl['o|'+d+'|'+n+'|'+k.toLowerCase()])||(+(e.c||{})[k]>0&&pl['c|'+d+'|'+n+'|'+k.toLowerCase()]))}catch(x){return false}};
+/* Order -> Pending Sales: each company's order of a form entry is sent to Pending Sales (ledger .sd) with coe='entryId|COMPANY'. State: 'p' = waiting in Pending Sales (Order box locked), 'f' = posted from Pending Sales (locked for good), '' = never sent or deleted from Pending (box open again). */
+const LKX='rdl.ledger.v1',ldX=()=>{try{const x=JSON.parse(localStorage.getItem(LKX));if(x&&x.rv){x.sd=x.sd||[];return x}}catch(e){}return{rv:[],dz:[],n:{RV:0,DZ:0},ps:{},pc:{},pl:{},sd:[]}},svX=L=>localStorage.setItem(LKX,JSON.stringify(L)),idX=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6),
+coSt=(e,k,L)=>{const sid=(e.snt||{})[k];if(!sid||!e.id)return '';L=L||ldX();if(L.sd.some(x=>x.id===sid||x.coe===e.id+'|'+k))return 'p';if((L.rv||[]).some(x=>x.coe===e.id+'|'+k))return 'f';return ''},
+coOs=e=>{const o={};if(e&&e.snt){const L=ldX();COL7.forEach(k=>{const v=coSt(e,k,L);if(v)o[k]=v})}return o};
 /* the app remembers the Collection & Order Excel: chosen once, then every new Excel it makes is kept for the next day */
 const coDb=(m,fn)=>new Promise((res,rej)=>{try{const q=indexedDB.open('rdl-coefile',1);q.onupgradeneeded=()=>q.result.createObjectStore('f');q.onerror=()=>rej(q.error);q.onsuccess=()=>{const d=q.result,t=d.transaction('f',m),r=fn(t.objectStore('f'));t.oncomplete=()=>{d.close();res(r&&r.result)};t.onerror=t.onabort=()=>{d.close();rej(t.error)}}}catch(e){rej(e)}}),
 coFileGet=k=>coDb('readonly',s=>s.get(k||'latest')).catch(()=>null),coFileSet=(o,k)=>coDb('readwrite',s=>s.put(o,k||'latest'));
@@ -8384,7 +8451,7 @@ function drawCO(){const B=CP.body;B.textContent='';
   const di=el('input','list-search');di.type='date';di.value=CX.date;di.max=today();di.onchange=()=>{if(!di.value)return;if(CX.commit)try{CX.commit()}catch(e){}CX.date=di.value;COT.from=COT.to=CX.date;CX.rows=null;CX.dirty=false;CX.open=false;drawCO()};di.classList.add('co-dt');
   const E=coList(CX.date);
   /* ---- Business Wise Order & Collection: ONE input table. A row = one customer; every business has its own column, Order on top, Collection below ---- */
-  if(CX.rowsDate!==CX.date||!CX.rows){CX.rows=E.map(e=>({id:e.id,cu:e.cu,nm:e.nm,o:Object.assign({},e.o||{}),c:Object.assign({},e.c||{}),rm:e.rm||'',saved:true,hid:true,cl:e.cl?1:0,posted:coPosted(CX.date,e)}));CX.rowsDate=CX.date;CX.dirty=false}
+  if(CX.rowsDate!==CX.date||!CX.rows){CX.rows=E.map(e=>({id:e.id,cu:e.cu,nm:e.nm,o:Object.assign({},e.o||{}),c:Object.assign({},e.c||{}),rm:e.rm||'',saved:true,hid:true,cl:e.cl?1:0,snt:e.snt||{},ost:coOs(e),posted:coPosted(CX.date,e)}));CX.rowsDate=CX.date;CX.dirty=false}
   const rows=CX.rows,CL=custs();
   const blank=()=>({id:'',cu:'',nm:'',o:{},c:{},rm:'',txt:'',saved:false}),isBlank=r=>!r.cu&&!r.txt&&!Object.keys(r.o).length&&!Object.keys(r.c).length&&!(r.rm||'').trim();
   if(!rows.length||!isBlank(rows[rows.length-1]))rows.push(blank());
@@ -8407,6 +8474,7 @@ function drawCO(){const B=CP.body;B.textContent='';
     r._tr=tr;ci.type='text';ci.placeholder='Code or name';ci.autocomplete='off';ci.value=r.cu||r.txt||'';t0.appendChild(ci);t0.appendChild(cn);t0.appendChild(sg);tr.appendChild(t0);
     if(r.posted){tr.classList.add('co-pst');ci.disabled=true;t0.appendChild(el('div','co-pb','Posted \u2022 locked'))}
     else if(r.cl){tr.classList.add('co-pst','co-cl');ci.disabled=true;t0.appendChild(el('div','co-pb cl','Collection \u2022 locked'))}
+    {const ov=Object.values(r.ost||{});if(!r.posted&&ov.length){ci.disabled=true;const f=ov.every(v=>v==='f');t0.appendChild(el('div','co-pb'+(f?'':' cl'),f?'Sales posted \u2022 locked':'Sales in Pending'))}}
     const pick=c=>{const ex=rows.find(x=>x!==r&&x.cu===c.code);if(ex){r.cu='';r.nm='';r.txt='';ci.value='';cn.textContent='';sg.textContent='';setMsg(ex.posted?'✗ '+c.name+' is already posted for this date. Posted entries are locked — use Quick Sales / Quick Collection for any new amount.':'✗ '+c.name+' is already in the table for this day','bad');return false}
       r.cu=c.code;r.nm=c.name;r.txt='';ci.value=c.code;cn.textContent=c.name+(c.dp?' • '+c.dp:'');ci.classList.remove('bad');sg.textContent='';setMsg('');CX.dirty=true;grow();return true};
     const resolve=()=>{const v=ci.value.trim();if(!v){r.cu='';r.nm='';r.txt='';cn.textContent='';ci.classList.remove('bad');return true}
@@ -8421,10 +8489,10 @@ function drawCO(){const B=CP.body;B.textContent='';
       const mk=(kind,cls,ph)=>{ph=k+'-'+ph;const i=el('input','co-n '+cls);i.type='text';i.inputMode='decimal';i.autocomplete='off';i.placeholder=ph;const v=r[kind][k];i.value=v?String(v):'';
         i.addEventListener('input',()=>{let t=i.value.replace(/[^0-9.]/g,'');const p=t.indexOf('.');if(p>=0)t=t.slice(0,p+1)+t.slice(p+1).replace(/\./g,'');if(t!==i.value)i.value=t;const n=parseFloat(t);if(n>0)r[kind][k]=n;else delete r[kind][k];CX.dirty=true;grow()});
         i.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();nextFrom(i)}});return i};
-      const io=mk('o','o','Order'),ic=mk('c','c','Collection');if(r.posted)io.disabled=ic.disabled=true;else if(r.cl)ic.disabled=true;td.appendChild(io);td.appendChild(ic);tr.appendChild(td)});
+      const io=mk('o','o','Order'),ic=mk('c','c','Collection');if(r.posted)io.disabled=ic.disabled=true;else if(r.cl)ic.disabled=true;if(r.ost&&r.ost[k])io.disabled=true;td.appendChild(io);td.appendChild(ic);tr.appendChild(td)});
     const tr0=el('td'),rm=el('input','co-n co-rm');rm.type='text';rm.placeholder='Remarks';rm.value=r.rm||'';if(r.posted||r.cl)rm.disabled=true;rm.addEventListener('input',()=>{r.rm=rm.value;CX.dirty=true;grow()});rm.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();nextFrom(rm)}});tr0.appendChild(rm);tr.appendChild(tr0);
     const tx=el('td'),x=el('button','co-x','×');x.type='button';x.setAttribute('aria-label','Delete row');
-    x.onclick=()=>{if(r.posted){if(!confirm('This entry is already posted. Delete it from this table?\n\nThe Sales / Collection already posted in the app stays as it is (remove it from Database Correction if needed).'))return;const X=coGet();X[CX.date]=coList(CX.date).filter(z=>z.id!==r.id);coSet(X);CX.rows=rows.filter(z=>z!==r);drawCO();return}if(r.saved){if(!confirm('Delete this saved entry?'))return;const X=coGet();X[CX.date]=coList(CX.date).filter(z=>z.id!==r.id);coSet(X);CX.rows=rows.filter(z=>z!==r);drawCO();return}
+    x.onclick=()=>{const ovs=Object.values(r.ost||{});if(ovs.includes('p')){alert('The sales of this entry are waiting in Pending Sales. Delete them from Pending Sales first.');return}if(r.posted||ovs.includes('f')){if(!confirm('This entry is already posted. Delete it from this table?\n\nThe Sales / Collection already posted in the app stays as it is (remove it from Database Correction if needed).'))return;const X=coGet();X[CX.date]=coList(CX.date).filter(z=>z.id!==r.id);coSet(X);CX.rows=rows.filter(z=>z!==r);drawCO();return}if(r.saved){if(!confirm('Delete this saved entry?'))return;const X=coGet();X[CX.date]=coList(CX.date).filter(z=>z.id!==r.id);coSet(X);CX.rows=rows.filter(z=>z!==r);drawCO();return}
       const i=rows.indexOf(r);if(i>=0)rows.splice(i,1);tr.remove();if(!rows.length||!isBlank(rows[rows.length-1])){const nb=blank();rows.push(nb);tb.appendChild(mkRow(nb))}CX.dirty=true};
     if(r.posted){x.textContent='\u2713';x.className='co-x co-ok';x.title='Posted and locked';x.setAttribute('aria-label','Posted and locked');x.onclick=()=>alert('Posted and locked \u2014 only the Admin can change or delete it.')}
     else if(r.cl){x.textContent='\u2713';x.className='co-x co-ok co-okc';x.title='Collection locked';x.setAttribute('aria-label','Collection locked');x.onclick=()=>alert('Collection is locked \u2014 only the Admin can change or delete it.')}
@@ -8440,7 +8508,7 @@ function drawCO(){const B=CP.body;B.textContent='';
     const date=CX.date;if(!date||date>today())return false;
     const old=coList(date),out=[];
     rows.forEach((r,i)=>{if(i<upto&&okRow(r)){r.id=r.id||(Date.now()+'-'+Math.random().toString(36).slice(2,7));r.saved=true;if(r._tr)r._tr.classList.add('co-sv');
-        out.push({id:r.id,cu:r.cu,nm:r.nm,o:Object.assign({},r.o),c:Object.assign({},r.c),rm:(r.rm||'').trim(),...(r.cl?{cl:1}:{})})}
+        out.push({id:r.id,cu:r.cu,nm:r.nm,o:Object.assign({},r.o),c:Object.assign({},r.c),rm:(r.rm||'').trim(),...(r.cl?{cl:1}:{}),...(r.snt&&Object.keys(r.snt).length?{snt:r.snt}:{})})}
       else if(r.id){const o=old.find(z=>z.id===r.id);if(o)out.push(o)}});
     CX.dirty=rows.slice(upto).some(r=>!isBlank(r));
     if(JSON.stringify(out)===JSON.stringify(old))return false;
@@ -8462,7 +8530,7 @@ function drawCO(){const B=CP.body;B.textContent='';
   const st=el('div','stt'),say=(t,k)=>{st.className='stt'+(k?' '+k:'');st.textContent=t};
   fi.onchange=async()=>{const f=fi.files[0];fi.value='';if(!f)return;try{CX.buf=await f.arrayBuffer();CX.name=f.name;await coFileSet({name:f.name,buf:CX.buf,at:Date.now()});CX.saved={name:f.name,buf:CX.buf};CX.buf=null;pf.textContent=lab();pf.style.display='none';say('✓ File saved in the app. Saving it on Drive…');coSrvPut(f.name,CX.saved.buf).then(()=>{coFileSet({name:f.name,buf:CX.saved.buf,at:Date.now(),srv:1}).catch(()=>{});say('✓ File saved in the app and on Drive. It stays the same file on every phone and computer.','ok')},()=>say('✓ File saved in the app. Could not save it on Drive now (no internet?). It will be saved on Drive the next time you make the Excel.','warn'))}catch(x){say('✗ Could not read this file','bad')}};
   const run=async mode=>{commit();const E=coList(CX.date);if(!coDates().length)return say('Add at least one entry first','bad');
-    if(mode==='app'){if(!E.length)return say('Add at least one entry for this day','bad');try{coSave(CX.date,E);say('✓ Saved in the app. For the Sales, open Smart Post. Collections are not posted from Smart Post.','ok')}catch(x){say('✗ Could not save on this device','bad')}return}
+    if(mode==='app'){if(!E.length)return say('Add at least one entry for this day','bad');try{coSave(CX.date,E);say('✓ Saved in the app. To send the Sales to Pending Sales and lock the collections, press the last button.','ok')}catch(x){say('✗ Could not save on this device','bad')}return}
     say('Making the file…');
     try{if(!window.RDL_SELFX)throw new Error('The Excel maker is not ready, reload the app and try again');
       /* the user's own Excel in the team format: every date of this month up to the chosen date (nothing after it); name, SAP ID and designation come from the Profile */
@@ -8473,20 +8541,40 @@ function drawCO(){const B=CP.body;B.textContent='';
       if(!list.length)return say('No entry from '+dd(fr)+' to '+dd(to)+' to put in the Excel','bad');
       if(E.length)coSave(CX.date,E);
       const r=await RDL_SELFX('co',to,list),f=new File([r.blob],r.name,{type:r.blob.type}),days=new Set(list.map(z=>z.d)).size;
-      const tail=' • saved in the app for Smart Post',info=days+' day'+(days===1?'':'s')+' • '+list.length+' entr'+(list.length===1?'y':'ies')+' • '+dd(fr)+' to '+dd(to),warn=(r.missing?' • Your official name / SAP ID is not in your Profile yet — add it in My profile so it appears in the Excel':'')+(r.partial?' • Earlier months could not be loaded from the server (no internet?) — only what is on this phone is in the file':'');
+      const tail=' • saved in the app',info=days+' day'+(days===1?'':'s')+' • '+list.length+' entr'+(list.length===1?'y':'ies')+' • '+dd(fr)+' to '+dd(to),warn=(r.missing?' • Your official name / SAP ID is not in your Profile yet — add it in My profile so it appears in the Excel':'')+(r.partial?' • Earlier months could not be loaded from the server (no internet?) — only what is on this phone is in the file':'');
       if(mode==='share'&&navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f],title:'Collection & Order '+dd(CX.date),text:'Daily Sales Order & Collection Statements — '+dd(CX.date)});say('✓ '+info+' • shared'+tail+warn,'ok')}
       else{const a=el('a');a.href=URL.createObjectURL(r.blob);a.download=r.name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);say('✓ '+info+(mode==='share'?' • sharing is not available here, so the file was downloaded':' • downloaded')+tail+warn,'ok')}
     }catch(x){if(x&&x.name==='AbortError')say('');else say('✗ '+(x&&x.message||'Could not make the file'),'bad')}};
   const row=el('div','co-acts');
   const IC={dl:'<path d="M12 3v11m0 0l-4-4m4 4l4-4M5 19h14"/>',sh:'<path d="M4 6h16v12H4zM4 7l8 6 8-6"/>',sv:'<path d="M5 4h11l3 3v13H5zM8 4v5h7M8 20v-6h8v6"/>',op:'<path d="M5 12h14m0 0l-5-5m5 5l-5 5"/>'};
   const mb=(t,k,cls)=>{const b=el('button','st-btn co-b '+cls);b.type='button';b.innerHTML='<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+IC[k]+'</svg><span>'+t+'</span>';return b};
-  const dl=mb('Download Excel','dl','co-p'),sh=mb('Share to Outlook','sh','co-p'),sp=mb('Save to app only','sv','co-s'),op=mb('Open Smart Post','op','co-s');dl.onclick=()=>run('dl');sh.onclick=()=>run('share');sp.onclick=()=>run('app');op.onclick=async()=>{try{commit()}catch(e){}
-    const day=CX.date,hasC=e=>COL7.some(k=>(+(e.c||{})[k]||0)>0),N=(coGet()[day]||[]).filter(e=>!e.cl&&hasC(e)).length;
-    if(N){const ok=await RDLUI.ask({title:'Lock the collections of '+dd(day)+'?',msg:N+' customer'+(N===1?'':'s')+' with a collection will be locked. You will not be able to change or delete them after this \u2014 only the Admin can.\n\nCollections are not posted from Smart Post. Post them in Quick Collection / your software.',ok:'Lock & open Smart Post',cancel:'Not now'});
-      if(!ok)return;
-      try{const X=coGet();X[day]=(X[day]||[]).map(e=>hasC(e)?Object.assign({},e,{cl:1}):e);coSet(X)}catch(x){say('\u2717 Could not lock on this device','bad');return}
-      CX.rows=null;CX.rowsDate=null}
-    if(R.openTab)R.openTab('s','post')};
+  const dl=mb('Download Excel','dl','co-p'),sh=mb('Share to Outlook','sh','co-p'),sp=mb('Save to app only','sv','co-s'),op=mb('Lock collections & send sales to Pending Sales','op','co-s');dl.onclick=()=>run('dl');sh.onclick=()=>run('share');sp.onclick=()=>run('app');op.onclick=async()=>{try{commit()}catch(e){}
+    const day=CX.date,M=R.master,hasC=e=>COL7.some(k=>(+(e.c||{})[k]||0)>0);
+    if(!M||!M.cr){say('\u2717 Credit Limit data is not loaded yet','bad');return}
+    /* plan: every order not yet sent (or deleted from Pending) becomes a pending sales bill; days limit = the customer's own, from the Credit Limit file */
+    const mk=()=>{const X=coGet(),E0=X[day]||[],L=ldX(),plan=[],bad=[];let N=0;
+      E0.forEach(e=>{if(!e.id)e.id=idX();if(!e.cl&&hasC(e))N++;if(coPosted(day,e))return;
+        COL7.forEach(k=>{const amt=+(e.o||{})[k]||0;if(!(amt>0)||coSt(e,k,L))return;
+          const cr=M.cr.find(x=>String(x.bp)===String(e.cu)&&String(x.cn).toLowerCase()===k.toLowerCase()),days=cr?parseInt(cr.dl):0;
+          if(!cr||!(days>0)){bad.push((e.nm||e.cu)+' ('+k+')');return}
+          plan.push({e,k,co:cr.co,amt,days})})});
+      return{X,plan,bad,N}};
+    const q0=mk();
+    if(q0.bad.length){say('\u2717 No company line / Days Limit in the Credit Limit file for: '+q0.bad.slice(0,4).join(', ')+(q0.bad.length>4?'\u2026':'')+'. Nothing was sent or locked.','bad');return}
+    if(!q0.plan.length&&!q0.N){say('Nothing new to send or lock for '+dd(day),'warn');return}
+    const tot0=q0.plan.reduce((a,x)=>a+x.amt,0);
+    const ok=await RDLUI.ask({title:'Lock collections & send sales?',msg:(q0.plan.length?q0.plan.length+' sales bill'+(q0.plan.length===1?'':'s')+' to Pending Sales \u2022 '+fm2(tot0)+'/=. Post them from there; until posted you can delete them from Pending Sales and correct the Order.':'')+(q0.plan.length&&q0.N?'\n\n':'')+(q0.N?q0.N+' customer'+(q0.N===1?'':'s')+' with a collection will be locked. You will not be able to change or delete them after this \u2014 only the Admin can.\n\nCollections are not posted from here. Post them in Quick Collection / your software.':''),ok:'Send & lock',cancel:'Not now'});
+    if(!ok)return;
+    const q=mk(),L2=ldX(),n0=L2.sd.length;
+    if(q.bad.length){say('\u2717 Could not match: '+q.bad.slice(0,3).join(', '),'bad');return}
+    q.plan.forEach(p=>{const id=idX();L2.sd.push({id,co:p.co,cu:p.e.cu,nm:p.e.nm,amt:p.amt,post:day,days:p.days,ds:today(),at:Date.now(),coe:p.e.id+'|'+p.k});p.e.snt=Object.assign({},p.e.snt,{[p.k]:id})});
+    (q.X[day]||[]).forEach(e=>{if(hasC(e))e.cl=1});
+    try{svX(L2)}catch(x){say('\u2717 Could not save on this device','bad');return}
+    try{coSet(q.X)}catch(x){try{L2.sd.length=n0;svX(L2)}catch(y){}say('\u2717 Could not save on this device','bad');return}
+    (CX.rows||[]).forEach(r=>{const e=r.id&&(q.X[day]||[]).find(z=>z.id===r.id);if(e){r.snt=e.snt;r.cl=e.cl?1:0}});
+    CX.rows=null;CX.rowsDate=null;
+    try{document.dispatchEvent(new Event('visibilitychange'))}catch(e){}
+    if(R.openPendingSales)R.openPendingSales();else if(R.openDrafts)R.openDrafts()};
   [sp,op].forEach(b=>row.appendChild(b));
   c.appendChild(row);c.appendChild(st);B.appendChild(c)}
 R.openCOE=()=>{if(window.RDL_ROLE==='admin')return;CX.open=false;CX.rows=null;CX.date=R.salesDay?R.salesDay():today();COT.from=COT.to=CX.date;COT.biz='';drawCO();show('coep')};   /* the file made today is for the sales day (yesterday; Thursday on Saturday), same as Today Sales and the uploaded file */
@@ -10289,6 +10377,8 @@ function who(u){var m=umap(),x=m[u]||m[String(u||'').toLowerCase()]||{};return{n
 /* entries the admin deleted from this table: remembered (rdl.etdel.v1) so that the next merge of the user's backup cannot bring them back */
 function tomb(){var a=J('rdl.etdel.v1',[]),o={};(Array.isArray(a)?a:[]).forEach(function(k){o[k]=1});return o}
 function ckey(d,e){return 'c|'+d+'|'+(e._u||'')+'|'+(e.id||JSON.stringify(e.o||{})+JSON.stringify(e.c||{})+(e.nm||''))}
+function cid(e){return String(e.id||(JSON.stringify(e.o||{})+JSON.stringify(e.c||{})+(e.nm||'')))}
+function vid(e){return String(e.id||[e.date,e.cu,e.tin,e.tout].join('~'))}
 function vkey(e){return 'v|'+(e._u||'')+'|'+(e.id||[e.date,e.cu,e.tin,e.tout].join('~'))}
 function delKeys(keys){
   var a=J('rdl.etdel.v1',[]);if(!Array.isArray(a))a=[];var set={};keys.forEach(function(k){set[k]=1;if(a.indexOf(k)<0)a.push(k)});
@@ -10298,18 +10388,18 @@ function delKeys(keys){
 /* rows kept on the server (Records sheet): [{d,em,dp,e}] -> entries with _u, minus the ones this phone already has */
 function srvEntries(extra,localKeys){var o=[];(extra||[]).forEach(function(r){if(!r||!r.e||!r.d)return;var e=Object.assign({},r.e,{_u:String(r.em||'').toLowerCase(),_dp:r.dp||''});if(!e.date)e.date=r.d;o.push({d:r.d,e:e})});return o}
 function coRows(extra){var X=J('rdl.coe.v1',{}),out=[],T=tomb(),have={},LK={};
-  Object.keys(X).forEach(function(d){(X[d]||[]).forEach(function(e){LK[ckey(d,Object.assign({},e,{_u:String(e._u||'').toLowerCase()}))]=1})});
+  var SV={};srvEntries(extra).forEach(function(r){SV[String(r.e._u)+'|'+cid(r.e)]=1});   /* the server copy of an entry (the admin's corrections are there) wins over an older copy on this phone */
   function push(d,e){if(T[ckey(d,e)])return;var w=who(e._u);if(w.depot==='—'&&e._dp)w={name:w.name,depot:e._dp};
     COL7.forEach(function(k){var o=+(e.o||{})[k]||0,c=+(e.c||{})[k]||0;if(o||c)out.push({d:d,k:ckey(d,e),em:String(e._u||'').toLowerCase(),cu:String(e.cu||''),dp:w.depot,u:w.name,b:k,nm:e.nm||'',rm:e.rm||'',o:o,c:c,r:[fd(d),w.depot,w.name,k,e.nm||'',o,c]})})}
-  Object.keys(X).forEach(function(d){(X[d]||[]).forEach(function(e){have[String(e._u||'').toLowerCase()+'|'+d+'|'+String(e.nm||'').toLowerCase()]=1;push(d,e)})});
-  srvEntries(extra).forEach(function(r){if(LK[ckey(r.d,r.e)])return;have[r.e._u+'|'+r.d+'|'+String(r.e.nm||'').toLowerCase()]=1;push(r.d,r.e)});
+  Object.keys(X).forEach(function(d){(X[d]||[]).forEach(function(e){if(e._u&&SV[String(e._u).toLowerCase()+'|'+cid(e)])return;have[String(e._u||'').toLowerCase()+'|'+d+'|'+String(e.nm||'').toLowerCase()]=1;push(d,e)})});
+  srvEntries(extra).forEach(function(r){have[r.e._u+'|'+r.d+'|'+String(r.e.nm||'').toLowerCase()]=1;push(r.d,r.e)});
   /* uploaded Daily Collection & Order files: added when the same user/date/customer is not already there from an app entry */
   var U=J('rdl.coup.v1',{});Object.keys(U).forEach(function(em){var m=U[em]||{};Object.keys(m).forEach(function(k){var r=m[k];if(have[em+'|'+r.d+'|'+String(r.n).toLowerCase()])return;push(r.d,{_u:em,id:'up|'+r.d+'|'+String(r.n).toLowerCase(),nm:r.n,o:r.o,c:r.c,rm:r.rm})})});
   return out}
 function vm(e){if(+e.mn>0)return +e.mn;var a=/^(\d{1,2}):(\d{2})$/.exec(e.tin||''),b=/^(\d{1,2}):(\d{2})$/.exec(e.tout||'');if(!a||!b)return 0;var m=(+b[1]*60+ +b[2])-(+a[1]*60+ +a[2]);return m>0?m:0}
-function dcrRows(extra){var x=J('rdl.visit.v1',{}),v=Array.isArray(x.visits)?x.visits:[],T=tomb(),LK={};
-  v.forEach(function(e){LK[vkey(Object.assign({},e,{_u:String(e._u||'').toLowerCase()}))]=1});
-  v=v.concat(srvEntries(extra).map(function(r){return r.e}).filter(function(e){return !LK[vkey(e)]}));
+function dcrRows(extra){var x=J('rdl.visit.v1',{}),v=Array.isArray(x.visits)?x.visits:[],T=tomb(),SV={};
+  srvEntries(extra).forEach(function(r){SV[String(r.e._u)+'|'+vid(r.e)]=1});   /* the server copy wins over an older copy on this phone */
+  v=v.filter(function(e){return !(e._u&&SV[String(e._u).toLowerCase()+'|'+vid(e)])}).concat(srvEntries(extra).map(function(r){return r.e}));
   return v.filter(function(e){return !T[vkey(e)]}).map(function(e){var w=who(e._u);if(w.depot==='—'&&e._dp)w={name:w.name,depot:e._dp};t=e.tin?e.tin+(e.tout?' – '+e.tout:''):(e.mn?e.mn+' Minutes':'—');
     return{d:e.date,k:vkey(e),em:String(e._u||'').toLowerCase(),cu:String(e.cu||''),nmv:e.nm||'',mnv:vm(e),vpv:e.vp||'Visit',vwv:e.vw||'',notev:e.note||'',dp:w.depot,u:w.name,b:'',t:e.tin||'99',r:[fd(e.date),w.depot,w.name,e.nm||'',t,e.vp||'Visit',e.vw||'',e.note||'']}})}
 /* ---- one-sheet xlsx ---- */
@@ -10533,6 +10623,90 @@ function teamDownload(kind,rowsAll,msg){
 var ST={tab:'co',from:td().slice(0,8)+'01',to:td(),dp:'',u:'',b:'',q:''};
 /* server records of the asked days (cached while the page is open): key tab|from|to|q -> {st:'load'|'ok'|'err',rows,trunc} */
 var SRV={};
+/* ---- admin correction: server first, then this phone's merged copy ---- */
+var FLD={co:[['nm','Customer name'],['rm','Remarks']],dcr:[['nm','Customer name'],['tin','Time in','time'],['tout','Time out','time'],['mn','Minutes','number'],['vp','Visit point'],['vw','Visited with'],['note','Remarks']],
+  rv:[['post','Posting date','date'],['amt','Bill amount','number'],['days','Days limit','number']],
+  dz:[['date','Posting date','date'],['type','Payment type'],['ref','Cheque / BEFTN number'],['rd','Cheque / BEFTN date','date'],['col','Collected amount','number'],['tds','TDS','number']]};
+function rid(kind,e){return kind==='co'?String(e.id||(JSON.stringify(e.o||{})+JSON.stringify(e.c||{})+(e.nm||''))):kind==='dcr'?String(e.id||[e.date,e.cu,e.tin,e.tout].join('~')):String(e.bill)}
+function strip_(e){var c=Object.assign({},e);delete c._u;delete c._dp;delete c._adm;return c}
+function same(kind,x,it){return x&&String(x._u||'').toLowerCase()===it.userEmail&&rid(kind,x)===it.key}
+function localApply(it){
+  var k=it.kind,ent=it.op==='edit'?Object.assign({},it.entry,{_u:it.userEmail}):null;
+  if(k==='co'){var X=J('rdl.coe.v1',{});Object.keys(X).forEach(function(d){X[d]=(X[d]||[]).filter(function(x){return !same(k,x,it)})});if(ent){ent.id=it.key;(X[it.newDate]=X[it.newDate]||[]).push(ent)}LS.setItem('rdl.coe.v1',JSON.stringify(X))}
+  else if(k==='dcr'){var V=J('rdl.visit.v1',{});V.visits=(V.visits||[]).filter(function(x){return !same(k,x,it)});if(ent){ent.id=it.key;ent.date=it.newDate;V.visits.push(ent)}LS.setItem('rdl.visit.v1',JSON.stringify(V))}
+  else{var L=J('rdl.ledger.v1',null);if(!L)return;L[k]=(L[k]||[]).filter(function(x){return !same(k,x,it)});if(ent)L[k].push(ent);LS.setItem('rdl.ledger.v1',JSON.stringify(L))}}
+function send(items,done){
+  var i=0;
+  function next(){if(i>=items.length){SRV={};done();return}
+    var part=items.slice(i,i+200);
+    RDLGATE.api('adminEntryEdit',{edits:part}).then(function(){part.forEach(function(it){localApply(it);if(it.op==='delete'&&it.tomb)delKeys([it.tomb])});i+=200;next()})
+      .catch(function(e){RDLUI.alert('সেভ হয়নি',String(e&&e.message||e)+(i?'\n'+i+' টি আগেই সেভ হয়েছে।':''));SRV={};done()})}
+  next()}
+function amountError(kind,e){
+  if(kind==='rv'){if(!(e.amt>0)||!(e.days>0)||!e.post)return'Posting date, amount and days limit are required.';
+    var used=(J('rdl.ledger.v1',{}).dz||[]).filter(function(z){return z._u===e._u&&z.ag===[e.bill,e.co,e.cu].join('|')}).reduce(function(a,z){return a+(+z.col||0)+(+z.tds||0)},0);
+    if(e.amt<used-0.005)return'Bill amount cannot be less than what is already collected ('+fm(used)+').'}
+  if(kind==='dz'){if(!e.date||e.col<0||e.tds<0||!(e.col+e.tds>0))return'Enter the date and a valid amount.';
+    if(['Cash','Cheque','BEFTN'].indexOf(e.type)<0)return'Payment type must be Cash, Cheque or BEFTN.';
+    var L=J('rdl.ledger.v1',{}),m=J('rdl.master.v1',{}),id=function(b){return[b.bill,b.co,b.cu].join('|')};
+    var b=(L.rv||[]).filter(function(r){return r._u===e._u&&id(r)===e.ag})[0]||(m.out||[]).filter(function(r){return id(r)===e.ag})[0];
+    if(b){var others=(L.dz||[]).filter(function(z){return z._u===e._u&&z.ag===e.ag&&z.bill!==e.bill}).reduce(function(a,z){return a+(+z.col||0)+(+z.tds||0)},0);
+      if(others+e.col+e.tds>(+b.amt||0)+0.005)return'Collected + TDS is more than the bill amount ('+fm(b.amt)+').'}}
+  return''}
+function editForm(kind,old,date,done){
+  var w=el('div'),inp={};w.style.cssText='max-height:55vh;overflow:auto';
+  function mk(key,label,type,val){w.appendChild(el('label','od-label',label));var i=el('input','list-search');i.type=type||'text';if(type==='number')i.step='any';i.value=val==null?'':val;w.appendChild(i);inp[key]=i}
+  if(kind==='co'||kind==='dcr')mk('_date','Date','date',date);
+  FLD[kind].forEach(function(f){mk(f[0],f[1],f[2],old[f[0]])});
+  if(kind==='co')COL7.forEach(function(b){mk('o_'+b,b+' — Order','number',(old.o||{})[b]);mk('c_'+b,b+' — Collection','number',(old.c||{})[b])});
+  RDLUI.ask({title:'Edit entry',msg:old.nm||old.cu||old.bill||'',node:w,ok:'Save & Post'}).then(function(go){
+    if(!go)return;
+    var e=Object.assign({},old);
+    FLD[kind].forEach(function(f){var v=inp[f[0]].value.trim();if(v===''&&old[f[0]]==null)return;e[f[0]]=f[2]==='number'?(+v||0):v});
+    if(kind==='dcr'){var ta=/^(\d{1,2}):(\d{2})$/.exec(e.tin||''),tb=/^(\d{1,2}):(\d{2})$/.exec(e.tout||'');
+      if((e.tin!==old.tin||e.tout!==old.tout)&&(+e.mn||0)===(+old.mn||0)&&ta&&tb){var mm=(+tb[1]*60+ +tb[2])-(+ta[1]*60+ +ta[2]);if(mm>0)e.mn=mm}}   /* time changed, minutes not touched by hand: minutes follow the new times */
+    if(kind==='co'){e.o={};e.c={};COL7.forEach(function(b){var o=+inp['o_'+b].value||0,c=+inp['c_'+b].value||0;if(o)e.o[b]=o;if(c)e.c[b]=c})}
+    var nd=inp._date?inp._date.value:'',err='';
+    if(inp._date&&(!nd||nd>td()))err='Date cannot be empty or after today.';
+    var d1=e.post||e.date;if((kind==='rv'||kind==='dz')&&d1>td())err='Date cannot be after today.';
+    err=err||amountError(kind,e);
+    if(err){RDLUI.alert('Cannot save',err).then(function(){editForm(kind,e,nd||date,done)});return}
+    if(kind==='rv'){var x=new Date(e.post+'T00:00:00');x.setDate(x.getDate()+(+e.days));e.due=x.getFullYear()+'-'+('0'+(x.getMonth()+1)).slice(-2)+'-'+('0'+x.getDate()).slice(-2)}
+    if(kind==='rv'||kind==='dz')e.edited=new Date().toISOString();
+    send([{userEmail:String(old._u).toLowerCase(),kind:kind,op:'edit',date:date,newDate:nd||date,key:rid(kind,old),entry:strip_(e)}],done)})}
+/* row key (as shown in the table) -> the real entry behind it */
+function entryMap(kind,extra){var m={};
+  function add(d,e){var k=kind==='co'?ckey(d,e):vkey(e);if(!m[k])m[k]={d:d,e:e}}
+  srvEntries(extra).forEach(function(r){add(r.d,r.e)});
+  if(kind==='co'){var X=J('rdl.coe.v1',{});Object.keys(X).forEach(function(d){(X[d]||[]).forEach(function(e){add(d,e)})})}
+  else (J('rdl.visit.v1',{}).visits||[]).forEach(function(e){add(e.date,e)});
+  return m}
+function unlockItem(kind,e,d){var c=strip_(e);if(kind==='co')delete c.cl;else if(kind==='dcr'){delete c.posted;delete c.postedAt}c.unl=1;return{userEmail:String(e._u).toLowerCase(),kind:kind,op:'edit',date:d,newDate:d,key:rid(kind,e),entry:c}}
+function delItem(kind,hit,k){return{userEmail:String(hit.e._u).toLowerCase(),kind:kind,op:'delete',date:hit.d,newDate:hit.d,key:rid(kind,hit.e),tomb:k}}
+function actBtn(txt,label,bg,fg,fn){var b=el('button',null,txt);b.type='button';b.setAttribute('aria-label',label);b.style.cssText='border:0;background:'+bg+';color:'+fg+';font-size:18px;width:34px;height:34px;border-radius:10px;font-weight:700;margin-right:4px';b.onclick=fn;return b}
+/* Sales (RV) and Collection (DZ) posted by users */
+function drawLedger(box,draw){
+  var kind=ST.tab,L=J('rdl.ledger.v1',{}),seen={},df=kind==='rv'?'post':'date';
+  var rows=(L[kind]||[]).filter(function(x){if(!x||!x._u||seen[x._u+'|'+x.bill])return false;seen[x._u+'|'+x.bill]=1;
+    var d=x[df]||'';return !((ST.from&&d<ST.from)||(ST.to&&d>ST.to)||(ST.q&&(String(x.cu)+' '+String(x.nm||'')).toLowerCase().indexOf(ST.q.toLowerCase())<0))}).sort(function(a,b){return a[df]<b[df]?1:-1});
+  var g=el('div');g.style.cssText='display:grid;grid-template-columns:1fr 1fr;gap:8px';
+  [['From','from'],['To','to']].forEach(function(f){var w=el('div'),i=el('input','list-search');i.type='date';i.value=ST[f[1]];i.max=td();i.onchange=function(){ST[f[1]]=i.value;draw()};w.appendChild(el('small',null,f[0]));w.appendChild(i);g.appendChild(w)});box.appendChild(g);
+  var q=el('input','list-search');q.type='search';q.placeholder='Search a customer…';q.value=ST.q;q.onchange=function(){ST.q=q.value.trim();draw()};box.appendChild(q);
+  if(!rows.length){box.appendChild(el('div','mv-empty','No entry for this filter. Users’ entries come here after their backup is merged.'));return}
+  var wrap=el('div');wrap.style.cssText='overflow-x:auto;margin:8px 0';var tb=el('table','mv-tbl'),th=el('tr');
+  ['','Date','User','Bill','Customer','Amount'].forEach(function(x){th.appendChild(el('th',null,x))});tb.appendChild(th);
+  rows.forEach(function(x){var tr=el('tr'),a=el('td');a.style.whiteSpace='nowrap';
+    var lock=function(){if(x.orphan||x.nx){RDLUI.alert('Locked','This record was settled by a database update.');return true}return false};
+    a.appendChild(actBtn('✎','Edit','#e8f0fe','#0a49b5',function(){if(!lock())editForm(kind,x,x[df],draw)}));
+    a.appendChild(actBtn('×','Delete','#fde8e6','#c0392b',function(){if(lock())return;
+      if(kind==='rv'&&(L.dz||[]).some(function(z){return z._u===x._u&&z.ag===[x.bill,x.co,x.cu].join('|')})){RDLUI.alert('Cannot delete','Collections are applied to this bill. Delete those first.');return}
+      RDLUI.ask({title:'Delete '+x.bill+'?',msg:who(x._u).name+' • '+(x.nm||x.cu),ok:'Delete',danger:true}).then(function(ok){if(ok)send([{userEmail:String(x._u).toLowerCase(),kind:kind,op:'delete',date:x[df],key:String(x.bill)}],draw)})}));
+    a.appendChild(actBtn('\uD83D\uDD13','Unlock for the user','#e6f6ec','#0b7a4b',function(){if(lock())return;
+      if(kind==='rv'&&x.sap){RDLUI.alert('Cannot unlock','This bill came from the SAP upload. Use Edit.');return}
+      if(kind==='rv'&&(L.dz||[]).some(function(z){return z._u===x._u&&z.ag===[x.bill,x.co,x.cu].join('|')})){RDLUI.alert('Cannot unlock','Collections are applied to this bill. Unlock those first.');return}
+      RDLUI.ask({title:'Unlock '+x.bill+'?',msg:who(x._u).name+' \u2022 '+(x.nm||x.cu)+(kind==='rv'?'\n(goes back to the user\u2019s Pending Sales; posting again gives a new RV number)':'\n(goes back to the user\u2019s Pending Collections, TDS included)'),ok:'Unlock'}).then(function(ok){if(ok)send([unlockItem(kind,x,x[df])],draw)})}));
+    tr.appendChild(a);[fd(x[df]),who(x._u).name,x.bill,x.nm||x.cu,fm(kind==='rv'?x.amt:(+x.col||0)+(+x.tds||0))].forEach(function(v){tr.appendChild(el('td',null,String(v)))});tb.appendChild(tr)});
+  wrap.appendChild(tb);box.appendChild(wrap)}
 function srvKey(tab,f,t,q){return tab+'|'+f+'|'+t+'|'+(q||'')}
 function srvGet(tab,f,t,q,done){var k=srvKey(tab,f,t,q),c=SRV[k];if(c)return c;c=SRV[k]={st:'load',rows:[]};
   if(!(window.RDLGATE&&RDLGATE.api)){c.st='err';return c}
@@ -10551,8 +10725,9 @@ function open(){
   var tabs=el('div');tabs.style.cssText='display:flex;gap:8px;margin-bottom:10px';ov.appendChild(tabs);
   var box=el('div','st-card');ov.appendChild(box);document.body.appendChild(ov);
   function draw(){
-    tabs.textContent='';[['co','Collection & Order'],['dcr','DCR']].forEach(function(t){var b=el('button','st-btn',t[1]);b.type='button';b.style.marginTop='0';b.style.flex='1';if(ST.tab!==t[0]){b.style.background='#e8f0fe';b.style.color='#0a49b5'}b.onclick=function(){ST.tab=t[0];ST.b='';ST.dp='';ST.u='';draw()};tabs.appendChild(b)});
-    box.textContent='';var sc=srvGet(ST.tab,ST.from,ST.to,ST.q,function(){if(document.getElementById('et-pg'))draw()});
+    tabs.textContent='';[['co','Collection & Order'],['dcr','DCR'],['rv','Sales'],['dz','Collection']].forEach(function(t){var b=el('button','st-btn',t[1]);b.type='button';b.style.marginTop='0';b.style.flex='1';if(ST.tab!==t[0]){b.style.background='#e8f0fe';b.style.color='#0a49b5'}b.onclick=function(){ST.tab=t[0];ST.b='';ST.dp='';ST.u='';draw()};tabs.appendChild(b)});
+    box.textContent='';if(ST.tab==='rv'||ST.tab==='dz'){drawLedger(box,draw);return}
+    var sc=srvGet(ST.tab,ST.from,ST.to,ST.q,function(){if(document.getElementById('et-pg'))draw()});
     var all=ST.tab==='co'?coRows(sc.rows):dcrRows(sc.rows);
     function sel(label,key,list){var w=el('div');w.style.marginBottom='8px';w.appendChild(el('small',null,label));var s=el('select','list-search');s.appendChild(new Option('All',''));list.forEach(function(x){s.appendChild(new Option(x,x))});s.value=ST[key]||'';s.onchange=function(){ST[key]=s.value;if(key==='dp')ST.u='';draw()};w.appendChild(s);return w}
     function uniq(a){var o={};a.forEach(function(x){if(x&&x!=='—')o[x]=1});return Object.keys(o).sort()}
@@ -10576,8 +10751,10 @@ function open(){
     if(!rows.length){wrap.appendChild(el('div','mv-empty','No entry for this filter. Users’ entries come here after their backup is merged (it happens by itself on the Home page, or use Data Hub).'))}
     else{var tb=el('table','mv-tbl'),th=el('tr');head.forEach(function(x){th.appendChild(el('th',null,x))});th.appendChild(el('th',null,''));tb.appendChild(th);
       data.concat([tot]).forEach(function(rw,i){var tr=el('tr',i===data.length?'tot':null);rw.forEach(function(v){var c=el('td',null,typeof v==='number'?fm(v):String(v));if(typeof v==='number')c.style.textAlign='right';tr.appendChild(c)});
-        var dc=el('td');if(i<data.length){var rx=rows[i],xb=el('button',null,'\u00d7');xb.type='button';xb.setAttribute('aria-label','Delete this entry');xb.style.cssText='border:0;background:#fde8e6;color:#c0392b;font-size:20px;line-height:1;width:34px;height:34px;border-radius:10px;font-weight:700';
-          xb.onclick=function(){if(!confirm('Delete this entry?\n\n'+rx.u+' \u2022 '+rx.r[0]+(ST.tab==='co'?' \u2022 '+rx.r[4]+'\n(all businesses of this customer entry are removed)':'')+'\n\nIt is also removed when the user\u2019s backup is merged again.'))return;delKeys([rx.k]);draw()};dc.appendChild(xb)}
+        var dc=el('td');dc.style.whiteSpace='nowrap';if(i<data.length){var rx=rows[i],hit=entryMap(ST.tab,sc.rows)[rx.k],real=hit&&hit.e._u&&String(hit.e.id||'').indexOf('up|')!==0;
+          if(real)dc.appendChild(actBtn('✎','Edit this entry','#e8f0fe','#0a49b5',function(){editForm(ST.tab,hit.e,hit.d,draw)}));
+          if(real)dc.appendChild(actBtn('\uD83D\uDD13','Unlock for the user','#e6f6ec','#0b7a4b',function(){RDLUI.ask({title:'Unlock this entry?',msg:rx.u+' \u2022 '+rx.r[0]+(ST.tab==='co'?' \u2022 '+rx.r[4]+'\n(the collection lock is removed; the user corrects it and posts again)':'\n(the user corrects the visit and posts it again)'),ok:'Unlock'}).then(function(ok){if(ok)send([unlockItem(ST.tab,hit.e,hit.d)],draw)})}));
+          dc.appendChild(actBtn('×','Delete this entry','#fde8e6','#c0392b',function(){RDLUI.ask({title:'Delete this entry?',msg:rx.u+' • '+rx.r[0]+(ST.tab==='co'?' • '+rx.r[4]+'\n(all businesses of this customer entry are removed)':'')+(real?'':'\nUploaded file row: removed from this phone only.'),ok:'Delete',danger:true}).then(function(ok){if(!ok)return;if(real)send([delItem(ST.tab,hit,rx.k)],draw);else{delKeys([rx.k]);draw()}})}))}
         tr.appendChild(dc);tb.appendChild(tr)});wrap.appendChild(tb)}
     var dl=el('button','st-btn',ST.tab==='co'?'Add to my own Excel file (old way)':'Download plain table (one sheet)');dl.type='button';var msg=el('div','stt');
     var tm=el('button','st-btn',ST.tab==='co'?'Download Report Excel (Top Sheet + every user)':'Download DCR Excel (every user, one sheet each)');tm.type='button';tm.style.marginTop='12px';tm.onclick=function(){var ms=(ST.to||td()).slice(0,8)+'01',f0=(ST.from&&ST.from<ms)?ST.from:ms;msg.className='stt';msg.textContent='Collecting the records…';
@@ -10585,7 +10762,9 @@ function open(){
       function go(c){var a2=ST.tab==='co'?coRows(c.rows):dcrRows(c.rows);teamDownload(ST.tab,a2,msg)}};box.appendChild(tm);
     if(ST.tab==='co'||true){dl.style.cssText='background:#e8f0fe;color:#0a49b5;margin-top:10px'}
     if(rows.length){var da=el('button','st-btn','Delete all '+rows.length+' shown row'+(rows.length===1?'':'s'));da.type='button';da.style.cssText='background:#fde8e6;color:#c0392b;margin-top:10px';
-      da.onclick=function(){if(!confirm('Delete all '+rows.length+' shown row(s)?\n\nOnly what is shown with the current filter (depot / user / dates) is deleted. This cannot be undone.'))return;var ks={};rows.forEach(function(x){ks[x.k]=1});delKeys(Object.keys(ks));draw()};box.appendChild(da)}
+      da.onclick=function(){RDLUI.ask({title:'Delete all '+rows.length+' shown row(s)?',msg:'Only what the current filter shows. This changes the users’ data and cannot be undone.',ok:'Delete',danger:true}).then(function(ok){if(!ok)return;
+        var m=entryMap(ST.tab,sc.rows),done={},items=[],local=[];rows.forEach(function(x){if(done[x.k])return;done[x.k]=1;var h=m[x.k];if(h&&h.e._u&&String(h.e.id||'').indexOf('up|')!==0)items.push(delItem(ST.tab,h,x.k));else local.push(x.k)});
+        delKeys(local);send(items,draw)})};box.appendChild(da)}
     if(ST.tab==='co'){box.appendChild(msg);return}   /* the old 'choose your own Excel file' way is gone: the Report Excel above needs no file */
     if(false){
       /* default-format Excel: your own Collection & Order file (kept on Drive) + the dates and customers of the filtered rows */
