@@ -11741,6 +11741,18 @@ html body .nav button:not([data-p="home"]):not([data-p="customer"]):not([data-p=
       '<span class="ov-val"><b>'+money(v)+'</b><small>'+esc(sub)+'</small></span></button>';
   }
   function mini(c,l,v,p){return '<div class="ov-mc" style="--c:'+c+'"><small>'+esc(l)+'</small><b>'+short(v)+'</b><em>'+p+'% of total</em></div>'}
+  var grow=0;
+  function fit(){
+    if(!wrap||!wrap.offsetHeight)return;
+    var rows=wrap.querySelectorAll('.ov-row');if(!rows.length)return;
+    var nav=document.querySelector('nav.nav>div'),limit=(nav&&nav.offsetHeight?nav.getBoundingClientRect().top:window.innerHeight)-10;
+    var spare=limit-(wrap.getBoundingClientRect().bottom+(window.pageYOffset||0));
+    var g=Math.max(-8,Math.min(70,Math.floor(grow+spare/rows.length)));
+    if(showGr||showTbl)g=0;
+    grow=g;
+    Array.prototype.forEach.call(rows,function(r){r.style.setProperty('padding-top',(10+g/2)+'px','important');r.style.setProperty('padding-bottom',(10+g/2)+'px','important')});
+  }
+  window.addEventListener('resize',function(){fit()});
   function tick(){
     if(!ensure())return;
     var tot=q(':scope>.total'),red=q('.card.red'),amb=q('.card.amb'),rs=q('#regCard .rc-p.s'),rc=q('#regCard .rc-p.c');
@@ -11761,7 +11773,8 @@ html body .nav button:not([data-p="home"]):not([data-p="customer"]):not([data-p=
     var acts=[];
     qa('.qa .card').forEach(function(c){if(getComputedStyle(c).display!=='none')acts.push({el:c,t:t(q('h4',c)),s:t(q('p',c)),ic:q('.em',c)})});
     var pch=document.getElementById('pcHome');
-    if(pch&&pch.style.display!=='none'){acts.unshift({el:pch,t:t(q('.pch-t b',pch))||'Posting Center',s:t(q('.pch-t small',pch)),ic:q('.pch-i',pch)})}
+    var pc1=pch&&pch.style.display!=='none'?{el:pch,t:t(q('.pch-t b',pch))||'Posting Center',s:t(q('.pch-t small',pch)),ic:q('.pch-i',pch)}:null;
+    function actBtn(a,cls){var i=reg(a.el),ic=a.ic?'<span class="ov-ic">'+a.ic.outerHTML+'</span>':'';return '<button type="button" class="ov-act'+cls+'" data-i="'+i+'">'+ic+'<span><b>'+esc(a.t)+'</b><small>'+esc(a.s)+'</small></span></button>'}
     var iT=reg(tot),iR=reg(red),iA=reg(amb),iS=reg(rs),iC=reg(rc);
     html+='<div class="ov-cap">'+esc(depot)+'</div>';
     html+='<section class="ov-panel">';
@@ -11769,6 +11782,7 @@ html body .nav button:not([data-p="home"]):not([data-p="customer"]):not([data-p=
       '<div class="ov-hero-top">'+gauge(hasData,pc,pa,pr)+
       '<div class="ov-hero-info"><small>Total Outstanding</small><b>'+money(T)+'</b><span>'+(hasData?'Current '+short(cur)+' · Overdue '+short(R):'Waiting for data')+'</span></div></div>'+
       '</div>';
+    if(pc1)html+=actBtn(pc1,' ov-pc');
     html+=chart();
     html+=row(iR,'#e0173c','overdue','Total overdue',cc(rN),R,pr+'% of outstanding',R,base);
     html+=row(iA,'#e08a00','upcoming','Upcoming overdue',cc(aN),A,pa+'% of outstanding',A,base);
@@ -11785,6 +11799,7 @@ html body .nav button:not([data-p="home"]):not([data-p="customer"]):not([data-p=
       html+='</div>';
     }
     if(html!==last){wrap.innerHTML=html;last=html}
+    fit();
   }
   tick();setInterval(tick,1500);
 })();
@@ -11869,6 +11884,41 @@ html body .ov-wrap.a .ov-act small{font-size:13.5px}
 .ov-wrap.a .ov-cols span{height:72px}
 .ov-wrap.a .ov-det{margin-top:4px;padding:6px 8px;font-size:12.5px;line-height:1.6}
 .ov-wrap.a .ov-tb{margin:6px 0 0}
+</style>
+<style id="rdl-dash-rows">
+html body .ov-wrap.a .ov-panel>.ov-row{width:calc(100% - 8px)!important;margin:6px 4px!important;padding-left:12px;padding-right:12px}
+html body .ov-wrap.a .ov-panel .ov-lab b{font-size:clamp(17px,3.4vw,25px)!important}
+html body .ov-wrap.a .ov-panel .ov-lab small{font-size:clamp(13px,2.5vw,18px)!important}
+html body .ov-wrap.a .ov-panel .ov-val b{font-size:clamp(17px,3.6vw,27px)!important}
+html body .ov-wrap.a .ov-panel .ov-val small{font-size:clamp(12.5px,2.4vw,17px)!important}
+html body .ov-wrap.a .ov-panel .ov-bar{height:12px}
+@media (min-width:560px){html body .ov-wrap.a .ov-panel .ov-ri{width:40px;height:40px;border-radius:13px}html body .ov-wrap.a .ov-panel .ov-ri svg{width:22px;height:22px}}
+@media (max-width:900px){html body .ov-wrap.a .ov-panel>.ov-row{grid-template-columns:auto minmax(0,1fr) auto!important;gap:8px 12px}html body .ov-wrap.a .ov-panel>.ov-row>.ov-bar{grid-column:1/-1;order:5}}
+</style>
+<style id="rdl-dash-readable">
+html body .ov-wrap.a .ov-cap{font-size:clamp(16px,2.8vw,21px)}
+html body .ov-wrap.a .ov-hero{padding:10px 12px}
+html body .ov-wrap.a .ov-gauge{width:clamp(110px,19vw,150px)}
+html body .ov-wrap.a .ov-hero-info small{font-size:clamp(17px,3.2vw,24px)!important}
+html body .ov-wrap.a .ov-hero-info b{font-size:clamp(21px,6.6vw,38px)!important}
+html body .ov-wrap.a .ov-hero-info span{font-size:clamp(11.5px,2.4vw,18px)!important}
+html body .ov-wrap.a .ov-tabs button{font-size:clamp(13px,2.6vw,19px)}
+html body .ov-wrap.a .ov-say>b{font-size:clamp(24px,4.6vw,34px)}
+html body .ov-wrap.a .ov-say span{font-size:clamp(13px,2.5vw,19px)}
+html body .ov-wrap.a .ov-say small{font-size:clamp(11.5px,2.2vw,16px)}
+html body .ov-wrap.a .ov-sum p{font-size:clamp(13.5px,2.7vw,20px)}
+html body .ov-wrap.a .ov-sum p b{font-size:clamp(15px,3vw,22px)}
+html body .ov-wrap.a .ov-sum p em{font-size:clamp(12px,2.4vw,17px)}
+html body .ov-wrap.a .ov-gap{font-size:clamp(12px,2.3vw,17px)}
+html body .ov-wrap.a .ov-btns .ov-more{font-size:clamp(12.5px,2.5vw,18px)}
+html body .ov-wrap.a .ov-det{font-size:clamp(12.5px,2.4vw,18px)}
+html body .ov-wrap.a .ov-tb{font-size:clamp(12.5px,2.4vw,17px)}
+html body .ov-wrap.a .ov-cols small{font-size:clamp(10px,1.7vw,13px)}
+html body .ov-wrap.a .ov-act b{font-size:clamp(17px,3.1vw,23px)}
+html body .ov-wrap.a .ov-act small{font-size:clamp(13.5px,2.4vw,17px)}
+html body .ov-wrap.a .ov-panel>.ov-pc{width:calc(100% - 20px);margin:8px 10px 0;box-sizing:border-box}
+html body .ov-wrap.a .ov-panel>.ov-pc .ov-ic{background:linear-gradient(135deg,#4f8ff7,#0a5fd6)}
+html body .ov-wrap.a .ov-acts>button:only-child .ov-ic{background:linear-gradient(135deg,#34d399,#059669)}
 </style>
 </body>
 </html>
