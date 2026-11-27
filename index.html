@@ -11801,9 +11801,9 @@ html:not(.ov-ready) .ov-wrap{visibility:hidden}
     for(var k=0;k<=10;k++){var th=Math.PI*(1-k/10);var x1=60+49*Math.cos(th),y1=62-49*Math.sin(th),x2=60+(k%5===0?56:53)*Math.cos(th),y2=62-(k%5===0?56:53)*Math.sin(th);ticks+='<line x1="'+x1.toFixed(1)+'" y1="'+y1.toFixed(1)+'" x2="'+x2.toFixed(1)+'" y2="'+y2.toFixed(1)+'" stroke="#9fb3d6" stroke-width="'+(k%5===0?1.8:1)+'" stroke-linecap="round"/>'}
     var th2=Math.PI*(1-(has?pr:0)/100),nx=60+34*Math.cos(th2),ny=62-34*Math.sin(th2);
     var needle='<line x1="60" y1="62" x2="'+nx.toFixed(1)+'" y2="'+ny.toFixed(1)+'" stroke="#12306b" stroke-width="2.4" stroke-linecap="round"/><circle cx="60" cy="62" r="4.5" fill="#12306b"/>';
-    return '<svg class="ov-gauge" viewBox="0 0 120 100" aria-hidden="true">'+track+segs+ticks+needle+
+    return '<svg class="ov-gauge" viewBox="0 0 120 104" aria-hidden="true">'+track+segs+ticks+needle+
       '<text x="60" y="79" text-anchor="middle" font-size="10.5" font-weight="700" letter-spacing=".6" fill="#6b7fa3">OVERDUE</text>'+
-      '<text x="60" y="97" text-anchor="middle" font-size="18" font-weight="900" fill="#e0173c">'+pr+'%</text></svg>';
+      '<text x="60" y="101" text-anchor="middle" font-size="23" font-weight="900" fill="#e0173c">'+pr+'%</text></svg>';
   }
   var mode='daily';
   function ymd(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
@@ -11918,7 +11918,6 @@ html:not(.ov-ready) .ov-wrap{visibility:hidden}
     html+=row(iS,'#16a34a','sales','Sales',cc(sN),S,'vs collection',S,mx);
     html+=row(iC,'#1d6fe8','collection','Collection',cc(cN),C,'vs sales',C,mx);
     if(!hasData)html+='<div class="ov-note">No data yet. Upload the database in Settings to see figures here.</div>';
-    html+='</section>';
     if(acts.length){
       html+='<div class="ov-acts">';
       acts.forEach(function(a){
@@ -11927,6 +11926,7 @@ html:not(.ov-ready) .ov-wrap{visibility:hidden}
       });
       html+='</div>';
     }
+    html+='</section>';
     if(html!==last){var _c=document.getElementById('rgx-chip'),_h=document.querySelector('.hdr');if(_c&&_h&&_c.parentNode!==_h)_h.appendChild(_c);wrap.innerHTML=html;last=html;dock();if(window.__rdlFitNow)window.__rdlFitNow()}
   }
   /* profile icon: lives next to the user name (phone layout); green dot = online */
@@ -11998,10 +11998,25 @@ html body .ov-wrap.a .ov-cap{margin:2px 2px 1px!important;padding:6px 8px 6px 14
 /* 3) bigger gauge with bigger OVERDUE % */
 html body .ov-wrap.a .ov-gauge{width:122px}
 /* 4) bigger titles */
-html body .ov-wrap.a .ov-hero-info small{font-size:clamp(21px,6.4vw,25px)!important}
+html body .ov-wrap.a .ov-hero-info small{font-size:clamp(22px,7vw,27.5px)!important;white-space:nowrap}
 html body .ov-wrap.a .ov-panel .ov-lab b{font-size:clamp(20px,6.1vw,23px)!important;white-space:nowrap}
 /* Posting Center + Customer Statement titles */
 html body .ov-wrap.a .ov-act b{font-size:clamp(20px,6.1vw,23px)!important}
+/* Posting Center = very light lavender, Customer Statement = very light mint */
+html body .ov-wrap.a .ov-panel>.ov-pc{background:linear-gradient(135deg,#faf8ff 0%,#f1edff 55%,#e9e3ff 100%)!important;border:1px solid #ded6fb!important}
+html body .ov-wrap.a .ov-acts>.ov-act{background:linear-gradient(135deg,#f7fefa 0%,#eafaf1 55%,#ddf5e9 100%)!important;border:1px solid #cdeedd!important}
+/* Customer Statement inside the main panel */
+html body .ov-wrap.a .ov-panel>.ov-acts{margin:3px 4px 4px!important}
+html body .ov-wrap.a .ov-panel>.ov-acts>.ov-act{width:100%;box-sizing:border-box;margin:0}
+/* Sales / Collection table */
+html body .ov-wrap.a .ov-tb{width:100%;margin:8px 0 2px;border-collapse:separate;border-spacing:0;border:1px solid #cfdff8;border-radius:14px;overflow:hidden;font-size:clamp(15.5px,4.5vw,17.5px)!important;font-variant-numeric:tabular-nums}
+html body .ov-wrap.a .ov-tb th{background:linear-gradient(180deg,#1f5bc4,#0b3d91);color:#fff;font-size:1.03em;font-weight:800;padding:10px 8px;border:0}
+html body .ov-wrap.a .ov-tb td{padding:8px;font-weight:700;color:#12306b;background:#fff;border:0;border-top:1px solid #e1eaf7;white-space:nowrap}
+html body .ov-wrap.a .ov-tb tr:nth-child(odd) td{background:#f3f7ff}
+html body .ov-wrap.a .ov-tb td:first-child{font-weight:800}
+html body .ov-wrap.a .ov-tb td:nth-child(2){color:#11763a;font-weight:800}
+html body .ov-wrap.a .ov-tb td:nth-child(3){color:#1650b8;font-weight:800}
+html body .ov-wrap.a .ov-tb td:last-child{font-weight:800}
 /* 5) share the saved space evenly */
 html body .ov-wrap.a .ov-hero{padding:8px 10px!important}
 html body .ov-wrap.a .ov-panel>.ov-row{padding-top:6px!important;padding-bottom:9px!important}
