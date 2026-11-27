@@ -12050,6 +12050,20 @@ html body .ov-wrap.a .ov-panel>.ov-row{padding-top:6px!important;padding-bottom:
 html body .ov-wrap.a .ov-chart{padding-top:6px;padding-bottom:6px}
 }
 </style>
+
+<style id="rdl-bar-pills">
+/* Home bar: depot pill + user pill share one design; the whole bar gets a soft blue gradient */
+html body .ov-wrap.a .ov-cap{padding:7px 8px!important;gap:10px;border:1px solid #c3d7f6!important;border-radius:18px!important;background:linear-gradient(135deg,#f5f9ff 0%,#e4efff 55%,#d4e5fc 100%)!important;box-shadow:0 3px 0 #c9daf3,0 8px 14px -8px #0a2f8a66,inset 0 1px 0 #fff!important}
+html body .ov-wrap.a .ov-dp,
+html body .ov-wrap.a .ov-cap>.ov-dpn,
+html body .ov-wrap.a .ov-me{box-sizing:border-box;min-height:44px;border:1px solid #c9dbfb;border-radius:999px;background:linear-gradient(180deg,#fff,#eaf2ff);box-shadow:0 3px 0 #cfdcf0,0 8px 12px -8px #0a2f8a88}
+/* depot: admin = button with arrow, depot user = same pill without arrow */
+html body .ov-wrap.a .ov-dp{padding:5px 8px 5px 16px}
+html body .ov-wrap.a .ov-cap>.ov-dpn{display:block;flex:0 1 auto;padding:0 18px;line-height:42px;color:#0a3a9a;font-weight:800}
+/* user: photo + name inside the pill */
+html body .ov-wrap.a .ov-me{margin-left:auto;display:flex;align-items:center;gap:9px;padding:4px 16px 4px 5px;max-width:58%;color:#000}
+html body .ov-wrap.a .ov-me:not(:has(.ov-un)){padding-right:5px}
+</style>
 <script>
 /* ===== NOTIFICATION RINGTONE: plays when a new notification arrives (bell badge goes up) or a scheduled note / reminder time comes ===== */
 (function(){
