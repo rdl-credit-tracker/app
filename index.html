@@ -3505,34 +3505,56 @@ const store={get:k=>{try{return JSON.parse(localStorage.getItem(K[k]))}catch(e){
 /* ---- Depot view (admin): one selected depot -> every screen that reads RDL.master sees only that depot. Raw data and uploads stay untouched. ---- */
 const DSK='rdl.dsel.v1',dKey=x=>String(x||'').trim().toLowerCase().replace(/\s+/g,' ');
 const dAdmin=()=>{try{const g=window.RDLGATE&&RDLGATE.session&&RDLGATE.session();return !g||g.role==='admin'}catch(e){return true}};
-const dSel=()=>{try{return dAdmin()?(localStorage.getItem(DSK)||''):''}catch(e){return''}};
-function depotView(m){const s=dSel();if(!m||!s)return m;const t=dKey(s),f=r=>dKey(r.dp)===t;return Object.assign({},m,{out:(m.out||[]).filter(f),cr:(m.cr||[]).filter(f)})}
+/* the admin can view ONE depot, SEVERAL depots together, or all depots. Saved as a JSON list (an old single name still works). */
+let _dsRaw=null,_dsArr=[];
+const dSelArr=()=>{try{if(!dAdmin())return[];const raw=localStorage.getItem(DSK)||'';if(raw===_dsRaw)return _dsArr;let a=[];if(raw){if(raw.charAt(0)==='['){try{a=JSON.parse(raw)}catch(e){a=[]}}else a=[raw]}
+  const seen={};_dsArr=(Array.isArray(a)?a:[]).map(x=>String(x||'').replace(/\s+/g,' ').trim()).filter(x=>x&&!seen[dKey(x)]&&(seen[dKey(x)]=1));_dsRaw=raw;return _dsArr}catch(e){return[]}};
+const dSelKeys=()=>{const a=dSelArr();return a.length?new Set(a.map(dKey)):null};
+const dSel=()=>dSelArr().join(', ');
+function depotView(m){const k=dSelKeys();if(!m||!k)return m;const f=r=>k.has(dKey(r.dp));return Object.assign({},m,{out:(m.out||[]).filter(f),cr:(m.cr||[]).filter(f)})}
 let _cm=null,_cr=-1;
 function cuMap(){const raw=window.__rdlV;if(_cm&&_cr===raw)return _cm;const m=store.get('m'),o=new Map();
   if(m){(m.cr||[]).forEach(r=>{if(r.dp)o.set(String(r.bp),dKey(r.dp))});(m.out||[]).forEach(r=>{if(r.dp)o.set(String(r.cu),dKey(r.dp))})}_cm=o;_cr=raw;return o}
 let _dn=null,_dr=-1;
 function cuDn(){const raw=window.__rdlV;if(_dn&&_dr===raw)return _dn;const m=store.get('m'),o=new Map();
   if(m){(m.cr||[]).forEach(r=>{if(r.dp)o.set(String(r.bp),String(r.dp))});(m.out||[]).forEach(r=>{if(r.dp)o.set(String(r.cu),String(r.dp))})}_dn=o;_dr=raw;return o}
-const cuIn=cu=>{const s=dSel();return !s||cuMap().get(String(cu))===dKey(s)};
+const cuIn=cu=>{const k=dSelKeys();return !k||k.has(cuMap().get(String(cu)))};
 const ledFl=L=>{if(!L||!dSel())return L;return Object.assign({},L,{rv:(L.rv||[]).filter(x=>cuIn(x.cu)),dz:(L.dz||[]).filter(x=>cuIn(x.cu))})};
-window.RDLDEPOT={admin:dAdmin,sel:dSel,key:dKey,cuIn,fl:ledFl,nameOf:cu=>cuDn().get(String(cu))||'',
+window.RDLDEPOT={admin:dAdmin,sel:dSel,selArr:dSelArr,has:n=>{const k=dSelKeys();return !k||k.has(dKey(n))},key:dKey,cuIn,fl:ledFl,
+  /* depots a screen's own Depot filter may offer: none when exactly one depot is selected, only the selected ones when several, all when nothing is selected */
+  pool:()=>{const a=dSelArr();if(a.length===1)return[];if(a.length)return a;return window.RDLDEPOT.names()},
+  label:()=>{const a=dSelArr();return !a.length?'All Depots':a.length<=2?a.join(', '):a.length+' Depots'},
+  pick:()=>openDpPick(),nameOf:cu=>cuDn().get(String(cu))||'',
   td:cu=>{const t=document.createElement('td');t.className='c-dp';const s=document.createElement('span');s.className='chip-g cn';s.textContent=cuDn().get(String(cu))||'\u2014';t.appendChild(s);return t},
   names:()=>{const m=store.get('m'),o={};if(m)(m.out||[]).concat(m.cr||[]).forEach(r=>{if(r.dp)o[r.dp]=1});return Object.keys(o).sort()},
-  set:v=>{try{v?localStorage.setItem(DSK,v):localStorage.removeItem(DSK)}catch(e){}location.reload()}};
+  set:v=>{try{const a=(Array.isArray(v)?v:(v?[v]:[])).filter(Boolean);a.length?localStorage.setItem(DSK,JSON.stringify(a)):localStorage.removeItem(DSK)}catch(e){}location.reload()}};
 /* Outstanding Register card: ONLY the left round icon opens the depot list (small ▾ badge); the rest of the card opens the Outstanding Register */
 (function(){const st=document.createElement('style');st.textContent='.total.dpk .ic{cursor:pointer}.total.dpk .ic::after{content:"\\25BE";position:absolute;right:-5px;top:-5px;width:22px;height:22px;border-radius:50%;background:#fff;color:#0a49b5;font-size:15px;line-height:22px;text-align:center;font-weight:900;box-shadow:0 2px 6px #0a2f8a66}';document.head.appendChild(st);
   const mark=()=>{try{const t=document.querySelector('.total');if(t)t.classList.toggle('dpk',!!dAdmin())}catch(e){}};mark();setInterval(mark,1500)})();
-document.addEventListener('click',e=>{const t=e.target&&e.target.closest&&e.target.closest('.total .ic');if(!t||!dAdmin())return;
-  e.stopPropagation();e.preventDefault();if(document.getElementById('dpPick'))return;
+function openDpPick(){if(!dAdmin()||document.getElementById('dpPick'))return;
+  const names=window.RDLDEPOT.names(),cur=new Set(dSelArr().map(dKey)),chosen=new Set(names.filter(n=>cur.has(dKey(n))).map(dKey));
   const ov=document.createElement('div');ov.id='dpPick';ov.style.cssText='position:fixed;inset:0;z-index:99999;background:#0008;display:flex;align-items:center;justify-content:center;padding:18px';
-  const bx=document.createElement('div');bx.style.cssText='background:#fff;color:#0b2a5b;border-radius:16px;max-width:380px;width:100%;max-height:80vh;overflow:auto;padding:14px;font:600 15px system-ui,sans-serif';
-  const h=document.createElement('div');h.textContent='Select Depot';h.style.cssText='font-weight:800;font-size:17px;margin:2px 4px 10px';bx.appendChild(h);
-  const cur=dSel(),add=(lab,val)=>{const b=document.createElement('button');b.type='button';b.textContent=lab+(dKey(val)===dKey(cur)?'  ✓':'');
-    b.style.cssText='display:block;width:100%;text-align:left;padding:13px 12px;margin:0 0 6px;border:1px solid #c9d6ee;border-radius:11px;background:'+(dKey(val)===dKey(cur)?'#e3edff':'#f6f9ff')+';color:#0b2a5b;font:inherit';
-    b.onclick=()=>{ov.remove();if(dKey(val)!==dKey(cur))RDLDEPOT.set(val)};bx.appendChild(b)};
-  add('All Depots','');RDLDEPOT.names().forEach(n=>add(n,n));
-  const c=document.createElement('button');c.type='button';c.textContent='Cancel';c.style.cssText='display:block;width:100%;padding:12px;border:0;background:none;color:#4a6a9f;font:inherit';c.onclick=()=>ov.remove();bx.appendChild(c);
-  ov.appendChild(bx);ov.onclick=ev=>{if(ev.target===ov)ov.remove()};document.body.appendChild(ov)},true);
+  const bx=document.createElement('div');bx.style.cssText='background:#fff;color:#0b2a5b;border-radius:18px;max-width:400px;width:100%;max-height:82vh;display:flex;flex-direction:column;padding:14px;font:600 15px system-ui,sans-serif;box-shadow:0 20px 40px -10px #0b2a5b88';
+  const h=document.createElement('div');h.textContent='Select Depot';h.style.cssText='font-weight:800;font-size:18px;margin:2px 4px 2px';bx.appendChild(h);
+  const hint=document.createElement('div');hint.style.cssText='font-size:12.5px;color:#5a6f95;font-weight:600;margin:0 4px 10px';hint.textContent='Tick one depot or several. Nothing ticked = All Depots.';bx.appendChild(hint);
+  const list=document.createElement('div');list.style.cssText='overflow:auto;flex:1;min-height:0';bx.appendChild(list);
+  const foot=document.createElement('div');foot.style.cssText='display:flex;gap:8px;margin-top:10px';bx.appendChild(foot);
+  const row=(lab,key)=>{const b=document.createElement('button');b.type='button';b.dataset.k=key;
+    b.style.cssText='display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:12px;margin:0 0 6px;border:1px solid #c9d6ee;border-radius:12px;color:#0b2a5b;font:inherit;cursor:pointer';
+    const bx2=document.createElement('span');bx2.style.cssText='width:22px;height:22px;border-radius:7px;border:2px solid #9fb3d6;display:flex;align-items:center;justify-content:center;flex:none;font-size:15px;line-height:1;color:#fff;font-weight:900';
+    const tx=document.createElement('span');tx.textContent=lab;tx.style.cssText='flex:1;min-width:0';b.appendChild(bx2);b.appendChild(tx);
+    b.onclick=()=>{if(key===''){chosen.clear()}else{if(chosen.has(key))chosen.delete(key);else chosen.add(key)}paint()};list.appendChild(b);return b};
+  const rows=[row('All Depots','')].concat(names.map(n=>row(n,dKey(n))));
+  function paint(){rows.forEach(b=>{const k=b.dataset.k,on=k===''?chosen.size===0:chosen.has(k),c=b.firstChild;
+    b.style.background=on?'#e3edff':'#f6f9ff';b.style.borderColor=on?'#1f5fd6':'#c9d6ee';c.style.background=on?'#1f5fd6':'#fff';c.style.borderColor=on?'#1f5fd6':'#9fb3d6';c.textContent=on?'✓':''});
+    ap.textContent=chosen.size?'Show '+chosen.size+' depot'+(chosen.size===1?'':'s'):'Show All Depots'}
+  const cn=document.createElement('button');cn.type='button';cn.textContent='Cancel';cn.style.cssText='flex:1;padding:12px;border:1px solid #c9d6ee;border-radius:12px;background:#fff;color:#4a6a9f;font:inherit;cursor:pointer';cn.onclick=()=>ov.remove();
+  const ap=document.createElement('button');ap.type='button';ap.id='dpApply';ap.style.cssText='flex:1.6;padding:12px;border:0;border-radius:12px;background:linear-gradient(180deg,#4a95ff,#1f5fd6);color:#fff;font:inherit;font-weight:800;cursor:pointer';
+  ap.onclick=()=>{const pick=names.filter(n=>chosen.has(dKey(n)));const same=pick.map(dKey).sort().join('|')===[...cur].filter(k=>names.some(n=>dKey(n)===k)).sort().join('|');ov.remove();if(!same)window.RDLDEPOT.set(pick)};
+  foot.appendChild(cn);foot.appendChild(ap);paint();
+  ov.appendChild(bx);ov.onclick=ev=>{if(ev.target===ov)ov.remove()};document.body.appendChild(ov)}
+/* the old round icon on the hidden Outstanding card opens the same picker */
+document.addEventListener('click',e=>{const t=e.target&&e.target.closest&&e.target.closest('.total .ic');if(!t||!dAdmin())return;e.stopPropagation();e.preventDefault();openDpPick()},true);
 let _gv=-1,_gm=null;
 window.RDL={get master(){if(_gv===window.__rdlV)return _gm;const v=window.__rdlV,m=depotView(store.get('m'));_gm=m;_gv=v;return m},get dcr(){return store.get('d')},fmt,curStatus:()=>curStatus()};window.RDL.readXlsx=readXlsx;
 /* company display: RPL(1000), RNL(2000) ...; every list of companies runs from 1000 up to 9000 */
@@ -4057,7 +4079,7 @@ function render(){
   q.placeholder='Search or speak a customer name or depot';mic.type='button';clr.type='button';clr.style.display='none';mic.setAttribute('aria-label','Voice search');clr.setAttribute('aria-label','Clear');
   mic.innerHTML='<svg viewBox="0 0 24 24"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2z"/></svg>';
   box.appendChild(q);box.appendChild(clr);box.appendChild(mic);P.appendChild(box);P.appendChild(hint);
-   const dpf=el('div','cu-dpf'),DPN=RDLDEPOT.sel()?[]:RDLDEPOT.names();if(DPN.length>1)P.appendChild(dpf);
+   const dpf=el('div','cu-dpf'),DPN=RDLDEPOT.pool();if(DPN.length>1)P.appendChild(dpf);
    function drawDp(){dpf.textContent='';const a=el('button',selDp.length?'':'on','All Depots');a.type='button';a.onclick=()=>{selDp=[];drawDp();draw()};dpf.appendChild(a);DPN.forEach(n=>{const on=selDp.includes(n),b=el('button',on?'on':'',n);b.type='button';b.onclick=()=>{selDp=on?selDp.filter(z=>z!==n):selDp.concat(n);drawDp();draw()};dpf.appendChild(b)})}
   let note='',spoken=false;
   const az=el('div','cu-az'),L=el('div','cu-list');P.appendChild(az);P.appendChild(L);
@@ -4142,7 +4164,7 @@ const norm=x=>String(x||'').toLowerCase().replace(/\s+/g,' ').trim();
 function lines(date,kind){const m=R.master,d=R.dcr;if(!m||!d)return[];if(kind==='c'&&window.RDL_ROLE==='user')return[];   /* collections are typed in the Collection & Order form (report only) and are never posted from Smart Post */const nm=new Map(),cm=new Map(),L=ld(),ps=kind==='o'?'ps':'pc';
   m.cr.forEach(r=>{nm.set(norm(r.nm),r.bp);cm.set(String(r.cn).toLowerCase(),r.co)});
   m.out.forEach(b=>{const k=norm(b.nm);if(k&&!nm.has(k))nm.set(k,b.cu)});
-  const oth=new Set();if(window.RDLDEPOT&&RDLDEPOT.sel()){try{const fm=JSON.parse(localStorage.getItem('rdl.master.v1')||'null')||{},sk=RDLDEPOT.key(RDLDEPOT.sel());(fm.cr||[]).concat(fm.out||[]).forEach(r=>{if(r.dp&&RDLDEPOT.key(r.dp)!==sk)oth.add(norm(r.nm))})}catch(e){}}
+  const oth=new Set();if(window.RDLDEPOT&&RDLDEPOT.sel()){try{const fm=JSON.parse(localStorage.getItem('rdl.master.v1')||'null')||{};(fm.cr||[]).concat(fm.out||[]).forEach(r=>{if(r.dp&&!RDLDEPOT.has(r.dp))oth.add(norm(r.nm))})}catch(e){}}
   const o=[];d.rows.filter(r=>r.d===date&&!oth.has(norm(r.n))).forEach(r=>Object.entries(r[kind]).forEach(([lb,amt])=>{const bp=nm.get(norm(r.n)),co=cm.get(lb.toLowerCase()),cr=bp&&co&&m.cr.find(x=>x.bp==bp&&x.co==co),key=kind+'|'+date+'|'+norm(r.n)+'|'+lb.toLowerCase();
     o.push({n:r.n,lb,amt,bp,co,key,rm:!!(L.px&&L.px[key]),done:!!(L.pl[key]||L[ps][date]||(L.px&&L.px[key])),days:cr?parseInt(cr.dl)||null:null,ok:!!(bp&&co),kd:kind})}));return o}
 /* the Daily Collection & Order data is only valid on the day it was uploaded: after midnight nothing is left to post */
@@ -5301,7 +5323,7 @@ const ALL={heads:['Customer Name','Company','Billing Document','Bill Type','Post
 {const dst=document.createElement('style');dst.textContent=':is(#sales,#collection,#scr) .cs-dpt td.c-dp{position:sticky;left:0;z-index:2;background:#fff;white-space:normal;border-left:1px solid #e6eef9;min-width:96px;max-width:96px;width:96px;box-shadow:4px 0 6px -4px #0a3a9a30;vertical-align:middle}:is(#sales,#collection,#scr) .cs-dpt tbody tr:nth-child(even) td.c-dp{background:#f4f8ff}:is(#sales,#collection,#scr) .cs-dpt td.c-dp .chip-g{font-size:12px;word-break:break-word}html body :is(#sales,#collection,#scr) .cs-dpt th:first-child{position:sticky;left:0;z-index:4;min-width:96px!important;max-width:96px!important;width:96px}html body :is(#sales,#collection,#scr) .cs-dpt td.c-n2{left:96px!important}html body :is(#sales,#collection,#scr) .cs-dpt thead th:nth-child(2){position:sticky;left:96px;z-index:3}html body :is(#sales,#collection,#scr) .cs-dpt tr.cs-tot>td.c-dp{background:#0b2a8a!important}';document.head.appendChild(dst)}
 R.history=function(w0,P){
   const w='a',C={empty:ALL.empty,heads:w0==='s'?['Customer Name','Company','Billing Document','Bill Type','Posting Date','Payment Date','Bill Amount','Collected','TDS','Balance','Days Limit','Status']:w0==='c'?['Customer Name','Company','Billing Document','Bill Type','Posting Date','Against Bill','Bill Amount','Collected','TDS','Total Settled','Payment Type','Cheque / BEFTN No.']:ALL.heads},all=records('a'),host=el('div'),dflt=(w0==='a'&&R.regPre)||(w0==='c'?['DZ']:w0==='s'?['RV']:['RV','DZ']);P.appendChild(host);
-  const DPN=RDLDEPOT.sel()?[]:RDLDEPOT.names(),DPH=DPN.length>1?'<label class="od-label">Depot Name</label><div class="dpo cs-opts"></div>':'';
+  const DPN=RDLDEPOT.pool(),DPH=DPN.length>1?'<label class="od-label">Depot Name</label><div class="dpo cs-opts"></div>':'';
   const typeHtml='<label class="od-label">Billing Document Type (tick one or both)</label><div class="tp" style="display:flex;gap:18px;margin:4px 0 8px"><label><input type="checkbox" value="RV"> RV (Sales)</label><label><input type="checkbox" value="DZ"> DZ (Collection)</label></div><select class="list-search sy" style="display:none"><option value=""></option></select>';
   const tpOk=r=>[...host.querySelectorAll('.tp input:checked')].some(i=>i.value===r.kd);
   const sel=w==='s'?'<label class="od-label">Status</label><select class="list-search sy"><option value="">All</option><option value="Open">Open</option><option value="Overdue">Overdue</option><option value="Cleared">Cleared</option></select>'
@@ -5506,7 +5528,7 @@ function applyPrefs(){
   const p=prefs(),h1=$('.ttl h1'),dl=$('#depotLine');if(h1){const tt=String(p.title||'').trim(),sp=tt.indexOf(' ');h1.textContent='';h1.setAttribute('aria-label',tt);
     if(sp>0){const a=document.createElement('span'),b=document.createElement('span');a.className='t1';a.textContent=tt.slice(0,sp);b.className='t2';b.textContent=tt.slice(sp+1);h1.appendChild(a);h1.appendChild(b)}
     else{const a=document.createElement('span');a.className='t1';a.textContent=tt;h1.appendChild(a)}}
-  if(dl){if(window.RDLDEPOT&&RDLDEPOT.admin()){dl.textContent=(RDLDEPOT.sel()||'All Depots');dl.style.display='';dl.style.cursor=''}else{dl.textContent=p.depot;dl.style.display=p.depot?'':'none'}}
+  if(dl){if(window.RDLDEPOT&&RDLDEPOT.admin()){dl.textContent=RDLDEPOT.label();dl.style.display='';dl.style.cursor=''}else{dl.textContent=p.depot;dl.style.display=p.depot?'':'none'}}
   document.title=p.title;
   const dark=p.theme==='dark'||(p.theme==='system'&&window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches);
   document.documentElement.dataset.theme=dark?'dark':'light';
@@ -7119,7 +7141,7 @@ function build(){
   {const cm=multi([['Cash','Cash'],['Cheque','Cheque'],['BEFTN','BEFTN']],k=>S.pay[k],k=>{if(S.dz)S.pay[k]=!S.pay[k]});box.appendChild(cm.row);
     syncPay=()=>{cm.row.style.opacity=S.dz?'':'.45';cm.row.style.pointerEvents=S.dz?'':'none'};syncPay()}
   /* company: swipeable multi-select chips, fixed order by company code (no selection = all companies) */
-  {const dn=RDLDEPOT.sel()?[]:RDLDEPOT.names();if(dn.length>1){box.appendChild(el('label','od-label','Depot Name'));const drow=el('div','rq'),dpt=[],dpaint=()=>dpt.forEach(f=>f());dn.forEach(k=>{const b=el('button',null,k);b.type='button';dpt.push(()=>{const on=S.dps.includes(k);b.classList.toggle('on',on);b.setAttribute('aria-pressed',on)});b.onclick=()=>{S.dps=S.dps.includes(k)?S.dps.filter(z=>z!==k):S.dps.concat(k);dpaint()};drow.appendChild(b)});dpaint();box.appendChild(drow)}}
+  {const dn=RDLDEPOT.pool();if(dn.length>1){box.appendChild(el('label','od-label','Depot Name'));const drow=el('div','rq'),dpt=[],dpaint=()=>dpt.forEach(f=>f());dn.forEach(k=>{const b=el('button',null,k);b.type='button';dpt.push(()=>{const on=S.dps.includes(k);b.classList.toggle('on',on);b.setAttribute('aria-pressed',on)});b.onclick=()=>{S.dps=S.dps.includes(k)?S.dps.filter(z=>z!==k):S.dps.concat(k);dpaint()};drow.appendChild(b)});dpaint();box.appendChild(drow)}}
   box.appendChild(el('label','od-label','Company'));
   const m=R.master,crow=el('div','rq'),cpaint=[],codes=R.coSort(new Set(m.cr.map(r=>String(r.co)).concat(m.out.map(b=>String(b.co)))));
   const repaint=()=>cpaint.forEach(f=>f());
@@ -7455,7 +7477,7 @@ function build(){
     const f=new Map();m.cr.forEach(r=>{if(String(r.bp).toLowerCase().includes(v)||String(r.nm||'').toLowerCase().includes(v))f.set(String(r.bp),r.nm)});m.out.forEach(b=>{if(!f.has(String(b.cu))&&(String(b.cu).toLowerCase().includes(v)||String(b.nm||'').toLowerCase().includes(v)))f.set(String(b.cu),b.nm||('Customer '+b.cu))});
     [...f].slice(0,8).forEach(([k,n])=>{const x=el('button','od-sug',n+' ');x.type='button';x.appendChild(el('small',null,k));x.onclick=()=>{q.value=k;sg.textContent='';apply()};sg.appendChild(x)})});
   q.addEventListener('keydown',e=>{if(e.key==='Enter')apply()});
-  if(!RDLDEPOT.sel()){const dn=RDLDEPOT.names();if(dn.length){box.appendChild(el('label','od-label','Depot Name'));box.appendChild(RDLRange.multi(dn.map(n=>[n,n]),()=>S.dps,v=>{S.dps=v},()=>{}).el)}}
+  {const dn=RDLDEPOT.pool();if(dn.length){box.appendChild(el('label','od-label','Depot Name'));box.appendChild(RDLRange.multi(dn.map(n=>[n,n]),()=>S.dps,v=>{S.dps=v},()=>{}).el)}}
   box.appendChild(el('label','od-label','Company'));
   const codes=R.coSort(new Set(m.cr.map(r=>String(r.co)).concat(m.out.map(b=>String(b.co)))));
   box.appendChild(RDLRange.multi(codes.map(c=>[c,R.coName(c)]),()=>S.cos,v=>{S.cos=v},()=>{}).el);
@@ -7832,7 +7854,7 @@ function render(){const S=get(),all=derive(S).filter(e=>RDLDEPOT.cuIn(e.cu)),B=P
   if(V.tab==='r')return byCo(B,open);
   const cos=[...new Set(all.map(e=>e.co))].sort();
   const f=el('div');f.style.marginTop='10px';
-  {const dn=RDLDEPOT.sel()?[]:RDLDEPOT.names();if(dn.length>1)f.appendChild(sel([['','All depots'],...dn.map(n=>[n,n])],V.dp,v=>{V.dp=v;render()}))}
+  {const dn=RDLDEPOT.pool();if(dn.length>1)f.appendChild(sel([['','All depots'],...dn.map(n=>[n,n])],V.dp,v=>{V.dp=v;render()}))}
   f.appendChild(sel([['','All companies'],...cos.map(c=>[c,coName(c)])],V.co,v=>{V.co=v;render()}));
   f.appendChild(sel([['open','Open (Pending + Short)'],['all','All'],['rec','Received'],['wo','Written-off']],V.st,v=>{V.st=v;render()}));
   const q=el('input','list-search');q.type='search';q.placeholder='Search depot, customer, DZ or challan no.';q.value=V.q;
@@ -11839,6 +11861,7 @@ html:not(.ov-ready) .ov-wrap{visibility:hidden}
     wrap=document.createElement('div');wrap.className='ov-wrap '+VARIANT.toLowerCase();
     s.parentNode.insertBefore(wrap,s.nextSibling);
     wrap.addEventListener('click',function(e){
+      if(e.target.closest&&e.target.closest('[data-dp]')){if(window.RDLDEPOT)RDLDEPOT.pick();return}
       var tb=e.target.closest&&e.target.closest('[data-tab]');if(tb){mode=tb.getAttribute('data-tab');sel=-1;last='';tick();return}
       var bk=e.target.closest&&e.target.closest('[data-bk]');if(bk){sel=+bk.getAttribute('data-bk');last='';tick();return}
       if(e.target.closest&&e.target.closest('[data-gr]')){showGr=!showGr;last='';tick();return}
@@ -11879,7 +11902,10 @@ html:not(.ov-ready) .ov-wrap{visibility:hidden}
     var pc1=pch&&pch.style.display!=='none'?{el:pch,t:t(q('.pch-t b',pch))||'Posting Center',s:t(q('.pch-t small',pch)),ic:q('.pch-i',pch)}:null;
     function actBtn(a,cls){var i=reg(a.el),ic=a.ic?'<span class="ov-ic">'+a.ic.outerHTML+'</span>':'';return '<button type="button" class="ov-act'+cls+'" data-i="'+i+'">'+ic+'<span><b>'+esc(a.t)+'</b><small>'+esc(a.s)+'</small></span></button>'}
     var iT=reg(tot),iR=reg(red),iA=reg(amb),iS=reg(rs),iC=reg(rc);
-    html+='<div class="ov-cap">'+esc(depot)+'</div>';
+    var G=window.RDLGATE,me={};try{me=(G&&G.session&&G.session())||{}}catch(e){}
+    var uname=String(me.name||'').trim(),isAdm=!!(window.RDLDEPOT&&RDLDEPOT.admin());
+    if(isAdm)depot=RDLDEPOT.label();
+    html+='<div class="ov-cap">'+(isAdm?'<button type="button" class="ov-dp" data-dp="1" aria-haspopup="dialog" title="Choose depot"><span class="ov-dpn">'+esc(depot)+'</span><i class="ov-dpa" aria-hidden="true"></i></button>':'<span class="ov-dpn">'+esc(depot)+'</span>')+(uname?'<span class="ov-un">'+esc(uname)+'</span>':'')+'</div>';
     html+='<section class="ov-panel">';
     html+='<div class="ov-hero" data-i="'+iT+'">'+
       '<div class="ov-hero-top">'+gauge(hasData,pc,pa,pr)+
@@ -11912,5 +11938,14 @@ html:not(.ov-ready) .ov-wrap{visibility:hidden}
 })();
 </script>
 
+<style id="rdl-dash-depot">
+html body .ov-wrap.a .ov-cap{display:flex;align-items:center;gap:10px;min-width:0}
+html body .ov-wrap.a .ov-dpn{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:0 1 auto}
+.ov-wrap.a .ov-dp{display:inline-flex;align-items:center;gap:8px;min-width:0;max-width:100%;border:1px solid #c9dbfb;border-radius:999px;background:linear-gradient(180deg,#fff,#eaf2ff);color:#0a3a9a;font:inherit;font-weight:800;letter-spacing:inherit;text-transform:inherit;padding:5px 8px 5px 14px;cursor:pointer;box-shadow:0 3px 0 #cfdcf0,0 8px 12px -8px #0a2f8a88}
+.ov-wrap.a .ov-dp:active{transform:translateY(2px);box-shadow:0 1px 0 #cfdcf0}
+.ov-wrap.a .ov-dpa{width:22px;height:22px;border-radius:50%;flex:none;background:linear-gradient(180deg,#3f6fe0,#0b2f86) ;position:relative;box-shadow:inset 0 1px 0 #ffffff80}
+.ov-wrap.a .ov-dpa::after{content:"";position:absolute;left:50%;top:46%;width:6px;height:6px;border:solid #fff;border-width:0 2.5px 2.5px 0;transform:translate(-50%,-50%) rotate(45deg)}
+.ov-wrap.a .ov-un{margin-left:auto;flex:0 1 auto;min-width:0;max-width:48%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:700;text-transform:none;letter-spacing:0;color:#3c5a8a;background:#fff;border:1px solid #dbe6f5;border-radius:999px;padding:4px 12px;box-shadow:0 2px 0 #dbe6f5}
+</style>
 </body>
 </html>
