@@ -11889,6 +11889,7 @@ html:not(.ov-ready) .ov-wrap{visibility:hidden}
     s.parentNode.insertBefore(wrap,s.nextSibling);
     wrap.addEventListener('click',function(e){
       if(e.target.closest&&e.target.closest('[data-dp]')){if(window.RDLDEPOT)RDLDEPOT.pick();return}
+      var me=e.target.closest&&e.target.closest('.ov-me');if(me){if(!e.target.closest('#rgx-chip')){var pc=document.getElementById('rgx-chip');if(pc)pc.click()}return}   /* tap on the photo OR the name opens the profile (Sign Out is inside) */
       var tb=e.target.closest&&e.target.closest('[data-tab]');if(tb){mode=tb.getAttribute('data-tab');sel=-1;last='';tick();return}
       var bk=e.target.closest&&e.target.closest('[data-bk]');if(bk){sel=+bk.getAttribute('data-bk');last='';tick();return}
       if(e.target.closest&&e.target.closest('[data-gr]')){showGr=!showGr;last='';tick();return}
@@ -12061,7 +12062,8 @@ html body .ov-wrap.a .ov-me{box-sizing:border-box;min-height:44px;border:1px sol
 html body .ov-wrap.a .ov-dp{padding:5px 8px 5px 16px}
 html body .ov-wrap.a .ov-cap>.ov-dpn{display:block;flex:0 1 auto;padding:0 18px;line-height:42px;color:#0a3a9a;font-weight:800}
 /* user: photo + name inside the pill */
-html body .ov-wrap.a .ov-me{margin-left:auto;display:flex;align-items:center;gap:9px;padding:4px 16px 4px 5px;max-width:58%;color:#000}
+html body .ov-wrap.a .ov-me{margin-left:auto;display:flex;align-items:center;gap:9px;padding:4px 16px 4px 5px;max-width:58%;color:#000;cursor:pointer;-webkit-tap-highlight-color:transparent}
+html body .ov-wrap.a .ov-me:active{transform:translateY(2px);box-shadow:0 1px 0 #cfdcf0}
 html body .ov-wrap.a .ov-me:not(:has(.ov-un)){padding-right:5px}
 </style>
 <script>
