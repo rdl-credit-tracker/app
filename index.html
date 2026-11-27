@@ -11801,9 +11801,9 @@ html:not(.ov-ready) .ov-wrap{visibility:hidden}
     for(var k=0;k<=10;k++){var th=Math.PI*(1-k/10);var x1=60+49*Math.cos(th),y1=62-49*Math.sin(th),x2=60+(k%5===0?56:53)*Math.cos(th),y2=62-(k%5===0?56:53)*Math.sin(th);ticks+='<line x1="'+x1.toFixed(1)+'" y1="'+y1.toFixed(1)+'" x2="'+x2.toFixed(1)+'" y2="'+y2.toFixed(1)+'" stroke="#9fb3d6" stroke-width="'+(k%5===0?1.8:1)+'" stroke-linecap="round"/>'}
     var th2=Math.PI*(1-(has?pr:0)/100),nx=60+34*Math.cos(th2),ny=62-34*Math.sin(th2);
     var needle='<line x1="60" y1="62" x2="'+nx.toFixed(1)+'" y2="'+ny.toFixed(1)+'" stroke="#12306b" stroke-width="2.4" stroke-linecap="round"/><circle cx="60" cy="62" r="4.5" fill="#12306b"/>';
-    return '<svg class="ov-gauge" viewBox="0 0 120 92" aria-hidden="true">'+track+segs+ticks+needle+
-      '<text x="60" y="78" text-anchor="middle" font-size="7.5" font-weight="700" letter-spacing=".6" fill="#6b7fa3">OVERDUE</text>'+
-      '<text x="60" y="90" text-anchor="middle" font-size="12" font-weight="800" fill="#e0173c">'+pr+'%</text></svg>';
+    return '<svg class="ov-gauge" viewBox="0 0 120 100" aria-hidden="true">'+track+segs+ticks+needle+
+      '<text x="60" y="79" text-anchor="middle" font-size="10.5" font-weight="700" letter-spacing=".6" fill="#6b7fa3">OVERDUE</text>'+
+      '<text x="60" y="97" text-anchor="middle" font-size="18" font-weight="900" fill="#e0173c">'+pr+'%</text></svg>';
   }
   var mode='daily';
   function ymd(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
@@ -11848,7 +11848,7 @@ html:not(.ov-ready) .ov-wrap{visibility:hidden}
       function bar(v,c){return '<i class="'+c+'" style="height:'+(max>0&&v>0?Math.max(3,v/max*100):0)+'%"></i>'}
       return '<button type="button" data-bk="'+i+'" class="'+(i===k?'on':'')+'" aria-label="'+esc(name(b))+': sales '+money(b.s)+', collection '+money(b.v)+'"><span>'+bar(b.s,'s')+bar(b.v,'c')+'</span><small>'+(n<=8||(n-1-i)%2===0?esc(b.label):'')+'</small></button>'}).join('');
     function btn(a,on,l){return '<button type="button" class="ov-more" data-'+a+'="1" aria-expanded="'+on+'">'+(on?'Hide ':'Show ')+l+'</button>'}
-    var body=(tot>0||stot>0)?'<div class="ov-btns">'+btn('gr',showGr,'graph')+btn('tbl',showTbl,'table')+'</div>'+
+    var body=(tot>0||stot>0)?'<div class="ov-btns">'+btn('gr',showGr,'Graph')+btn('tbl',showTbl,'Table')+'</div>'+
       (showGr?'<div class="ov-cols">'+cols+'</div><div class="ov-det"><b>'+esc(name(x))+'</b> · Sales <b style="color:#15803d">'+short(x.s)+'</b> · Collection <b style="color:#1d5fd6">'+short(x.v)+'</b><br>Collection is <b>'+ratio(x.v,x.s)+'</b> of this '+unit.toLowerCase()+'’s sales, <b>'+ratio(x.v,avS*xd)+'</b> of average sales</div>':'')+
       (showTbl?'<table class="ov-tb"><tr><th>'+unit+'</th><th>Sales</th><th>Collection</th><th>Coll. %</th></tr>'+s.slice().reverse().filter(function(b){return b.s||b.v}).map(function(b){return '<tr><td>'+esc(mode==='weekly'?dm(b.from):name(b))+'</td><td>'+short(b.s)+'</td><td>'+short(b.v)+'</td><td>'+ratio(b.v,b.s)+'</td></tr>'}).join('')+'</table>':'')
       :'<div class="ov-empty">No sales or collection in this period</div>';
@@ -11913,8 +11913,8 @@ html:not(.ov-ready) .ov-wrap{visibility:hidden}
       '</div>';
     if(pc1)html+=actBtn(pc1,' ov-pc');
     html+=chart();
-    html+=row(iR,'#e0173c','overdue','Total overdue',cc(rN),R,pr+'% of outstanding',R,base);
-    html+=row(iA,'#e08a00','upcoming','Upcoming overdue',cc(aN),A,pa+'% of outstanding',A,base);
+    html+=row(iR,'#e0173c','overdue','Total Overdue',cc(rN),R,pr+'% of outstanding',R,base);
+    html+=row(iA,'#e08a00','upcoming','Upcoming Overdue',cc(aN),A,pa+'% of outstanding',A,base);
     html+=row(iS,'#16a34a','sales','Sales',cc(sN),S,'vs collection',S,mx);
     html+=row(iC,'#1d6fe8','collection','Collection',cc(cN),C,'vs sales',C,mx);
     if(!hasData)html+='<div class="ov-note">No data yet. Upload the database in Settings to see figures here.</div>';
@@ -11981,6 +11981,29 @@ html body .ov-wrap.a .ov-panel>.ov-pc{padding:18px 12px!important;margin:6px 6px
 html body .ov-wrap.a .ov-act:not(.ov-pc){padding:19px 14px!important}
 html body .ov-wrap.a .ov-pc .ov-ic,html body .ov-wrap.a .ov-acts .ov-act .ov-ic,html body .ov-wrap.a .ov-pc .ov-ic .pch-i,html body .ov-wrap.a .ov-acts .ov-act .ov-ic .em,html body .ov-wrap.a .ov-pc .ov-ic .pi,html body .ov-wrap.a .ov-acts .ov-act .ov-ic .pi{width:36px!important;height:36px!important}
 html body .ov-wrap.a .ov-pc .ov-ic svg,html body .ov-wrap.a .ov-acts .ov-act .ov-ic svg{width:19px!important;height:19px!important}
+}
+</style>
+<style id="rdl-tune-2">
+/* UI only: compact header, depot + user box, bigger titles. Delete this block to undo. Phone only. */
+@media(max-width:999px){
+/* 1) header: less space on top, slightly smaller logo + icons */
+html body .hdr{padding-top:calc(7px + env(safe-area-inset-top,0px))!important;padding-bottom:9px!important;row-gap:7px!important;
+background:linear-gradient(180deg,#0b3d91 0,#0b3d91 env(safe-area-inset-top,0px),#0b3d9100 calc(env(safe-area-inset-top,0px) + 30px)),linear-gradient(100deg,#0a3a9a,#0a7fc4 60%,#12b5b0)}
+html body .hdr .logo{width:39px!important;height:39px!important}
+html body .hdr>.ib{width:31px!important;height:31px!important}
+html body .hdr>.ib svg{width:17px;height:17px}
+/* 2) depot name + user inside one soft shaded box */
+html body #home .search{margin:9px 0 0!important}
+html body .ov-wrap.a .ov-cap{margin:2px 2px 1px!important;padding:6px 8px 6px 14px!important;border:1px solid #cfdff8;border-radius:16px;background:linear-gradient(135deg,#ffffff 0%,#edf4ff 55%,#e2eeff 100%);box-shadow:0 3px 0 #d3e0f5,0 8px 14px -8px #0a2f8a55,inset 0 1px 0 #ffffff}
+/* 3) bigger gauge with bigger OVERDUE % */
+html body .ov-wrap.a .ov-gauge{width:122px}
+/* 4) bigger titles */
+html body .ov-wrap.a .ov-hero-info small{font-size:clamp(21px,6.4vw,25px)!important}
+html body .ov-wrap.a .ov-panel .ov-lab b{font-size:clamp(20px,6.1vw,23px)!important;white-space:nowrap}
+/* 5) share the saved space evenly */
+html body .ov-wrap.a .ov-hero{padding:8px 10px!important}
+html body .ov-wrap.a .ov-panel>.ov-row{padding-top:6px!important;padding-bottom:9px!important}
+html body .ov-wrap.a .ov-chart{padding-top:6px;padding-bottom:6px}
 }
 </style>
 </body>
