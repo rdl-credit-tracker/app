@@ -11905,7 +11905,7 @@ html:not(.ov-ready) .ov-wrap{visibility:hidden}
     var G=window.RDLGATE,me={};try{me=(G&&G.session&&G.session())||{}}catch(e){}
     var uname=String(me.name||'').trim(),isAdm=!!(window.RDLDEPOT&&RDLDEPOT.admin());
     if(isAdm)depot=RDLDEPOT.label();
-    html+='<div class="ov-cap">'+(isAdm?'<button type="button" class="ov-dp" data-dp="1" aria-haspopup="dialog" title="Choose depot"><span class="ov-dpn">'+esc(depot)+'</span><i class="ov-dpa" aria-hidden="true"></i></button>':'<span class="ov-dpn">'+esc(depot)+'</span>')+(uname?'<span class="ov-un">'+esc(uname)+'</span>':'')+'</div>';
+    html+='<div class="ov-cap">'+(isAdm?'<button type="button" class="ov-dp" data-dp="1" aria-haspopup="dialog" title="Choose depot"><span class="ov-dpn">'+esc(depot)+'</span><i class="ov-dpa" aria-hidden="true"></i></button>':'<span class="ov-dpn">'+esc(depot)+'</span>')+'<span class="ov-me"><span class="ov-pf" id="ov-pf"></span>'+(uname?'<span class="ov-un">'+esc(uname)+'</span>':'')+'</span></div>';
     html+='<section class="ov-panel">';
     html+='<div class="ov-hero" data-i="'+iT+'">'+
       '<div class="ov-hero-top">'+gauge(hasData,pc,pa,pr)+
@@ -11927,8 +11927,12 @@ html:not(.ov-ready) .ov-wrap{visibility:hidden}
       });
       html+='</div>';
     }
-    if(html!==last){wrap.innerHTML=html;last=html;if(window.__rdlFitNow)window.__rdlFitNow()}
+    if(html!==last){var _c=document.getElementById('rgx-chip'),_h=document.querySelector('.hdr');if(_c&&_h&&_c.parentNode!==_h)_h.appendChild(_c);wrap.innerHTML=html;last=html;dock();if(window.__rdlFitNow)window.__rdlFitNow()}
   }
+  /* profile icon: lives next to the user name (phone layout); green dot = online */
+  function dock(){if(innerWidth>=1000)return;var c=document.getElementById('rgx-chip'),sl=document.getElementById('ov-pf');if(c&&sl&&c.parentNode!==sl){sl.appendChild(c);if(window.__rdlFitNow)window.__rdlFitNow()}}
+  function net(){document.documentElement.classList.toggle('rdl-offline',navigator.onLine===false)}
+  window.addEventListener('online',net);window.addEventListener('offline',net);net();setInterval(dock,700);
   tick();setInterval(tick,1500);
   /* show the dashboard only after it has its final size (no visible jumps while opening) */
   function ready(){tick();if(window.__rdlFitNow)window.__rdlFitNow();document.documentElement.classList.add('ov-ready')}
@@ -11946,6 +11950,38 @@ html body .ov-wrap.a .ov-dpn{min-width:0;overflow:hidden;text-overflow:ellipsis;
 .ov-wrap.a .ov-dpa{width:22px;height:22px;border-radius:50%;flex:none;background:linear-gradient(180deg,#3f6fe0,#0b2f86) ;position:relative;box-shadow:inset 0 1px 0 #ffffff80}
 .ov-wrap.a .ov-dpa::after{content:"";position:absolute;left:50%;top:46%;width:6px;height:6px;border:solid #fff;border-width:0 2.5px 2.5px 0;transform:translate(-50%,-50%) rotate(45deg)}
 .ov-wrap.a .ov-un{margin-left:auto;flex:0 1 auto;min-width:0;max-width:48%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:700;text-transform:none;letter-spacing:0;color:#3c5a8a;background:#fff;border:1px solid #dbe6f5;border-radius:999px;padding:4px 12px;box-shadow:0 2px 0 #dbe6f5}
+</style>
+
+<style id="rdl-tune-1">
+@media(max-width:999px){
+/* 1) profile icon leaves the header (it now sits before the user name) */
+html body .hdr>#rgx-chip{display:none!important}
+html body .hdr{grid-template-columns:auto minmax(0,1fr) auto auto!important}
+/* 2) header -> search box: smaller gap (still not touching) */
+html body #home .search{margin:7px 0 -8px!important}
+/* 3) depot name + user: closer to the search box; user = photo icon + black name, same size as the depot name */
+html body .ov-wrap.a .ov-cap{align-items:center;gap:10px}
+html body .ov-wrap.a .ov-me{margin-left:auto;display:flex;align-items:center;gap:8px;min-width:0;max-width:60%}
+html body .ov-wrap.a .ov-un{margin:0!important;max-width:none!important;flex:0 1 auto;min-width:0;font-size:inherit!important;font-weight:700;letter-spacing:0;text-transform:none;color:#000!important;background:none!important;border:0!important;box-shadow:none!important;padding:0!important}
+html body .ov-pf{position:relative;width:34px;height:34px;flex:none;display:block}
+html body .ov-pf #rgx-chip{position:relative;display:grid!important;place-items:center;width:34px!important;height:34px!important;border-radius:50%!important;border:2px solid #fff!important;background:linear-gradient(135deg,#4f8ff7,#0a5fd6)!important;box-shadow:0 4px 8px -3px #0a2f8a99!important;overflow:visible}
+html body .ov-pf #rgx-chip svg{width:19px;height:19px;fill:#fff}
+html body .ov-pf #rgx-chip img.pf{position:absolute;inset:0;width:100%;height:100%;border:0!important;box-shadow:none!important;border-radius:50%;object-fit:cover}
+html body .ov-pf #rgx-chip::after{content:"";position:absolute;right:-2px;bottom:-2px;width:12px;height:12px;border-radius:50%;background:#22c55e;border:2px solid #fff;box-shadow:0 1px 3px #0a2f8a66;z-index:3}
+html.rdl-offline body .ov-pf #rgx-chip::after{background:#94a3b8}
+/* 4) Collection -> Customer Statement: smaller gap */
+html body .ov-wrap.a .ov-acts{margin-top:-4px}
+/* 4b) bottom navigation: a little smaller */
+html body .nav>div{padding:3px 8px!important}
+html body .nav button{padding:3px 2px!important;gap:1px!important}
+html body .nav button span{width:34px!important;height:26px!important}
+html body .nav button span svg{width:19px!important;height:19px!important}
+/* 5) the space saved goes to the Posting Center and Customer Statement boxes */
+html body .ov-wrap.a .ov-panel>.ov-pc{padding:18px 12px!important;margin:6px 6px 0!important}
+html body .ov-wrap.a .ov-act:not(.ov-pc){padding:19px 14px!important}
+html body .ov-wrap.a .ov-pc .ov-ic,html body .ov-wrap.a .ov-acts .ov-act .ov-ic,html body .ov-wrap.a .ov-pc .ov-ic .pch-i,html body .ov-wrap.a .ov-acts .ov-act .ov-ic .em,html body .ov-wrap.a .ov-pc .ov-ic .pi,html body .ov-wrap.a .ov-acts .ov-act .ov-ic .pi{width:36px!important;height:36px!important}
+html body .ov-wrap.a .ov-pc .ov-ic svg,html body .ov-wrap.a .ov-acts .ov-act .ov-ic svg{width:19px!important;height:19px!important}
+}
 </style>
 </body>
 </html>
