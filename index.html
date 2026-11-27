@@ -11702,28 +11702,21 @@ html body .nav button:not([data-p="home"]):not([data-p="customer"]):not([data-p=
     function name(b){return mode==='daily'?dm(b.from):mode==='weekly'?dm(b.from)+' – '+dm(b.to):mode==='monthly'?b.label+' '+b.from.slice(0,4):b.label}
     function times(v,av){return av>0?(v/(av*xd)).toFixed(1)+'× average':'—'}
     var diff=stot-tot,pc100=stot>0?Math.round(tot/stot*100):0;
-    function line(c,l,v,av){return '<tr style="--c:'+c+'"><th><i></i>'+l+'</th><td>'+money(v)+'</td><td>'+short(av)+'</td></tr>'}
-    var head='<div class="ov-sum"><div class="ov-say">'+(stot>0?'<b>৳'+pc100+'</b><span>collected for every ৳100 sold<small>Last '+nd+' days</small></span>':'<span>No sales in this period<small>Last '+nd+' days</small></span>')+'</div>'+
+    function line(c,l,v,av){return '<p style="--c:'+c+'"><span><i></i>'+l+'</span><b>'+money(v)+'</b><em>'+short(av)+'/day</em></p>'}
+    var head='<div class="ov-sum"><div class="ov-say">'+(stot>0?'<b>৳'+pc100+'</b><span>collected per ৳100 sold</span>':'<span>No sales in this period</span>')+'<small>'+nd+' days · '+cnt+' receipts</small></div>'+
       '<div class="ov-meter"><i style="width:'+Math.min(100,pc100)+'%"></i></div>'+
-      '<table class="ov-led"><tr class="h"><th></th><td>Total</td><td>Per day</td></tr>'+
       line('#16a34a','Sales',stot,avS)+line('#1d5fd6','Collection',tot,avC)+
-      '<tr class="d"><th>'+(diff>0?'Sales above collection':'Collection above sales')+'</th><td>'+money(Math.abs(diff))+'</td><td>'+short(Math.abs(avS-avC))+'</td></tr></table></div>';
+      '<div class="ov-gap">'+(diff>0?'Sales above collection':'Collection above sales')+': <b>'+short(Math.abs(diff))+'</b> · incl. TDS</div></div>';
     var cols=s.map(function(b,i){
       function bar(v,c){return '<i class="'+c+'" style="height:'+(max>0&&v>0?Math.max(3,v/max*100):0)+'%"></i>'}
       return '<button type="button" data-bk="'+i+'" class="'+(i===k?'on':'')+'" aria-label="'+esc(name(b))+': sales '+money(b.s)+', collection '+money(b.v)+'"><span>'+bar(b.s,'s')+bar(b.v,'c')+'</span><small>'+(n<=8||(n-1-i)%2===0?esc(b.label):'')+'</small></button>'}).join('');
-    var body=(tot>0||stot>0)?'<button type="button" class="ov-more" data-gr="1" aria-expanded="'+showGr+'">'+(showGr?'Hide graph':'Show graph')+'</button>'+(showGr?'<div class="ov-max">Highest bar: '+short(max)+' · tap a bar for details</div><div class="ov-cols">'+cols+'</div>'+
-      '<div class="ov-det"><div class="ov-det-h">'+unit+': '+esc(name(x))+'</div>'+
-      '<p><span>Sales</span><b style="color:#15803d">'+money(x.s)+'</b><em>'+times(x.s,avS)+'</em></p>'+
-      '<p><span>Collection</span><b style="color:#1d5fd6">'+money(x.v)+'</b><em>'+times(x.v,avC)+'</em></p>'+
-      '<p><span>Collection ÷ this '+unit.toLowerCase()+'’s sales</span><b>'+ratio(x.v,x.s)+'</b></p>'+
-      '<p><span>Collection ÷ average sales per '+unit.toLowerCase()+'</span><b>'+ratio(x.v,avS*xd)+'</b></p></div>'+
-      '':'')+
-      '<button type="button" class="ov-more" data-tbl="1">'+(showTbl?'Hide table':'Show '+unit.toLowerCase()+'-by-'+unit.toLowerCase()+' table')+'</button>'+
+    function btn(a,on,l){return '<button type="button" class="ov-more" data-'+a+'="1" aria-expanded="'+on+'">'+(on?'Hide ':'Show ')+l+'</button>'}
+    var body=(tot>0||stot>0)?'<div class="ov-btns">'+btn('gr',showGr,'graph')+btn('tbl',showTbl,'table')+'</div>'+
+      (showGr?'<div class="ov-cols">'+cols+'</div><div class="ov-det"><b>'+esc(name(x))+'</b> · Sales <b style="color:#15803d">'+short(x.s)+'</b> · Collection <b style="color:#1d5fd6">'+short(x.v)+'</b><br>Collection is <b>'+ratio(x.v,x.s)+'</b> of this '+unit.toLowerCase()+'’s sales, <b>'+ratio(x.v,avS*xd)+'</b> of average sales</div>':'')+
       (showTbl?'<table class="ov-tb"><tr><th>'+unit+'</th><th>Sales</th><th>Collection</th><th>Coll. %</th></tr>'+s.slice().reverse().filter(function(b){return b.s||b.v}).map(function(b){return '<tr><td>'+esc(mode==='weekly'?dm(b.from):name(b))+'</td><td>'+short(b.s)+'</td><td>'+short(b.v)+'</td><td>'+ratio(b.v,b.s)+'</td></tr>'}).join('')+'</table>':'')
       :'<div class="ov-empty">No sales or collection in this period</div>';
     var tabs=['daily','weekly','monthly','yearly'].map(function(t){return '<button type="button" data-tab="'+t+'" class="'+(t===mode?'on':'')+'">'+t.charAt(0).toUpperCase()+t.slice(1)+'</button>'}).join('');
-    return '<div class="ov-chart"><div class="ov-tabs">'+tabs+'</div>'+head+body+
-      '<div class="ov-legend"><span><i style="background:#16a34a"></i>Sales</span><span><i style="background:#1d5fd6"></i>Collection (incl. TDS)</span><span class="ov-cnt">'+cnt+' receipts</span></div></div>';
+    return '<div class="ov-chart"><div class="ov-tabs">'+tabs+'</div>'+head+body+'</div>';
   }
   function ensure(){
     if(wrap&&wrap.isConnected)return true;
@@ -11853,6 +11846,29 @@ html body .ov-wrap.a .ov-act small{font-size:13.5px}
 .ov-tb th,.ov-tb td{text-align:right;padding:6px 2px;border-bottom:1px solid #e1eaf7}
 .ov-tb th:first-child,.ov-tb td:first-child{text-align:left}
 .ov-wrap.a .ov-legend{font-size:12px}
+</style>
+<style id="rdl-dash-compact">
+.ov-wrap.a .ov-chart{padding:8px 10px}
+.ov-wrap.a .ov-tabs{margin:0}
+.ov-wrap.a .ov-tabs button{padding:6px 0;font-size:13px}
+.ov-wrap.a .ov-sum{margin:7px 2px 6px}
+.ov-wrap.a .ov-say{gap:6px;align-items:baseline;flex-wrap:wrap}
+.ov-wrap.a .ov-say>b{font-size:24px}
+.ov-wrap.a .ov-say span{font-size:13px}
+.ov-wrap.a .ov-say small{margin-left:auto;font-size:11.5px}
+.ov-wrap.a .ov-meter{height:6px;margin:5px 0 3px}
+.ov-sum p{display:flex;align-items:baseline;gap:8px;margin:4px 0;font-size:13.5px;font-weight:800}
+.ov-sum p i{display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--c);margin-right:5px}
+.ov-sum p b{margin-left:auto;font-size:15px;color:var(--c)}
+.ov-sum p em{min-width:78px;text-align:right;font-style:normal;font-size:12px;color:#4a6592}
+.ov-gap{font-size:12px;color:#51648a}
+.ov-gap b{color:#12306b}
+.ov-btns{display:flex;gap:8px}
+.ov-wrap.a .ov-btns .ov-more{flex:1;margin:0;padding:6px;font-size:12.5px}
+.ov-wrap.a .ov-cols{margin-top:8px}
+.ov-wrap.a .ov-cols span{height:72px}
+.ov-wrap.a .ov-det{margin-top:4px;padding:6px 8px;font-size:12.5px;line-height:1.6}
+.ov-wrap.a .ov-tb{margin:6px 0 0}
 </style>
 </body>
 </html>
