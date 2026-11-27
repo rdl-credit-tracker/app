@@ -5650,7 +5650,34 @@ page('setnotif','Notification Settings','settings',b=>{
   const row=(t,key)=>{const l=el('label','fp opt');l.style.cssText='flex-direction:row;align-items:center;gap:10px';const i=el('input');i.type='checkbox';i.checked=prefs()[key]!==false;
     i.onchange=()=>{setPref({[key]:i.checked});document.dispatchEvent(new Event('visibilitychange'))};l.appendChild(i);l.appendChild(el('span',null,t));c.appendChild(l)};
   row('Notifications on','notif');row('Bills due today','nToday');row('Bills due tomorrow','nTomorrow');
-  b.appendChild(c)});
+  b.appendChild(c);
+  /* ringtone */
+  const rc=card('Notification ringtone','A ringtone plays when a new notification arrives, or when the time of a schedule / note you set comes. The phone must have been touched once after opening the app, and the app must be open.');
+  const RG=window.RDLRING;if(!RG){b.appendChild(rc);return}
+  {const l=el('label','fp opt');l.style.cssText='flex-direction:row;align-items:center;gap:10px';const i=el('input');i.type='checkbox';i.checked=prefs().ring!==false;
+    i.onchange=()=>setPref({ring:i.checked});l.appendChild(i);l.appendChild(el('span',null,'Ringtone (sound) on'));rc.appendChild(l)}
+  {const l=el('label','fp opt');l.style.cssText='flex-direction:row;align-items:center;gap:10px';const i=el('input');i.type='checkbox';i.checked=prefs().vib!==false;
+    i.onchange=()=>{setPref({vib:i.checked});if(i.checked)RG.vibrate()};l.appendChild(i);l.appendChild(el('span',null,'Vibration on'));rc.appendChild(l)
+    if(!RG.canVib()){const w=el('p','hint','Vibration is not supported by this browser / phone (iPhone does not allow it in a web app). It works on most Android phones.');rc.appendChild(w)}}
+  rc.appendChild(el('label','od-label','Ringtone'));
+  const sl=el('select','list-search');
+  const fill=()=>{sl.textContent='';Object.keys(RG.tones).forEach(k=>sl.appendChild(new Option(RG.tones[k].n,k)));if(RG.custom())sl.appendChild(new Option('My own tone (uploaded)','custom'));const cur=prefs().ringTone||'bell';sl.value=[...sl.options].some(o=>o.value===cur)?cur:'bell'};
+  fill();sl.onchange=()=>{setPref({ringTone:sl.value});RG.play(sl.value,true)};rc.appendChild(sl);
+  rc.appendChild(el('label','od-label','Volume'));
+  const vr=el('input');vr.type='range';vr.min=0;vr.max=100;vr.value=Math.round((prefs().ringVol==null?.8:+prefs().ringVol)*100);vr.style.width='100%';
+  vr.onchange=()=>setPref({ringVol:(+vr.value)/100});rc.appendChild(vr);
+  const msg=el('div','stt');msg.style.margin='8px 0';
+  const bt=(t,f)=>{const x=el('button','st-btn',t);x.type='button';x.style.marginTop='8px';x.onclick=f;rc.appendChild(x);return x};
+  bt('▶ Play / test',()=>{setPref({ringVol:(+vr.value)/100});RG.play(sl.value,true)});
+  bt('■ Stop',()=>RG.stop());
+  bt('📳 Test vibration',()=>{if(!RG.vibrate()){msg.className='stt bad';msg.textContent='Vibration is not available on this device'}});
+  const fi=document.createElement('input');fi.type='file';fi.accept='audio/*';fi.hidden=true;
+  fi.onchange=()=>{const f=fi.files[0];fi.value='';if(!f)return;
+    if(f.size>700*1024){msg.className='stt bad';msg.textContent='✗ File is too big (max 700 KB). Choose a shorter tone.';return}
+    const rd=new FileReader();rd.onload=()=>{if(RG.setCustom(rd.result)){fill();sl.value='custom';setPref({ringTone:'custom'});msg.className='stt ok';msg.textContent='✓ Your tone is added and selected';RG.play('custom',true)}else{msg.className='stt bad';msg.textContent='✗ Could not save this file on the phone'}};rd.readAsDataURL(f)};
+  rc.appendChild(fi);bt('+ Add my own ringtone (audio file)',()=>fi.click());
+  bt('Remove my own tone',()=>{RG.clearCustom();if(prefs().ringTone==='custom')setPref({ringTone:'bell'});fill();msg.className='stt';msg.textContent='Removed'});
+  rc.appendChild(msg);b.appendChild(rc)});
 
 /* ---------- Admin: Depot-wise / Customer-wise backup & restore (only that depot's / that customer's data; everything else untouched) ---------- */
 window.RDLBKP_EXTRA=function(b,bok){
@@ -8840,7 +8867,7 @@ function schedNotif(){const L=$('#nList');if(!L||busyS)return;busyS=1;
       c.appendChild(b);c.appendChild(el('div','go','›'));c.onclick=()=>{const X=rget();X.read[d.k]=1;rset(X);SV.type=null;drawS();show('sched')};L.appendChild(c)});
     L.querySelectorAll('.sch-n').forEach(x=>L.insertBefore(x,L.firstChild));
     /* phone alert (works where the device / app allows it) */
-    try{if('Notification' in window&&Notification.permission==='granted'){const X=rget();D.forEach(d=>{if(!X.ping[d.k]&&d.diff!=null&&d.diff>=-5){X.ping[d.k]=1;new Notification(tInfo(d.it.type)[1]+(d.it.time?' at '+hm(d.it.time):''),{body:(d.it.nm||'')+(d.it.note?' — '+d.it.note:'')})}});rset(X)}}catch(e){}
+    try{const X=rget();let rg=0;D.forEach(d=>{if(!X.ping[d.k]&&d.diff!=null&&d.diff>=-5){X.ping[d.k]=1;rg=1;try{if('Notification' in window&&Notification.permission==='granted')new Notification(tInfo(d.it.type)[1]+(d.it.time?' at '+hm(d.it.time):''),{body:(d.it.nm||'')+(d.it.note?' — '+d.it.note:'')})}catch(e){}}});rset(X);if(rg&&window.RDLRING)RDLRING.ring()}catch(e){}
   }finally{setTimeout(()=>{busyS=0;badge()},0)}}
 function badge(){const bd=$('.hdr .badge'),L=$('#nList');if(!bd||!L)return;setTimeout(()=>{const n=L.querySelectorAll('.nit.unread').length;bd.textContent=n>99?'99+':n;bd.style.display=n?'':'none'},150)}
 const nlist=$('#nList');if(nlist)new MutationObserver(()=>{if(!busyS)setTimeout(schedNotif,60)}).observe(nlist,{childList:true});
@@ -12023,5 +12050,62 @@ html body .ov-wrap.a .ov-panel>.ov-row{padding-top:6px!important;padding-bottom:
 html body .ov-wrap.a .ov-chart{padding-top:6px;padding-bottom:6px}
 }
 </style>
+<script>
+/* ===== NOTIFICATION RINGTONE: plays when a new notification arrives (bell badge goes up) or a scheduled note / reminder time comes ===== */
+(function(){
+if(window.RDLRING)return;
+var LS=localStorage,AC=null,nodes=[],aud=null,stopT=0,lastRing=0,t0=Date.now(),prev=null;
+function P(){try{return JSON.parse(LS.getItem('rdl.prefs.v1'))||{}}catch(e){return{}}}
+function on(){return P().ring!==false}
+function vol(){var v=P().ringVol;return (v==null||isNaN(+v))?0.8:Math.max(0,Math.min(1,+v))}
+function name(){return P().ringTone||'bell'}
+function custom(){try{return LS.getItem('rdl.ring.v1')||''}catch(e){return ''}}
+function ctx(){try{if(!AC){var C=window.AudioContext||window.webkitAudioContext;if(!C)return null;AC=new C()}if(AC.state==='suspended')AC.resume();return AC}catch(e){return null}}
+/* a phone only allows sound after the person touched the page once: unlock on the first touch */
+['pointerdown','touchstart','keydown','click'].forEach(function(ev){document.addEventListener(ev,function f(){ctx();document.removeEventListener(ev,f,true)},true)});
+/* each tone = list of [frequency Hz, start s, length s, wave] ; repeated */
+var TONES={
+  bell:{n:'Bell',rep:2,gap:1.6,w:[[1046.5,0,.9,'sine'],[1318.5,.25,.9,'sine'],[1568,.5,.9,'sine'],[2093,.75,1.2,'sine']]},
+  chime:{n:'Soft chime',rep:2,gap:1.8,w:[[523.3,0,.8,'sine'],[659.3,.3,.8,'sine'],[784,.6,1.2,'sine']]},
+  alarm:{n:'Alarm beep',rep:3,gap:1.0,w:[[880,0,.15,'square'],[880,.25,.15,'square'],[880,.5,.15,'square'],[880,.75,.15,'square']]},
+  digital:{n:'Digital ping',rep:3,gap:.9,w:[[1200,0,.12,'triangle'],[1600,.16,.12,'triangle'],[1200,.4,.12,'triangle'],[1600,.56,.2,'triangle']]},
+  phone:{n:'Phone ring',rep:3,gap:1.4,w:[[440,0,.4,'sine'],[480,0,.4,'sine'],[440,.5,.4,'sine'],[480,.5,.4,'sine']]}
+};
+function stop(){clearTimeout(stopT);nodes.forEach(function(o){try{o.stop(0)}catch(e){}});nodes=[];if(aud){try{aud.pause();aud.currentTime=0}catch(e){}aud=null}}
+function playTone(k,v){
+  var c=ctx();if(!c)return;var T=TONES[k]||TONES.bell,len=0;
+  for(var r=0;r<T.rep;r++){var base=c.currentTime+.05+r*T.gap;
+    T.w.forEach(function(n){var o=c.createOscillator(),g=c.createGain(),s=base+n[1],e=s+n[2];
+      o.type=n[3];o.frequency.value=n[0];
+      var pk=Math.max(.0001,v*(n[3]==='square'?.25:.6));
+      g.gain.setValueAtTime(.0001,s);g.gain.exponentialRampToValueAtTime(pk,s+.02);g.gain.exponentialRampToValueAtTime(.0001,e);
+      o.connect(g);g.connect(c.destination);o.start(s);o.stop(e+.05);nodes.push(o)});
+    len=Math.max(len,r*T.gap+1.5)}
+  stopT=setTimeout(function(){nodes=[]},(len+1)*1000)}
+function playCustom(v){
+  try{aud=new Audio(custom());aud.volume=v;aud.loop=false;var p=aud.play();if(p&&p.catch)p.catch(function(){});
+    stopT=setTimeout(stop,20000)}catch(e){}}
+function play(k,force){
+  stop();var v=vol();if(!v&&!force)return;
+  if(k==='custom'&&custom())playCustom(v||.8);else playTone(k==='custom'?'bell':k,v||.8)}
+/* ring(): the normal call. Never twice within 4 seconds. */
+function vibOn(){return P().vib!==false}
+function vibrate(){try{if(navigator.vibrate)return navigator.vibrate([400,150,400,150,400,300,600])}catch(e){}return false}
+function ring(force){
+  if(!force&&!on()&&!vibOn())return;   /* sound and vibration both off = silent */
+  var now=Date.now();if(!force&&now-lastRing<4000)return;lastRing=now;
+  if(force||on())play(name(),force);
+  if(force||vibOn())vibrate()}
+/* any new notification: the red number on the bell goes up */
+function count(){var b=document.querySelector('.hdr .badge');if(!b||b.style.display==='none')return 0;var n=parseInt(String(b.textContent).replace(/\D/g,''),10);return isNaN(n)?0:n}
+setInterval(function(){var n=count();
+  if(Date.now()-t0<6000){prev=n;return}   /* just opened the app: what is already waiting does not ring */
+  if(prev!==null&&n>prev)ring();prev=n},1000);
+window.RDLRING={ring:ring,vibrate:vibrate,canVib:function(){return !!navigator.vibrate},play:play,stop:stop,tones:TONES,custom:custom,
+  setCustom:function(data){try{LS.setItem('rdl.ring.v1',data);return true}catch(e){return false}},
+  clearCustom:function(){try{LS.removeItem('rdl.ring.v1')}catch(e){}}};
+})();
+</script>
+
 </body>
 </html>
