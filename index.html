@@ -9933,12 +9933,10 @@ html.rdl-fit,html.rdl-fit body{height:100%;overflow:hidden;overscroll-behavior:n
   function fit(){
     if(!home.classList.contains('on')){home.style.height='';reset();return}
     var a=document.activeElement;if(a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName))return;
+    if(home.querySelector('.ov-wrap [aria-expanded="true"]')){root.classList.remove('rdl-fit');return}   /* graph / table open: keep size, allow scrolling */
     root.classList.add('rdl-fit');window.scrollTo(0,0);
-    var avail=navTop()-8,z=1;app.style.zoom='';home.style.zoom=1;home.style.height='';
-    for(var i=0;i<7;i++){
-      var b=bottom(),hb=hdrBottom();if(b<=avail&&(avail-b<8||z>=1))break;
-      z=Math.max(MIN,Math.min(1,z*((avail-hb)/Math.max(1,b-hb))*(b>avail?.996:1)));home.style.zoom=z;
-      if(z<=MIN)break}
+    var avail=navTop()-3,z=1,lo=MIN,hi=1;app.style.zoom='';home.style.height='';home.style.zoom=1;
+    if(bottom()>avail){for(var i=0;i<10;i++){z=(lo+hi)/2;home.style.zoom=z;if(bottom()>avail)hi=z;else lo=z}z=lo;home.style.zoom=z}
     if(bottom()>avail+2&&z<=MIN)root.classList.remove('rdl-fit')   /* extremely small screen: allow scrolling instead of clipping */
     if(desk()&&root.classList.contains('rdl-fit')){   /* DESKTOP: after fitting, the cards stretch to use the whole free height down to the bottom of the screen */
       var bz=parseFloat(document.body.style.zoom)||1,hz=parseFloat(home.style.zoom)||1,tp=home.getBoundingClientRect().top;
@@ -11631,6 +11629,123 @@ html body .nav button:not([data-p="home"]):not([data-p="customer"]):not([data-p=
 .ov-wrap.a .ov-acts{margin-top:8px}
 </style>
 
+<style id="rdl-fix7">
+html body .ov-wrap.a .ov-panel>.ov-row{width:calc(100% - 24px)!important;box-sizing:border-box!important;margin:5px 12px!important;display:grid!important}
+@media (min-width:760px){
+  html body nav.nav{left:300px!important;right:100px!important;width:auto!important;transform:none!important;max-width:none!important;justify-content:center!important}
+  html body nav.nav>div{width:100%!important;max-width:none!important;display:flex!important;justify-content:space-between!important;align-items:stretch!important;gap:10px!important;padding:8px 14px!important;border-radius:24px!important}
+  html body nav.nav button{flex:1 1 0!important;min-width:0!important;font-size:13.5px!important;padding:8px 6px!important;gap:6px!important;display:flex!important;flex-direction:column!important;align-items:center!important}
+  html body nav.nav button span{width:50px!important;height:42px!important;border-radius:14px!important}
+  html body nav.nav button span svg{width:26px!important;height:26px!important}
+}
+</style>
+<style id="rdl-dash-big">
+html body .ov-wrap.a .ov-cap{font-size:16px}
+html body .ov-wrap.a .ov-hero-top{gap:10px}
+html body .ov-wrap.a .ov-gauge{width:110px}
+html body .ov-wrap.a .ov-hero-info small{font-size:17px!important}
+html body .ov-wrap.a .ov-hero-info b{font-size:clamp(21px,6.6vw,28px)!important}
+html body .ov-wrap.a .ov-panel .ov-lab b{font-size:17px!important;white-space:normal}
+html body .ov-wrap.a .ov-panel .ov-lab small{font-size:13.5px!important;white-space:normal}
+html body .ov-wrap.a .ov-panel .ov-val b{font-size:18px!important}
+html body .ov-wrap.a .ov-panel .ov-val small{font-size:13px!important}
+html body .ov-wrap.a .ov-act b{font-size:17px}
+html body .ov-wrap.a .ov-act small{font-size:13.5px}
+.ov-wrap.a .ov-tabs button{font-size:13.5px;padding:8px 0}
+.ov-sum{margin:12px 2px 10px;color:#12306b}
+.ov-say{display:flex;align-items:center;gap:10px}
+.ov-say>b{font-size:34px;font-weight:800;color:#1d5fd6;line-height:1}
+.ov-say span{font-size:14px;font-weight:700;line-height:1.3}
+.ov-say small{display:block;font-size:12px;font-weight:600;color:#6b7fa3}
+.ov-meter{height:10px;border-radius:99px;background:#bfe8cd;overflow:hidden;margin:8px 0 6px}
+.ov-meter i{display:block;height:100%;background:#1d5fd6;border-radius:99px}
+.ov-led{width:100%;border-collapse:collapse}
+.ov-led th,.ov-led td{padding:8px 0;text-align:right;border-bottom:1px solid #e6eefb;font-size:15px;font-weight:800}
+.ov-led th{text-align:left;font-size:13.5px;padding-right:6px}
+.ov-led th i{display:inline-block;width:9px;height:9px;border-radius:3px;background:var(--c);margin-right:6px}
+.ov-led td:last-child{font-size:13px;color:#4a6592;padding-left:10px;white-space:nowrap}
+.ov-led tr.h td{font-size:11.5px;color:#6b7fa3;padding:2px 0 4px}
+.ov-led tr[style] td:nth-child(2){color:var(--c)}
+.ov-led tr.d th,.ov-led tr.d td{border-bottom:0}
+.ov-max{font-size:12px;color:#51648a;margin:4px 0}
+.ov-cols{display:flex;gap:2px}
+.ov-wrap.a .ov-cols button{flex:1;min-width:0;border:0;background:transparent;padding:0;border-radius:6px;cursor:pointer}
+.ov-wrap.a .ov-cols button.on{background:#e4edfd}
+.ov-cols span{display:flex;align-items:flex-end;justify-content:center;gap:1px;height:130px;border-bottom:1px solid #cbd9f0}
+.ov-cols i{width:44%;border-radius:3px 3px 0 0}
+.ov-cols i.s{background:#16a34a}.ov-cols i.c{background:#1d5fd6}
+.ov-cols small{display:block;height:18px;font-size:10px;font-weight:700;color:#4a6592;white-space:nowrap;display:flex;justify-content:center}
+.ov-det{margin-top:8px;background:#f4f8ff;border:1px solid #d3e3f7;border-radius:12px;padding:8px 10px;color:#12306b}
+.ov-det-h{font-size:15px;font-weight:800}
+.ov-det p{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:0 8px;margin:6px 0 0;font-size:13px}
+.ov-det p b{font-size:16px;margin-left:auto}
+.ov-det p em{flex-basis:100%;text-align:right;font-style:normal;font-size:12px;color:#51648a}
+.ov-wrap.a .ov-more{width:100%;margin:8px 0;padding:9px;border:1px solid #c9dbfb;border-radius:10px;background:#eaf2ff;color:#1d4fb8;font:700 13.5px system-ui,sans-serif;cursor:pointer}
+.ov-tb{width:100%;border-collapse:collapse;font-size:12.5px;color:#12306b;margin-bottom:8px}
+.ov-tb th,.ov-tb td{text-align:right;padding:6px 2px;border-bottom:1px solid #e1eaf7}
+.ov-tb th:first-child,.ov-tb td:first-child{text-align:left}
+.ov-wrap.a .ov-legend{font-size:12px}
+</style>
+<style id="rdl-dash-compact">
+.ov-wrap.a .ov-chart{padding:8px 10px}
+.ov-wrap.a .ov-tabs{margin:0}
+.ov-wrap.a .ov-tabs button{padding:6px 0;font-size:13px}
+.ov-wrap.a .ov-sum{margin:7px 2px 6px}
+.ov-wrap.a .ov-say{gap:6px;align-items:baseline;flex-wrap:wrap}
+.ov-wrap.a .ov-say>b{font-size:24px}
+.ov-wrap.a .ov-say span{font-size:13px}
+.ov-wrap.a .ov-say small{margin-left:auto;font-size:11.5px}
+.ov-wrap.a .ov-meter{height:6px;margin:5px 0 3px}
+.ov-sum p{display:flex;align-items:baseline;gap:8px;margin:4px 0;font-size:13.5px;font-weight:800}
+.ov-sum p i{display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--c);margin-right:5px}
+.ov-sum p b{margin-left:auto;font-size:15px;color:var(--c)}
+.ov-sum p em{min-width:78px;text-align:right;font-style:normal;font-size:12px;color:#4a6592}
+.ov-gap{font-size:12px;color:#51648a}
+.ov-gap b{color:#12306b}
+.ov-btns{display:flex;gap:8px}
+.ov-wrap.a .ov-btns .ov-more{flex:1;margin:0;padding:6px;font-size:12.5px}
+.ov-wrap.a .ov-cols{margin-top:8px}
+.ov-wrap.a .ov-cols span{height:72px}
+.ov-wrap.a .ov-det{margin-top:4px;padding:6px 8px;font-size:12.5px;line-height:1.6}
+.ov-wrap.a .ov-tb{margin:6px 0 0}
+</style>
+<style id="rdl-dash-final">
+html body .ov-wrap.a .ov-cap{font-size:19px;margin:0}
+html body .ov-wrap.a .ov-hero{padding:6px 10px}
+html body .ov-wrap.a .ov-gauge{width:112px}
+html body .ov-wrap.a .ov-hero-info small{font-size:23px!important}
+html body .ov-wrap.a .ov-hero-info b{font-size:34px!important;margin-top:0!important}
+html body .ov-wrap.a .ov-hero-info span{font-size:15px!important;margin-top:2px}
+html body .ov-wrap.a .ov-panel>.ov-pc{width:calc(100% - 12px);margin:5px 6px 0;padding:6px 10px;box-sizing:border-box}
+html body .ov-wrap.a .ov-pc .ov-ic{background:linear-gradient(135deg,#4f8ff7,#0a5fd6)}
+html body .ov-wrap.a .ov-chart{margin:5px 6px 2px;padding:5px 8px}
+html body .ov-wrap.a .ov-tabs button{font-size:16px;padding:5px 0}
+html body .ov-wrap.a .ov-sum{margin:3px 2px 4px}
+html body .ov-wrap.a .ov-say>b{font-size:27px}
+html body .ov-wrap.a .ov-say span{font-size:16px}
+html body .ov-wrap.a .ov-say small{font-size:13px}
+html body .ov-wrap.a .ov-sum p{font-size:17px;margin:1px 0}
+html body .ov-wrap.a .ov-sum p b{font-size:19px}
+html body .ov-wrap.a .ov-sum p em{font-size:14.5px}
+html body .ov-wrap.a .ov-gap{font-size:14px}
+html body .ov-wrap.a .ov-btns .ov-more{font-size:15px;padding:4px}
+html body .ov-wrap.a .ov-det{font-size:15px}
+html body .ov-wrap.a .ov-tb{font-size:14.5px}
+html body .ov-wrap.a .ov-panel>.ov-row{width:calc(100% - 8px)!important;margin:3px 4px!important;padding:5px 10px 8px!important;position:relative;overflow:hidden;grid-template-columns:auto minmax(0,1fr) auto!important;gap:0 10px}
+html body .ov-wrap.a .ov-panel>.ov-row>.ov-bar{position:absolute;left:0;right:0;bottom:0;height:4px;border-radius:0;box-shadow:none}
+html body .ov-wrap.a .ov-panel>.ov-row>.ov-bar i{box-shadow:none;border-radius:0 4px 4px 0}
+html body .ov-wrap.a .ov-panel .ov-lab b{font-size:21px!important;line-height:1.2}
+html body .ov-wrap.a .ov-panel .ov-lab small{font-size:15px!important;margin-top:0}
+html body .ov-wrap.a .ov-panel .ov-val b{font-size:22px!important;line-height:1.2}
+html body .ov-wrap.a .ov-panel .ov-val small{font-size:14.5px!important}
+html body .ov-wrap.a .ov-panel>.ov-row:last-of-type{margin-bottom:4px!important}
+html body .ov-wrap.a .ov-acts{margin-top:6px}
+html body .ov-wrap.a .ov-act:not(.ov-pc){padding:7px 12px}
+html body .ov-wrap.a .ov-act b{font-size:20px}
+html body .ov-wrap.a .ov-act small{font-size:15px;margin-top:0}
+html body .ov-wrap.a .ov-acts>button:only-child .ov-ic{background:linear-gradient(135deg,#34d399,#059669)}
+html:not(.ov-ready) .ov-wrap{visibility:hidden}
+</style>
 <script id="rdl-dash-V-js">
 /* Read-only summary. Figures come from the dashboard's own numbers; taps forward to the original elements. */
 (function(){
@@ -11741,18 +11856,6 @@ html body .nav button:not([data-p="home"]):not([data-p="customer"]):not([data-p=
       '<span class="ov-val"><b>'+money(v)+'</b><small>'+esc(sub)+'</small></span></button>';
   }
   function mini(c,l,v,p){return '<div class="ov-mc" style="--c:'+c+'"><small>'+esc(l)+'</small><b>'+short(v)+'</b><em>'+p+'% of total</em></div>'}
-  var grow=0;
-  function fit(){
-    if(!wrap||!wrap.offsetHeight)return;
-    var rows=wrap.querySelectorAll('.ov-row');if(!rows.length)return;
-    var nav=document.querySelector('nav.nav>div'),limit=(nav&&nav.offsetHeight?nav.getBoundingClientRect().top:window.innerHeight)-10;
-    var spare=limit-(wrap.getBoundingClientRect().bottom+(window.pageYOffset||0));
-    var g=Math.max(-8,Math.min(70,Math.floor(grow+spare/rows.length)));
-    if(showGr||showTbl)g=0;
-    grow=g;
-    Array.prototype.forEach.call(rows,function(r){r.style.setProperty('padding-top',(10+g/2)+'px','important');r.style.setProperty('padding-bottom',(10+g/2)+'px','important')});
-  }
-  window.addEventListener('resize',function(){fit()});
   function tick(){
     if(!ensure())return;
     var tot=q(':scope>.total'),red=q('.card.red'),amb=q('.card.amb'),rs=q('#regCard .rc-p.s'),rc=q('#regCard .rc-p.c');
@@ -11798,127 +11901,16 @@ html body .nav button:not([data-p="home"]):not([data-p="customer"]):not([data-p=
       });
       html+='</div>';
     }
-    if(html!==last){wrap.innerHTML=html;last=html}
-    fit();
+    if(html!==last){wrap.innerHTML=html;last=html;if(window.__rdlFitNow)window.__rdlFitNow()}
   }
   tick();setInterval(tick,1500);
+  /* show the dashboard only after it has its final size (no visible jumps while opening) */
+  function ready(){tick();if(window.__rdlFitNow)window.__rdlFitNow();document.documentElement.classList.add('ov-ready')}
+  if(document.readyState==='complete')ready();else window.addEventListener('load',ready);
+  setTimeout(ready,900);
+  if(document.fonts&&document.fonts.ready)document.fonts.ready.then(function(){if(window.__rdlFitNow)window.__rdlFitNow()});
 })();
 </script>
 
-<style id="rdl-fix7">
-html body .ov-wrap.a .ov-panel>.ov-row{width:calc(100% - 24px)!important;box-sizing:border-box!important;margin:5px 12px!important;display:grid!important}
-@media (min-width:760px){
-  html body nav.nav{left:300px!important;right:100px!important;width:auto!important;transform:none!important;max-width:none!important;justify-content:center!important}
-  html body nav.nav>div{width:100%!important;max-width:none!important;display:flex!important;justify-content:space-between!important;align-items:stretch!important;gap:10px!important;padding:8px 14px!important;border-radius:24px!important}
-  html body nav.nav button{flex:1 1 0!important;min-width:0!important;font-size:13.5px!important;padding:8px 6px!important;gap:6px!important;display:flex!important;flex-direction:column!important;align-items:center!important}
-  html body nav.nav button span{width:50px!important;height:42px!important;border-radius:14px!important}
-  html body nav.nav button span svg{width:26px!important;height:26px!important}
-}
-</style>
-<style id="rdl-dash-big">
-html body .ov-wrap.a .ov-cap{font-size:16px}
-html body .ov-wrap.a .ov-hero-top{gap:10px}
-html body .ov-wrap.a .ov-gauge{width:110px}
-html body .ov-wrap.a .ov-hero-info small{font-size:17px!important}
-html body .ov-wrap.a .ov-hero-info b{font-size:clamp(21px,6.6vw,28px)!important}
-html body .ov-wrap.a .ov-panel .ov-lab b{font-size:17px!important;white-space:normal}
-html body .ov-wrap.a .ov-panel .ov-lab small{font-size:13.5px!important;white-space:normal}
-html body .ov-wrap.a .ov-panel .ov-val b{font-size:18px!important}
-html body .ov-wrap.a .ov-panel .ov-val small{font-size:13px!important}
-html body .ov-wrap.a .ov-act b{font-size:17px}
-html body .ov-wrap.a .ov-act small{font-size:13.5px}
-.ov-wrap.a .ov-tabs button{font-size:13.5px;padding:8px 0}
-.ov-sum{margin:12px 2px 10px;color:#12306b}
-.ov-say{display:flex;align-items:center;gap:10px}
-.ov-say>b{font-size:34px;font-weight:800;color:#1d5fd6;line-height:1}
-.ov-say span{font-size:14px;font-weight:700;line-height:1.3}
-.ov-say small{display:block;font-size:12px;font-weight:600;color:#6b7fa3}
-.ov-meter{height:10px;border-radius:99px;background:#bfe8cd;overflow:hidden;margin:8px 0 6px}
-.ov-meter i{display:block;height:100%;background:#1d5fd6;border-radius:99px}
-.ov-led{width:100%;border-collapse:collapse}
-.ov-led th,.ov-led td{padding:8px 0;text-align:right;border-bottom:1px solid #e6eefb;font-size:15px;font-weight:800}
-.ov-led th{text-align:left;font-size:13.5px;padding-right:6px}
-.ov-led th i{display:inline-block;width:9px;height:9px;border-radius:3px;background:var(--c);margin-right:6px}
-.ov-led td:last-child{font-size:13px;color:#4a6592;padding-left:10px;white-space:nowrap}
-.ov-led tr.h td{font-size:11.5px;color:#6b7fa3;padding:2px 0 4px}
-.ov-led tr[style] td:nth-child(2){color:var(--c)}
-.ov-led tr.d th,.ov-led tr.d td{border-bottom:0}
-.ov-max{font-size:12px;color:#51648a;margin:4px 0}
-.ov-cols{display:flex;gap:2px}
-.ov-wrap.a .ov-cols button{flex:1;min-width:0;border:0;background:transparent;padding:0;border-radius:6px;cursor:pointer}
-.ov-wrap.a .ov-cols button.on{background:#e4edfd}
-.ov-cols span{display:flex;align-items:flex-end;justify-content:center;gap:1px;height:130px;border-bottom:1px solid #cbd9f0}
-.ov-cols i{width:44%;border-radius:3px 3px 0 0}
-.ov-cols i.s{background:#16a34a}.ov-cols i.c{background:#1d5fd6}
-.ov-cols small{display:block;height:18px;font-size:10px;font-weight:700;color:#4a6592;white-space:nowrap;display:flex;justify-content:center}
-.ov-det{margin-top:8px;background:#f4f8ff;border:1px solid #d3e3f7;border-radius:12px;padding:8px 10px;color:#12306b}
-.ov-det-h{font-size:15px;font-weight:800}
-.ov-det p{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:0 8px;margin:6px 0 0;font-size:13px}
-.ov-det p b{font-size:16px;margin-left:auto}
-.ov-det p em{flex-basis:100%;text-align:right;font-style:normal;font-size:12px;color:#51648a}
-.ov-wrap.a .ov-more{width:100%;margin:8px 0;padding:9px;border:1px solid #c9dbfb;border-radius:10px;background:#eaf2ff;color:#1d4fb8;font:700 13.5px system-ui,sans-serif;cursor:pointer}
-.ov-tb{width:100%;border-collapse:collapse;font-size:12.5px;color:#12306b;margin-bottom:8px}
-.ov-tb th,.ov-tb td{text-align:right;padding:6px 2px;border-bottom:1px solid #e1eaf7}
-.ov-tb th:first-child,.ov-tb td:first-child{text-align:left}
-.ov-wrap.a .ov-legend{font-size:12px}
-</style>
-<style id="rdl-dash-compact">
-.ov-wrap.a .ov-chart{padding:8px 10px}
-.ov-wrap.a .ov-tabs{margin:0}
-.ov-wrap.a .ov-tabs button{padding:6px 0;font-size:13px}
-.ov-wrap.a .ov-sum{margin:7px 2px 6px}
-.ov-wrap.a .ov-say{gap:6px;align-items:baseline;flex-wrap:wrap}
-.ov-wrap.a .ov-say>b{font-size:24px}
-.ov-wrap.a .ov-say span{font-size:13px}
-.ov-wrap.a .ov-say small{margin-left:auto;font-size:11.5px}
-.ov-wrap.a .ov-meter{height:6px;margin:5px 0 3px}
-.ov-sum p{display:flex;align-items:baseline;gap:8px;margin:4px 0;font-size:13.5px;font-weight:800}
-.ov-sum p i{display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--c);margin-right:5px}
-.ov-sum p b{margin-left:auto;font-size:15px;color:var(--c)}
-.ov-sum p em{min-width:78px;text-align:right;font-style:normal;font-size:12px;color:#4a6592}
-.ov-gap{font-size:12px;color:#51648a}
-.ov-gap b{color:#12306b}
-.ov-btns{display:flex;gap:8px}
-.ov-wrap.a .ov-btns .ov-more{flex:1;margin:0;padding:6px;font-size:12.5px}
-.ov-wrap.a .ov-cols{margin-top:8px}
-.ov-wrap.a .ov-cols span{height:72px}
-.ov-wrap.a .ov-det{margin-top:4px;padding:6px 8px;font-size:12.5px;line-height:1.6}
-.ov-wrap.a .ov-tb{margin:6px 0 0}
-</style>
-<style id="rdl-dash-rows">
-html body .ov-wrap.a .ov-panel>.ov-row{width:calc(100% - 8px)!important;margin:6px 4px!important;padding-left:12px;padding-right:12px}
-html body .ov-wrap.a .ov-panel .ov-lab b{font-size:clamp(17px,3.4vw,25px)!important}
-html body .ov-wrap.a .ov-panel .ov-lab small{font-size:clamp(13px,2.5vw,18px)!important}
-html body .ov-wrap.a .ov-panel .ov-val b{font-size:clamp(17px,3.6vw,27px)!important}
-html body .ov-wrap.a .ov-panel .ov-val small{font-size:clamp(12.5px,2.4vw,17px)!important}
-html body .ov-wrap.a .ov-panel .ov-bar{height:12px}
-@media (min-width:560px){html body .ov-wrap.a .ov-panel .ov-ri{width:40px;height:40px;border-radius:13px}html body .ov-wrap.a .ov-panel .ov-ri svg{width:22px;height:22px}}
-@media (max-width:900px){html body .ov-wrap.a .ov-panel>.ov-row{grid-template-columns:auto minmax(0,1fr) auto!important;gap:8px 12px}html body .ov-wrap.a .ov-panel>.ov-row>.ov-bar{grid-column:1/-1;order:5}}
-</style>
-<style id="rdl-dash-readable">
-html body .ov-wrap.a .ov-cap{font-size:clamp(16px,2.8vw,21px)}
-html body .ov-wrap.a .ov-hero{padding:10px 12px}
-html body .ov-wrap.a .ov-gauge{width:clamp(110px,19vw,150px)}
-html body .ov-wrap.a .ov-hero-info small{font-size:clamp(17px,3.2vw,24px)!important}
-html body .ov-wrap.a .ov-hero-info b{font-size:clamp(21px,6.6vw,38px)!important}
-html body .ov-wrap.a .ov-hero-info span{font-size:clamp(11.5px,2.4vw,18px)!important}
-html body .ov-wrap.a .ov-tabs button{font-size:clamp(13px,2.6vw,19px)}
-html body .ov-wrap.a .ov-say>b{font-size:clamp(24px,4.6vw,34px)}
-html body .ov-wrap.a .ov-say span{font-size:clamp(13px,2.5vw,19px)}
-html body .ov-wrap.a .ov-say small{font-size:clamp(11.5px,2.2vw,16px)}
-html body .ov-wrap.a .ov-sum p{font-size:clamp(13.5px,2.7vw,20px)}
-html body .ov-wrap.a .ov-sum p b{font-size:clamp(15px,3vw,22px)}
-html body .ov-wrap.a .ov-sum p em{font-size:clamp(12px,2.4vw,17px)}
-html body .ov-wrap.a .ov-gap{font-size:clamp(12px,2.3vw,17px)}
-html body .ov-wrap.a .ov-btns .ov-more{font-size:clamp(12.5px,2.5vw,18px)}
-html body .ov-wrap.a .ov-det{font-size:clamp(12.5px,2.4vw,18px)}
-html body .ov-wrap.a .ov-tb{font-size:clamp(12.5px,2.4vw,17px)}
-html body .ov-wrap.a .ov-cols small{font-size:clamp(10px,1.7vw,13px)}
-html body .ov-wrap.a .ov-act b{font-size:clamp(17px,3.1vw,23px)}
-html body .ov-wrap.a .ov-act small{font-size:clamp(13.5px,2.4vw,17px)}
-html body .ov-wrap.a .ov-panel>.ov-pc{width:calc(100% - 20px);margin:8px 10px 0;box-sizing:border-box}
-html body .ov-wrap.a .ov-panel>.ov-pc .ov-ic{background:linear-gradient(135deg,#4f8ff7,#0a5fd6)}
-html body .ov-wrap.a .ov-acts>button:only-child .ov-ic{background:linear-gradient(135deg,#34d399,#059669)}
-</style>
 </body>
 </html>
