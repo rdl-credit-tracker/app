@@ -1887,7 +1887,7 @@ function pullData(force,safe){
     return true})}
 
 /* ---------- backup (user and admin) ---------- */
-function collect(){var o={};for(var i=0;i<LS.length;i++){var k=LS.key(i);if(k.indexOf('rdl.')===0)o[k]=LS.getItem(k)}return o}
+function collect(){var o={};for(var i=0;i<LS.length;i++){var k=LS.key(i);if(k.indexOf('rdl.')===0&&k!=='rdl.ring.v1')o[k]=LS.getItem(k)}return o}   /* the phone's own ringtone file (up to ~1 MB) stays on the phone: never part of a backup */
 /* a phone that has not loaded its data yet (just signed in, or another account was used in the same browser) holds only settings: such a thing is never a backup */
 var BK_IGN={'rdl.prefs.v1':1,'rdl.cleanstart.v2':1,'rdl.bkp.v1':1,'rdl.notif.v1':1,'rdl.schedn.v1':1,'rdl.wa.v1':1,'rdl.upskip.v1':1};
 function bkHasData(d){return Object.keys(d).some(function(k){return !BK_IGN[k]&&String(d[k]||'').length>20})}
@@ -11586,7 +11586,7 @@ html body .nav button span svg{width:21px!important;height:21px!important;fill:#
 html body .nav button.on{background:#eef4ff!important;color:#1f4fd6!important}
 html body .nav button.on span{background:linear-gradient(135deg,#1f4fd6,#0a7fc4)!important;box-shadow:0 6px 12px -6px #1f4fd6!important}
 html body .nav button.on span svg{fill:#fff!important}
-html body .nav button:not([data-p="home"]):not([data-p="customer"]):not([data-p="sales"]):not([data-p="collection"]):not([data-p="dhub"]){display:none!important}
+html body .nav button:not([data-p="home"]):not([data-p="customer"]):not([data-p="sales"]):not([data-p="collection"]):not([data-p="dhub"]):not(.dsk-set){display:none!important}
 .ov-wrap.a .ov-tl b{white-space:normal!important;font-size:20px!important;line-height:1.15}
 /* ---- A v3 ---- */
 .ov-wrap.a .ov-cap{font-size:12.5px;text-transform:uppercase;letter-spacing:.8px;color:#0a3a9a;font-weight:800}
@@ -12123,5 +12123,12 @@ window.RDLRING={ring:ring,vibrate:vibrate,canVib:function(){return !!navigator.v
 })();
 </script>
 
+<style id="rdl-desk-fix61">
+@media (min-width:1000px){
+html body nav.nav{right:124px!important}
+html body .ov-wrap.a .ov-me{flex:none!important;max-width:none!important;min-width:max-content!important}
+html body .ov-wrap.a .ov-un{flex:none!important;max-width:none!important;min-width:max-content!important;white-space:nowrap!important;overflow:visible!important}
+}
+</style>
 </body>
 </html>
