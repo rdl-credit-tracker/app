@@ -2509,7 +2509,7 @@ function openProfile(email){
       w.appendChild(i);if(note){var n=h('div',null,note);n.style.cssText='font-size:11.5px;color:#7a8594;margin-top:3px';w.appendChild(n)}body.appendChild(w)}
     function sec(t){var d=h('div',null,t);d.style.cssText='margin:18px 0 0;padding-bottom:5px;border-bottom:2px solid #e3edfb;font-size:11.5px;font-weight:800;letter-spacing:1.1px;text-transform:uppercase;color:#0a56b8;text-align:left';body.appendChild(d)}
     sec('Basic info');
-    field('Name','official','text',P.official||P.username,mine);
+    field('Name','official','text',P.official||P.username,mine&&S&&S.role==='admin',mine&&S&&S.role!=='admin'?'Only the admin can change your name.':'');
     field('Designation','designation','text',P.designation,mine);
     sec('Work');
     field('SAP ID','sap','text',P.sap,mine);
